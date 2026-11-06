@@ -256,9 +256,11 @@ const first: (type)([]T)T = (const T: type){
     };
 };
 
-const firstInt: ([]int)int = first(int);   // a function for int arrays
-firstInt([7, 8])                           // 7
-first(bool)([true, false])                 // true
+const firstInt: ([]int)int = first(int);      // call first with the type int: gives a function for int arrays
+firstInt([7, 8])                              // 7: the first element
+
+const firstBool: ([]bool)bool = first(bool);  // the same for bool arrays
+firstBool([true, false])                      // true: the first element
 ```
 
 `first(int)` gives back a function made for `int`, so what each call works with is
