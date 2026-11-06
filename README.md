@@ -40,7 +40,7 @@ limit = 11;                // ERROR: limit is const
 ## 3. Basic types
 
 ```go
-int  uint  float  char  bool  str
+int  uint  float  char  bool
 int8  int16  int32  int64  int128  int256
 ```
 
@@ -88,7 +88,6 @@ Param     = [ "ref" ] Type                    (ref only here, see section 9)
 A type is a value of type `type`, so it is declared like anything else:
 
 ```go
-const str: type = []char;
 const Pair: type = [2]int;
 const Op: type = (int, int)int;
 
