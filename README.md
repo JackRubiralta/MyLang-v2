@@ -133,7 +133,7 @@ A type is a basic type, or a modifier followed by a type:
 | unsized array | `[]T` | `[]int` | array of ints |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
-| function, no return value | `(P1, P2)` | `(int)` | takes an int, returns nothing |
+| function that returns nothing | `(P1, P2)null` | `(int)null` | takes an int, returns nothing |
 | pointer | `*T` | `*int` | pointer to an int |
 
 ### 3.2 Modifiers stack in any combination
@@ -179,12 +179,13 @@ Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
           | "{" Type "}" Type                 (map: {key}value)
           | "*" Type                          (pointer)
-          | "(" [ TypeList ] ")" [ Type ]     (function: parameter types, then the return type)
+          | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
+Return    = Type | "null"                     (null = returns nothing)
 TypeList  = Type { "," Type }
 ```
 
-After a function's parameter list, whatever type follows is its return type. If no type
-follows, it returns nothing.
+A function type always ends with its return type. A function that returns nothing ends
+with `null`: `(int)null`, and `()null` takes nothing and returns nothing.
 
 ### 3.5 Why
 
@@ -192,8 +193,8 @@ follows, it returns nothing.
   compared on hard nested types and on 3,000 random ones. Only the all-in-front form gave
   every type exactly one meaning without brackets. Mixing front and back (like `int[]`
   with `(int)int`) makes types such as `(int)int[3]` mean two different things.
-- **Why no brackets at all:** `(int)` already means "a function that takes an int", so a
-  bracket used for grouping would silently change the meaning.
+- **Why no brackets at all:** `(…)` always starts a function type, so a bracket used for
+  grouping would silently change the meaning.
 - **Why it reads well:** left to right is plain English, and it's the order you use the
   value in (3.3).
 - **Why no `fn` keyword:** it isn't needed, so types stay short and clean.
@@ -334,10 +335,10 @@ add(1, 2)              // 3
 
 ### 7.3 A function that returns nothing
 
-Leave out the return type:
+Its return type is `null`:
 
 ```go
-const show: (int) = (const value: int){
+const show: (int)null = (const value: int){
     ...
 };
 show(5);
@@ -452,7 +453,7 @@ A function can take a parameter as a `ref`, so it can change the caller's variab
 the parameter in the function's value says `ref`; the function's type stays plain:
 
 ```go
-const bump: (int) = (ref x: int){
+const bump: (int)null = (ref x: int){
     x = x + 1;
 };
 
@@ -461,7 +462,7 @@ bump(n);               // n is now 4
 bump(scores[1]);       // scores[1] goes up by 1
 bump(3);               // ERROR: 3 isn't a variable
 
-const swap: (int, int) = (ref a: int, ref c: int){
+const swap: (int, int)null = (ref a: int, ref c: int){
     var t: int = a;
     a = c;
     c = t;
@@ -476,7 +477,7 @@ in an array or a map, and can't be returned, so these don't exist:
 ```go
 [3]ref int             // ERROR: not a type
 (int)ref int           // ERROR: not a type
-(ref int)              // ERROR: not a type; write (int)
+(ref int)null          // ERROR: not a type; write (int)null
 ```
 
 ### 8.5 Why
@@ -513,7 +514,7 @@ A heap variable dies when its scope ends (the `{ }` it was declared in), exactly
 stack variable:
 
 ```go
-const work: (int) = (const x: int){
+const work: (int)null = (const x: int){
     heap big: [3]int = [x, x, x];
     big[0] = 9;
 };                     // work ends, so big and its value are gone
@@ -681,9 +682,9 @@ A function declared inside a struct is in the struct's scope, so it uses the str
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)} = {
+var counter: {int, (int)null} = {
     var count: int = 0;
-    const add: (int) = (const n: int){
+    const add: (int)null = (const n: int){
         count = count + n;     // count is the struct's own field
     };
 };
@@ -772,9 +773,9 @@ some possible fixes. None of the fixes is decided.
 ### 14.1 Refs don't show in types, so first-class functions can't be checked
 
 ```go
-const bump: (int) = (ref x: int){ x = x + 1; };
-const show: (int) = (const x: int){ ... };
-const fs: [2](int) = [bump, show];     // same type, so allowed
+const bump: (int)null = (ref x: int){ x = x + 1; };
+const show: (int)null = (const x: int){ ... };
+const fs: [2](int)null = [bump, show];     // same type, so allowed
 fs[i](n);       // does n change? it depends on i, which is only known when the program runs
 fs[i](3);       // fine for show, an ERROR for bump, and nothing can tell which before running
 ```
@@ -822,8 +823,10 @@ const Op: type = (int, int)int;
 const T: type = (Op);    // a function that takes an Op, or just Op in brackets?
 ```
 
-Named types are ordinary names, so brackets around one are ambiguous. Possible fix: in a
-type, `( … )` always means a function and is never used for grouping.
+Named types are ordinary names, so brackets around one are ambiguous. Since every function
+type now ends with its return type (`(Op)null`, `(Op)int`), `(Op)` on its own can't be a
+function type, which mostly settles this. Possible fix for the rest: in a type, `( … )`
+always starts a function and is never used for grouping.
 
 ### 14.6 Arrays or maps of unsized arrays
 
