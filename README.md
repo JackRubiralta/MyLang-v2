@@ -26,7 +26,7 @@ decided yet is left out on purpose and listed at the end.
 10. [Pointers](#10-pointers)
 11. [Putting it together](#11-putting-it-together)
 12. [Not decided yet](#12-not-decided-yet)
-13. [Problems to look at later](#13-problems-to-look-at-later)
+13. [Problems to look at later](#13-problems-to-look-at-later) (incl. struct notes, 13.12)
 
 ---
 
@@ -768,3 +768,80 @@ stored somewhere that lives longer, such as a heap array, without being returned
 const N: int = 3;
 var a: [N]int = [1, 2, 3];     // allowed?
 ```
+
+### 13.12 Structs (notes from 2024, not decided)
+
+Structs aren't decided yet. These are the earlier notes to start from.
+
+**A struct is a value of type `type`**, declared like everything else (rule 1):
+
+```go
+const LinkedList: type = {
+    const Node: type = {
+        var x: int = 3;
+        var next: *Node = null;
+    }
+    var head: Item = Item();
+
+    const append: (int) = (const value: int){
+        const new_node: *Node = new(Node(value))
+        if (head == null) {
+            head = new_node;
+        } else {
+            var current_node: *Node = head;
+            while (current_node != null) {
+                current_node = current_node.next
+            } else {
+                &current_node.next = new_node;
+            }
+        }
+    }
+
+    const pop: (int) = (const index: int){
+        var current_node: *Node = head;
+        while (current_node.next.next != null) {
+            current_node = current_node.next;
+        } else {
+            delete(current_node.next);
+            &current_node.next = null;
+        }
+    }
+}
+```
+
+What the sketch shows:
+
+- **Fields** are declared with `var` or `const`, each with a starting value (`var x: int = 3;`).
+- **Types can be nested:** `Node` is declared inside `LinkedList`.
+- **Methods** are just function values inside the struct (`append`, `pop`).
+- **Making one** is calling the type: `Node(value)`, `Item()`.
+- **Fields** are reached with `.`: `current_node.next`.
+- `null` is used for "no next node" (`var next: *Node = null;`).
+
+Later notes (May 2024):
+
+- "&foo.leafs gives pointer to leafs and if i have pointer to foo if i get pointer_foo.leafs
+  is give pointer": `&` of a field gives a pointer to that field, and reading a field through
+  a pointer also gives a pointer.
+- "const declared during run time are added to stack, so having var and const inside of a
+  struct works"
+- "look into struct constructor though"
+
+A Go-style version was tried and dropped (29–31 Mar 2024) in favour of the form above:
+
+```go
+type Foo struct { x int; y int }
+var f Foo = Foo{x: 1, y: 2}
+var fp *Foo = &f
+fp.x            // gives a pointer to x
+```
+
+**Clashes with today's rules:**
+
+- `new(...)` and `delete(...)` aren't in the rules.
+- `&current_node.next = new_node;` puts `&` on the left of an assignment, which the pointer
+  rules don't cover.
+- `var head: Item = Item();`: `Item` is never defined (probably meant `*Node = null`).
+- A linked list needs nodes that outlive the function that made them, which 13.2 and 13.3
+  don't allow yet.
+- `while … else` and `if` are control flow, which isn't decided yet.
