@@ -6,6 +6,18 @@ functions and even types are all declared, stored, passed and returned the same 
 This file holds the rules decided so far, each with the reason behind it. Anything not
 decided yet is left out on purpose and listed at the end.
 
+## The idea behind MyLang
+
+MyLang is **declarative and explicit: reading the code tells you what happens.** Nothing
+happens behind your back:
+
+- a value goes on the heap only when you write `heap`;
+- a value is shared only when you write `ref` or use a pointer you made with `&`;
+- otherwise every value lives on the stack and is copied when it's declared or assigned.
+
+Every rule below follows from this. When a choice comes up, the option that keeps what
+happens visible in the code wins.
+
 **Reading the examples**
 - Code blocks are marked `go` only for colouring. The code is MyLang.
 - The basic types aren't decided yet, so the examples use `int` and `bool` as stand-ins,
