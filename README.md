@@ -20,7 +20,7 @@ happens visible in the code wins.
 
 **Reading the examples**
 - Code blocks are marked `go` only for colouring. The code is MyLang.
-- The basic types aren't decided yet, so the examples use `int` and `bool` as stand-ins,
+- The basic types aren't decided yet, so the examples use `int`, `float` and `bool` as stand-ins,
   and simple sums like `x + y` to show values.
 - `// ERROR` marks a line the rules don't allow.
 
@@ -266,12 +266,42 @@ firstBool([true, false])                      // true: the first element
 `first(int)` gives back a function made for `int`, so what each call works with is
 written right there in the code.
 
-### 4.4 Why
+### 4.4 Calling a type
+
+A type is a value, and calling it does two things.
+
+**Calling a type with a value converts the value to that type:**
+
+```go
+int(3.0)               // 3
+float(3)               // 3.0
+var whole: int = int(2.0);
+```
+
+**`type(value)` gives back the type of any value.** The result is a type, so it can be
+stored and used like any other type:
+
+```go
+type(3)                // int
+type(add)              // (int, int)int
+type(scores)           // []int
+
+var T: type = type(3); // T is int
+var x: T = 5;          // x is an int
+```
+
+`type(x)` gives the type `x` was declared with, which never changes (4.2).
+
+### 4.5 Why
 
 - **Why types are values:** it follows from rule 1, so types get names the same way
   everything else does, and a long type can be named once and reused.
 - **Why a `var` type is allowed:** a type is a value like any other, so it can be a `var`
   like any other.
+- **Why converting is calling a type:** a type is a value, so it can be called like a
+  function, and the code shows exactly where a value changes type: `int(3.0)`.
+- **Why `type(…)`:** types are values, so the type of a value can be handed back and used
+  like any other value.
 - **Why generics are just functions:** types are values, and functions already take
   values, so nothing new is needed. It follows from rule 1.
 - **Why a value keeps its type:** a value's type is fixed when it's declared, just as
@@ -920,7 +950,10 @@ pb[2] = table[0][1];                // big is now [0, 0, 12]
 
 These are left out on purpose until they're decided:
 
-- **Basic types:** which ones there are and their sizes (`char` included); converting between types.
+- **Basic types:** which ones there are and their sizes (`char` included), and what type a
+  plain number like `3` or `3.0` has.
+- **Conversions:** which types can be converted to which, how `int(3.7)` rounds, and what
+  happens when a value doesn't fit (`int8(300)`).
 - **Generic function types:** in `(type)([]T)T` the return type uses `T`, the type passed
   in, without naming it first. How a function's type refers to its own parameter ties in
   with names inside types (above).
