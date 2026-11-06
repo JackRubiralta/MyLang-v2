@@ -243,12 +243,35 @@ var y: T = 3;          // y is an int8
 x                      // still an int
 ```
 
-### 4.3 Why
+### 4.3 Generics: functions that take a type
+
+Because a type is a value, it can be passed to a function like any other value. So
+generics aren't a separate feature: a generic function is just a function that takes a
+type as a parameter.
+
+```go
+const first: (type)([]T)T = (const T: type){
+    return (const v: []T){
+        return v[0];
+    };
+};
+
+const firstInt: ([]int)int = first(int);   // a function for int arrays
+firstInt([7, 8])                           // 7
+first(bool)([true, false])                 // true
+```
+
+`first(int)` gives back a function made for `int`, so what each call works with is
+written right there in the code.
+
+### 4.4 Why
 
 - **Why types are values:** it follows from rule 1, so types get names the same way
   everything else does, and a long type can be named once and reused.
 - **Why a `var` type is allowed:** a type is a value like any other, so it can be a `var`
   like any other.
+- **Why generics are just functions:** types are values, and functions already take
+  values, so nothing new is needed. It follows from rule 1.
 - **Why a value keeps its type:** a value's type is fixed when it's declared, just as
   declaring makes a new value (2.4). Changing `T` later doesn't reach back and change `x`.
 
@@ -858,6 +881,12 @@ pb[2] = table[0][1];                // big is now [0, 0, 12]
 These are left out on purpose until they're decided:
 
 - **Basic types:** which ones there are and their sizes (`char` included); converting between types.
+- **Generic function types:** in `(type)([]T)T` the return type uses `T`, the type passed
+  in, without naming it first. How a function's type refers to its own parameter ties in
+  with names inside types (above).
+- **Generics and returned functions:** `first` returns a function that uses `T`, one of
+  `first`'s parameters, which is the open question about returned functions and local
+  values (below).
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
