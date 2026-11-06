@@ -335,6 +335,49 @@ describe(3);               // ERROR: 3 is an int, not an any; write any(3)
 `type(x)` gives `any`, because that's the type `x` was declared with (4.4); the type
 inside is `x.T`.
 
+#### What `any` is for
+
+- **Data whose shape you only learn while running:** a file or a message that says "the
+  next value is a bool".
+- **Choosing a type while running:** for example a small number type for small data and a
+  big one for big data.
+- **Acting on the type:** reading `x.T` to treat an `int` and a `bool` differently (once
+  `if` exists).
+
+#### The rule that keeps it explicit
+
+A value whose type is only known while the program runs can't be used where a fixed type
+is expected until you write the conversion yourself:
+
+```go
+const double: (int)int = (const n: int){ return n * 2; };
+
+double(x);             // ERROR: x is an any
+double(int(x));        // fine: the conversion is written out, so you can see where it could fail
+```
+
+So every place where something could go wrong while running is visible in the code: each
+wrap is `any(…)` and each unwrap is `int(…)`, `bool(…)` and so on. Everything that doesn't
+touch an `any` is still checked before the program runs.
+
+#### Underneath, on the stack
+
+An `any` sits on the stack like everything else. Its size depends on the value inside, so
+it's only known when the `any` is made or passed in, the same as an unsized array whose
+length comes from its first value (5.3). The stack simply grows by that much at that
+point; nothing is moved to the heap.
+
+#### `any` or generics?
+
+Both let one function work with many types (4.3):
+
+| | generic: takes a type | `any` |
+|---|---|---|
+| call | you pass the type: `first(int)` | the type travels with the value: `describe(any(3))` |
+| type known | before the program runs, when you write the type | only while it runs |
+| mistakes show up | before the program runs | when a conversion like `int(x)` runs |
+| best for | the same code for many types | values whose type you only learn while running |
+
 ### 4.6 Why
 
 - **Why types are values:** it follows from rule 1, so types get names the same way
