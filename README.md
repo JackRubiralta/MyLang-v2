@@ -708,6 +708,8 @@ const work: (int)null = (const x: int){
 };                     // work ends, so big and its value are gone
 ```
 
+The one way out is `hand` (10.6), which passes a heap value to the caller.
+
 ### 9.3 Declaring makes a new heap value
 
 Like every declaration (2.4), declaring a heap variable makes a new value:
@@ -830,8 +832,55 @@ already says 5.
 const str: type = *[]char;
 ```
 
-### 10.6 Why
+### 10.6 `hand`: passing heap data out of a function
 
+`hand` ends a function like `return`, but the heap value it names doesn't die: it's handed
+to whatever receives it in the caller, and that receiver becomes its **owner**.
+
+```go
+const makeNode: (int)*Node = (const v: int){
+    heap n: Node = { var value: int = v; var next: *Node = null; };
+    hand &n;                       // n is handed out instead of dying
+};
+
+var p: *Node = makeNode(5);        // p owns the node now
+```
+
+The receiver must be a pointer or a `ref`. A plain `var` just makes a copy (2.4), and the
+handed value is freed straight away:
+
+```go
+const makeBig: (int)[1000]int = (const x: int){
+    heap big: [1000]int = [...];
+    hand big;
+};
+
+ref b: [1000]int = makeBig(1);     // b is the name for the handed heap value
+var c: [1000]int = makeBig(1);     // a copy; the handed value is freed
+```
+
+- A handed value dies with its owner, when the owner's scope ends.
+- When an owner is given a new value, the value it owned before has no owner any more and
+  is freed right there.
+
+This is what lets linked structures grow: each new node is handed to the `next` that
+points at it, so the whole chain belongs to the first node.
+
+```go
+var list: Node = { var value: int = 1; var next: *Node = null; };
+list.next = makeNode(2);           // owned by list.next
+list.next.next = makeNode(3);      // owned by that node's next
+list.next = makeNode(9);           // the node holding 2 is freed here (and 3 with it)
+```
+
+### 10.7 Why
+
+- **Why `hand`:** a heap value dies with its scope (9.2), so getting heap data out of a
+  function needs its own word. You can see in the code exactly where ownership moves.
+- **Why the receiver must be a pointer or a `ref`:** only those can take over the value
+  itself; a `var` always makes its own copy.
+- **Why the old value is freed:** `hand` passes ownership, so a value whose owner takes
+  something new has no owner left.
 - **Why `*T`:** it goes in front, like every other modifier (section 3).
 - **Why a fat pointer is a struct:** it's two values kept together, the start and the
   length, which is exactly what a struct is (section 11). Nothing about it is hidden: `*`
@@ -1027,12 +1076,13 @@ These are left out on purpose until they're decided:
     `(T: type, T)null` and `{T: type, T}`, with every other type left without names.
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
-- **Nodes that outlive the function that made them** (for linked lists; see 14.2, 14.3).
 - **Control flow:** `if`, loops and the like.
 - **Refs and `const`:** whether a ref can refer to a `const`.
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
-- **Heap data outliving a function:** a heap variable dies with its scope, so returning
-  `&` of one would point at nothing. How a function hands heap data back is open.
+- **`hand` in function types:** with first-class functions the caller only sees the type,
+  so the type may need to show that a function hands, e.g. `(int)hand *Node`.
+- **Copies of an owning pointer:** `var q: *Node = list.next;` makes a pointer that doesn't
+  own the node; if the owner goes first, `q` points at nothing (see 14.2).
 - **Using a `null` pointer:** what `*p` does when `p` is `null`.
 - **Pointer lifetimes:** what `&` may point at, and what happens to a pointer whose
   target's scope has ended.
@@ -1079,11 +1129,10 @@ fixes: a pointer can't be stored anywhere that lives longer than what it points 
 checker, like Rust), or the target stays alive while a pointer reaches it (turned down
 earlier).
 
-### 14.3 Heap data can never leave the function that made it
+### 14.3 Heap data leaving the function that made it (settled)
 
-A heap variable dies with its scope, and a pointer to it would point at nothing once the
-function ends (14.2). So a function can only hand back a copy: a big array is copied in
-full, and linked structures like lists and trees can't be built.
+Settled by `hand` (10.6): a function hands its heap value to a pointer or a `ref` in the
+caller, which becomes the owner.
 
 ### 14.4 Checking values whose type is a `var`
 
@@ -1225,6 +1274,7 @@ fp.x            // gives a pointer to x
 - `&current_node.next = new_node;` puts `&` on the left of an assignment, which the pointer
   rules don't cover.
 - `var head: Item = Item();`: `Item` is never defined (probably meant `*Node = null`).
-- A linked list needs nodes that outlive the function that made them, which 14.2 and 14.3
+- A linked list needs nodes that outlive the function that made them: now possible with
+  `hand` (10.6), though 14.2 is still open for copies of a pointer. Previously this ran into 14.2 and 14.3
   don't allow yet.
 - `while … else` and `if` are control flow, which isn't decided yet.
