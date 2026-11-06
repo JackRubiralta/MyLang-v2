@@ -199,6 +199,9 @@ TypeList  = Type { "," Type }
 A function type always ends with its return type. A function that returns nothing ends
 with `null`: `(int)null`, and `()null` takes nothing and returns nothing.
 
+`{…}` starts both a map type (`{int}bool`) and a struct type (`{int, *Node}`); how a
+one-field struct `{int}` is told apart from a map isn't decided yet (section 13).
+
 ### 3.5 Why
 
 - **Why in front:** the four options (`int[]` or `[]int`, `int(int)` or `(int)int`) were
@@ -210,6 +213,42 @@ with `null`: `(int)null`, and `()null` takes nothing and returns nothing.
 - **Why it reads well:** left to right is plain English, and it's the order you use the
   value in (3.3).
 - **Why no `fn` keyword:** it isn't needed, so types stay short and clean.
+
+### 3.6 How the type syntax was chosen
+
+Four combinations were on the table: arrays written after the type (`int[]`) or before it
+(`[]int`), and functions written return-first (`int(int, int)`) or parameters-first
+(`(int, int)int`). Three independent checks compared them:
+
+| | A: `int[]` + `int(int)` | B: `int[]` + `(int)int` | C: `[]int` + `int(int)` | D: `[]int` + `(int)int` |
+|---|---|---|---|---|
+| 21 hard nested types, read by a parser | 12 clean, 9 with two meanings | 9 clean, 4 with two meanings | 11 clean, 10 with two meanings | **21 clean, 0** |
+| 3,000 random types: how many need brackets | 711 | 1,216 | 648 | **0** |
+| 17 hard types written by hand: how many need brackets | 5 | 7 | 5 | **0** |
+
+D, every modifier in front, was the only one with no double meanings and no brackets, and
+it was chosen. What went wrong with the others:
+
+- **Mixing sides needs a precedence rule.** In B, `(int)int[3]` can mean a function
+  returning `int[3]` or an array of functions. TypeScript, which works like B, needs
+  brackets for exactly this (`(() => number)[]`). C's mix of front and back is why C
+  programmers need the "spiral rule" to read their types.
+- **All-at-the-back (A) reads backwards:** the first argument you pass is written last, as
+  in `int[3](int)(int)`.
+- **Brackets clash with function types:** wherever A, B or C needed a grouping bracket, it
+  could be read as a function type instead, silently changing the meaning.
+- **Real languages built after C** that treat functions as values, like Go, Zig and Odin,
+  put modifiers in front as well.
+
+The same rule decided the other modifiers:
+
+- **Maps are `{K}V`, in front.** A map written after its value type, `V{K}`, brings the
+  double meanings back: `[3]bool{int}` could be an array of maps or a map of arrays.
+  Writing a map as `[K]V`, like an array, doesn't work either: types are values, so
+  `[N]int` couldn't tell an array size `N` from a key type `N`.
+- **Pointers are `*int`, not `int*`.** With `int*` the pointer is the only modifier at the
+  back, and `[3]int*` could mean an array of pointers or a pointer to an array. With `*`
+  in front, `[3]*int` and `*[3]int` say which one.
 
 ---
 
@@ -433,11 +472,11 @@ var b: []int = [1, 2, 3, 4];   // fine: a new declaration, length 4
 Because of this, a function can take or return an unsized array of any length:
 
 ```go
-const first: ([]int)int = (const values: []int){
+const firstOf: ([]int)int = (const values: []int){
     return values[0];
 };
-first([7, 8])          // 7
-first([1, 2, 3, 4])    // 1
+firstOf([7, 8])        // 7
+firstOf([1, 2, 3, 4])  // 1
 ```
 
 ### 5.4 Arrays inside arrays
@@ -460,6 +499,20 @@ scores.length          // 3: from the first value
 scores.length = 4;     // ERROR: a length never changes
 ```
 
+### 5.6 Passing an array to a function
+
+There are three ways, and the code says which one is happening:
+
+```go
+const sumCopy: ([]int)int = (const v: []int){ ... };       // v is a copy of the array
+const sumRef: ([]int)int = (ref v: []int){ ... };          // v is the caller's array itself
+const sumPtr: (*[]int)int = (const v: *[]int){ ... };      // v is a fat pointer to it (10.5)
+
+sumCopy(scores);       // copies all of scores, like every declaration (2.4)
+sumRef(scores);        // no copy: v is another name for scores
+sumPtr(&scores);       // no copy: a pointer you made with &, which can also be stored
+```
+
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
 
@@ -475,6 +528,9 @@ The type is `{KeyType}ValueType`, and the value lists `key: value` pairs:
 var seen: {int}bool = {1: true, 4: false};
 const rows: {int}[]int = {1: [1, 2], 2: [3, 4, 5]};
 ```
+
+The values in `rows` have different lengths, which raises a layout question on the stack
+that's still open (14.6).
 
 ### 6.2 Reading and changing entries
 
@@ -535,6 +591,11 @@ const show: (int)null = (const value: int){
     ...
 };
 show(5);
+
+const hello: ()null = (){      // takes nothing, returns nothing
+    ...
+};
+hello();
 ```
 
 ### 7.4 Parameters are declared like names
@@ -721,12 +782,18 @@ top = 99;                      // writes 99 at that location
   map entry.
 - **Why `ref` stays out of types:** a ref is a kind of name, not a type, so it belongs
   with the name (`ref x: int`), not in the type.
+- **The cost:** because the type doesn't show `ref`, a caller holding a function value
+  (for example `ops[i](n)`) can't tell from the type whether `n` will be changed. That's
+  written down as problem 14.1.
+- **Why not a reference type, like C++:** C++ has reference types, and it can't put them in
+  arrays or point at them, so they're second-class. Keeping `ref` out of types avoids that.
 
 ---
 
 ## 9. The stack and the heap
 
-For now, every value lives on the stack, unless it's declared `heap`.
+For now, every value lives on the stack, unless it's declared `heap`. That includes
+functions: a function value on the stack is a function pointer (7.7).
 
 ### 9.1 `heap`
 
@@ -784,6 +851,21 @@ When the scope ends, the slot is removed and the heap value it points at is free
 - **Why it dies with its scope:** it behaves like everything else, and nothing is handed
   from one name to another without you seeing it.
 
+### 9.6 Other ways that were considered
+
+- **`new(value)` giving back a pointer** (`var p: *int = new(5);`). Rejected: a value on the
+  heap shouldn't have to be a pointer first.
+- **`heap` as part of the type** (`var x: heap int = …`). Rejected: a `heap int` is still an
+  `int`, and when a function handed one to `var y: heap int = make();` you couldn't tell
+  from the code that `y` now owned something on the heap. Declaring `heap` should always
+  make a new heap value.
+- **`heap` on the value** (`var x: int = heap 5;`). Liked for how it reads, but the same
+  problem: ownership could pass to a new name without the code showing it.
+- **A heap value that can't change** (`heap const`). Dropped: a heap value that can't
+  change has little point, so `heap` always behaves like `var`.
+- **`heap` as a kind of name, dying with its scope** (`heap x: int = 5;`). Chosen. Getting
+  heap data out of a function then needs `hand` (10.6).
+
 ---
 
 ## 10. Pointers
@@ -830,6 +912,8 @@ heap n: int = 5;
 p = &n;                // now it points at n
 p = null;              // and at nothing again
 ```
+
+`null` is also how a function type says it returns nothing: `(int)null` (3.4).
 
 ### 10.4 Going through a pointer
 
@@ -1094,6 +1178,18 @@ block directly.
   or assigned (2.4), and structs behave the same. Because the variable holds its own block,
   it can never be left pointing at a block that has been removed.
 
+### 11.8 Other ways that were considered
+
+- **A separate `type` kind of name** (`type Node: {int, *Node} = { … };`). Dropped: types
+  are values (section 4), so `const Node: type = {int, *Node};` already does it, and
+  singletons need nothing extra.
+- **Field names in the struct type** (`{value: int, next: *Node}`). Not decided yet: it's
+  the "names inside types" question in section 13.
+- **A struct variable as a fat pointer** to its block on the stack (where the block starts
+  and ends). Dropped: with every declaration copying the whole block, the variable can
+  simply hold the block, and nothing can be left pointing at a removed block.
+- **A `this` for functions inside a struct.** Not needed: they're in the struct's scope.
+
 ---
 
 ## 12. Putting it together
@@ -1112,7 +1208,7 @@ const ops: {int}Op = {1: add, 2: mul};
 var table: [2]Row = [[1, 2], [3, 4]];
 
 // a function that takes a function and a ref
-const applyTo: (Op, int, int) = (const f: Op, ref target: int, const by: int){
+const applyTo: (Op, int, int)null = (const f: Op, ref target: int, const by: int){
     target = f(target, by);
 };
 
@@ -1141,6 +1237,9 @@ These are left out on purpose until they're decided:
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
+- **Calling a struct type:** built-in types can be called to convert (`int(3.0)`, 4.4).
+  Whether a struct type can be called too, e.g. `Node(5)`, isn't decided; for now a struct
+  value is written as a block (11.2).
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
