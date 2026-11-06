@@ -963,8 +963,20 @@ These are left out on purpose until they're decided:
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
-  (`{int, *Node}`, `(int, int)int`). Without names in the type, two values of type `Node`
-  can name their fields differently, so `n.value` can't be checked from the type alone.
+  (`{int, *Node}`, `(int, int)int`).
+  - *Advantage of names:* a later part of a type can refer to an earlier one by name. That
+    is exactly what generics and `any` need, so they come with no extra rule:
+    ```go
+    const show: (T: type, v: T)null = (const T: type, const v: T){ ... };
+    ```
+    Here the type of `v` is "whatever was passed as `T`", which a type without names can't
+    say. The same works for a struct holding a type and a value: `{T: type, value: T}`.
+  - *Advantage of names:* field names are part of the type, so `n.value` can be checked from
+    the type alone. Without them, two values of type `Node` could name their fields
+    differently.
+  - *Cost:* every type gets longer, e.g. `(x: int, y: int)int` instead of `(int, int)int`.
+  - *Middle option:* names only where a later part of the type needs them, e.g.
+    `(T: type, T)null` and `{T: type, T}`, with every other type left without names.
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
 - **Nodes that outlive the function that made them** (for linked lists; see 14.2, 14.3).
