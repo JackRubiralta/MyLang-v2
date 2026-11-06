@@ -24,9 +24,10 @@ decided yet is left out on purpose and listed at the end.
 8. [`ref`: another name for a variable](#8-ref-another-name-for-a-variable)
 9. [The stack and the heap](#9-the-stack-and-the-heap)
 10. [Pointers](#10-pointers)
-11. [Putting it together](#11-putting-it-together)
-12. [Not decided yet](#12-not-decided-yet)
-13. [Problems to look at later](#13-problems-to-look-at-later) (incl. struct notes, 13.12)
+11. [Structs and `type`](#11-structs-and-type)
+12. [Putting it together](#12-putting-it-together)
+13. [Not decided yet](#13-not-decided-yet)
+14. [Problems to look at later](#14-problems-to-look-at-later) (incl. struct notes, 14.12)
 
 ---
 
@@ -58,7 +59,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var`, `ref` or `heap` |
+| `kind` | what sort of name it is: `const`, `var`, `ref`, `heap` or `type` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -75,7 +76,7 @@ A number, a function and an array are all declared the same way.
 **Why:** since everything is a value (rule 1), there is no reason for functions or arrays
 to be declared differently from numbers.
 
-### 2.2 The four kinds of name
+### 2.2 The five kinds of name
 
 | Kind | Can it be given a new value? | Where its value lives | Section |
 |---|---|---|---|
@@ -83,6 +84,7 @@ to be declared differently from numbers.
 | `var` | yes | stack | 2.3 |
 | `ref` | it *is* another variable: assigning changes that variable | wherever that variable is | 8 |
 | `heap` | yes | heap | 9 |
+| `type` | no: it names a type | – | 11 |
 
 ### 2.3 `const` and `var`
 
@@ -610,7 +612,99 @@ var ps: [2]*int = [&a, &b];
 
 ---
 
-## 11. Putting it together
+## 11. Structs and `type`
+
+### 11.1 `type`: naming a type
+
+`type` is the fifth kind of name, with the same shape as every other declaration:
+
+```go
+type Name: Type = value;
+```
+
+After the `:` comes the actual type. After the `=` comes the value: for a struct, its
+fields (11.2); for any other type, its default value.
+
+```go
+type Op: (int, int)int = add;
+type Pair: [2]int = [0, 0];
+```
+
+### 11.2 Struct types
+
+A struct's type lists its field types in braces, `{int, *Node}`. Its value is a block of
+declarations, one per field and in the same order, each with `const` or `var`, a name, a
+type and a starting value:
+
+```go
+type Node: {int, *Node} = {
+    var value: int = 0;
+    var next: *Node = null;
+};
+```
+
+This mirrors functions: the type lists only the types, and the value gives the names.
+
+| | Type (after `:`) | Value (after `=`) |
+|---|---|---|
+| function | `(int, int)int` | `(const x: int, const y: int){ … }` |
+| struct | `{int, *Node}` | `{ var value: int = 0; var next: *Node = null; }` |
+
+### 11.3 Fields
+
+`.` reaches a field. A `var` field can change and a `const` field can't:
+
+```go
+settings.size = 5;          // fine: size is var
+settings.debug = true;      // ERROR: debug is const
+```
+
+### 11.4 Singletons
+
+A singleton is the same line with `var` or `const` instead of `type`. It declares one
+struct value directly:
+
+```go
+var settings: {bool, int} = {
+    const debug: bool = false;
+    var size: int = 3;
+};
+
+settings.size              // 3
+```
+
+There is no type name, so there's no way to make a second one.
+
+### 11.5 Functions inside a struct
+
+A function declared inside a struct is in the struct's scope, so it uses the struct's
+fields directly. There is no `this`:
+
+```go
+var counter: {int, (int)} = {
+    var count: int = 0;
+    const add: (int) = (const n: int){
+        count = count + n;     // count is the struct's own field
+    };
+};
+
+counter.add(5);                // counter.count is now 5
+```
+
+### 11.6 Why
+
+- **Why `type` keeps the `=`:** every declaration has the shape `kind name: Type = value;`
+  (section 2), and naming a type is no exception.
+- **Why the type lists only the field types:** it works like a function's type, which
+  lists only the parameter types; the names belong in the value.
+- **Why singletons need nothing new:** a struct value can be declared directly with `var`
+  or `const`, like any other value.
+- **Why no `this`:** a function inside a struct is already in the struct's scope, so the
+  fields are just names it can see.
+
+---
+
+## 12. Putting it together
 
 ```go
 // name long types once
@@ -641,12 +735,20 @@ pb[2] = table[0][1];                // big is now [0, 0, 12]
 
 ---
 
-## 12. Not decided yet
+## 13. Not decided yet
 
 These are left out on purpose until they're decided:
 
 - **Basic types:** which ones there are and their sizes; strings; converting between types.
-- **Structs.**
+- **Names inside types:** whether struct and function types include the names, e.g.
+  `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
+  (`{int, *Node}`, `(int, int)int`).
+- **Making a value of a named struct type:** `var a: Node = …` (what goes after the `=`).
+- **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
+  field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
+- **`type` and section 4:** whether `type Op: (int, int)int = …;` replaces
+  `const Op: type = (int, int)int;` or both stay.
+- **Nodes that outlive the function that made them** (for linked lists; see 14.2, 14.3).
 - **Control flow:** `if`, loops and the like.
 - **Refs and `const`:** whether a ref can refer to a `const`.
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
@@ -662,12 +764,12 @@ These are left out on purpose until they're decided:
 
 ---
 
-## 13. Problems to look at later
+## 14. Problems to look at later
 
 Problems the current rules run into. Each shows an example that the rules allow today and
 some possible fixes. None of the fixes is decided.
 
-### 13.1 Refs don't show in types, so first-class functions can't be checked
+### 14.1 Refs don't show in types, so first-class functions can't be checked
 
 ```go
 const bump: (int) = (ref x: int){ x = x + 1; };
@@ -680,7 +782,7 @@ fs[i](3);       // fine for show, an ERROR for bump, and nothing can tell which 
 Possible fixes: mark ref arguments at the call (`bump(ref n)`), or don't allow a function
 with ref parameters to be stored in an array or a map.
 
-### 13.2 A pointer can outlive what it points at
+### 14.2 A pointer can outlive what it points at
 
 ```go
 heap a: int = 1;
@@ -697,13 +799,13 @@ fixes: a pointer can't be stored anywhere that lives longer than what it points 
 checker, like Rust), or the target stays alive while a pointer reaches it (turned down
 earlier).
 
-### 13.3 Heap data can never leave the function that made it
+### 14.3 Heap data can never leave the function that made it
 
 A heap variable dies with its scope, and a pointer to it would point at nothing once the
-function ends (13.2). So a function can only hand back a copy: a big array is copied in
+function ends (14.2). So a function can only hand back a copy: a big array is copied in
 full, and linked structures like lists and trees can't be built.
 
-### 13.4 A type stored in a `var` can change while the program runs
+### 14.4 A type stored in a `var` can change while the program runs
 
 ```go
 var T: type = int;
@@ -713,7 +815,7 @@ T = bool;       // what type is x now?
 
 Types have to be known before the program runs. Possible fix: a type can only be a `const`.
 
-### 13.5 `(Op)` has two meanings when the value is a type
+### 14.5 `(Op)` has two meanings when the value is a type
 
 ```go
 const Op: type = (int, int)int;
@@ -723,7 +825,7 @@ const T: type = (Op);    // a function that takes an Op, or just Op in brackets?
 Named types are ordinary names, so brackets around one are ambiguous. Possible fix: in a
 type, `( … )` always means a function and is never used for grouping.
 
-### 13.6 Arrays or maps of unsized arrays
+### 14.6 Arrays or maps of unsized arrays
 
 ```go
 const rows: {int}[]int = {1: [1, 2], 2: [3, 4, 5]};   // values of different lengths
@@ -733,13 +835,13 @@ Values of different sizes can't sit side by side on the stack, so finding `rows[
 simple position. Possible fixes: unsized arrays inside an array or a map must all have the
 same length, or only fixed-size `[n]T` is allowed there.
 
-### 13.7 Which types can be map keys
+### 14.7 Which types can be map keys
 
 `{(int)int}bool` or `{[]int}bool`: when are two functions, or two arrays, the same key?
 Possible fix: only types that can be compared can be keys (to decide together with the
 basic types).
 
-### 13.8 A ref into a map entry, then the whole map is reassigned
+### 14.8 A ref into a map entry, then the whole map is reassigned
 
 ```go
 var seen: {int}bool = {1: true, 4: false};
@@ -747,32 +849,33 @@ ref four: bool = seen[4];
 seen = {1: true, 2: false};    // if allowed, four's entry is gone
 ```
 
-Depends on how reassigning a whole map works (section 12).
+Depends on how reassigning a whole map works (section 13).
 
-### 13.9 A ref to a `const`
+### 14.9 A ref to a `const`
 
 ```go
 const limit: int = 10;
 bump(limit);    // would change a constant
 ```
 
-Because of 13.1 this can't always be caught before the program runs.
+Because of 14.1 this can't always be caught before the program runs.
 
-### 13.10 A function made inside another function that uses its local values
+### 14.10 A function made inside another function that uses its local values
 
-The returned-function case from section 12, but it also happens when the inner function is
+The returned-function case from section 13, but it also happens when the inner function is
 stored somewhere that lives longer, such as a heap array, without being returned.
 
-### 13.11 Array sizes from names
+### 14.11 Array sizes from names
 
 ```go
 const N: int = 3;
 var a: [N]int = [1, 2, 3];     // allowed?
 ```
 
-### 13.12 Structs (notes from 2024, not decided)
+### 14.12 Structs (notes from 2024, not decided)
 
-Structs aren't decided yet. These are the earlier notes to start from.
+The decided struct rules are in section 11. These are the earlier notes, kept for the parts
+still open.
 
 **A struct is a value of type `type`**, declared like everything else (rule 1):
 
@@ -843,6 +946,6 @@ fp.x            // gives a pointer to x
 - `&current_node.next = new_node;` puts `&` on the left of an assignment, which the pointer
   rules don't cover.
 - `var head: Item = Item();`: `Item` is never defined (probably meant `*Node = null`).
-- A linked list needs nodes that outlive the function that made them, which 13.2 and 13.3
+- A linked list needs nodes that outlive the function that made them, which 14.2 and 14.3
   don't allow yet.
 - `while … else` and `if` are control flow, which isn't decided yet.
