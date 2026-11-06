@@ -210,7 +210,9 @@ bump(3);           // ERROR: 3 isn't a variable
 (`const` and `var` on a parameter don't show in the type: they only affect the function's
 own copy.)
 
-## 10. The heap
+## 10. The heap and pointers
+
+### `heap`: a variable kept on the heap
 
 `heap` is a fourth way to declare a name. A heap variable can change, like a `var`, but
 its value is kept on the heap instead of the stack.
@@ -221,10 +223,44 @@ grid[1][1] = 5;
 ```
 
 - A heap variable dies when its scope ends (the `{ }` it was declared in), just like a
-  stack variable.
+  stack variable, unless a pointer to it is still around (below).
 - Declaring always makes a new value: `heap copy: [3][3]int = grid;` is a second heap value.
-- To keep heap data alive after a function ends, the function returns a pointer to it
-  (a function of type `(int)*int`, for example).
+
+### Pointers: `*T`
+
+A pointer is a first-class value that points at something on the heap. `&` gives a pointer,
+`*` reads or changes what it points at:
+
+```go
+heap n: int = 5;
+var p: *int = &n;      // a pointer to n
+*p                     // 5
+*p = 6;                // n is now 6
+```
+
+- `&` only works on the heap: a heap variable, or an element or entry of a heap array or
+  map. A stack variable can't be pointed at; use a `ref` to share it.
+- A heap value is freed when its scope has ended **and** no pointer to it is left. With no
+  pointer, that is exactly the end of its scope. There is no `delete`.
+- So a pointer always points at a live value: it can't dangle, and there is no null.
+- Copying a pointer gives a second pointer to the same value.
+- Indexing and calling go straight through a pointer, no `*` needed: if `q` is a `*[3]int`,
+  `q[0]` is its first element. Indexing and calling come before `*`, so `*ps[0]` is the
+  value that the first pointer in `ps` points at.
+
+To keep heap data alive after a function ends, the function returns a pointer to it:
+
+```go
+const make: (int)*int = (const x: int){
+    heap n: int = x;
+    return &n;         // n's scope ends, but the pointer keeps its value alive
+};
+
+var p: *int = make(5);
+*p                     // 5
+var ps: [2]*int = [make(1), make(2)];
+*ps[0]                 // 1
+```
 
 ## 11. First-class examples
 
