@@ -71,7 +71,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var`, `ref` or `heap` |
+| `kind` | what sort of name it is: `const`, `var`, `ref`, `heap` or `type` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -88,7 +88,7 @@ A number, a function and an array are all declared the same way.
 **Why:** since everything is a value (rule 1), there is no reason for functions or arrays
 to be declared differently from numbers.
 
-### 2.2 The four kinds of name
+### 2.2 The five kinds of name
 
 | Kind | Can it be given a new value? | Where its value lives | Section |
 |---|---|---|---|
@@ -96,6 +96,7 @@ to be declared differently from numbers.
 | `var` | yes | stack | 2.3 |
 | `ref` | it *is* another variable: assigning changes that variable | wherever that variable is | 8 |
 | `heap` | yes | heap | 9 |
+| `type` | no: a type never changes | – | 4 |
 
 ### 2.3 `const` and `var`
 
@@ -254,32 +255,36 @@ The same rule decided the other modifiers:
 
 ## 4. Types are values too
 
-### 4.1 Declaring a type
+### 4.1 Declaring a type: `type`
 
-A type is a value of type `type`, so it's declared like anything else and then used
-wherever a type goes:
+`type` is the fifth kind of name, with the same shape as every other declaration:
 
 ```go
-const Pair: type = [2]int;
-const Op: type = (int, int)int;
-const Table: type = {int}[]int;
+type Name: Shape = default;
+```
+
+- After the `:` comes the **shape**: what the type actually is.
+- After the `=` comes its **default**: what a new value of the type looks like.
+- A `type` name can never be given a new value, so a type never changes.
+
+```go
+type Pair: [2]int = [0, 0];
+type Table: {int}[]int = {0: [0]};
+type Op: (int, int)int = (const x: int, const y: int){ return x + y; };
 
 var p: Pair = [1, 2];
 const add: Op = (const x: int, const y: int){ return x + y; };
 const ops: [2]Op = [add, add];       // an array of Op
 ```
 
-### 4.2 A type in a `var` can change
+### 4.2 Types never change
 
-Like any `var`, a type in a `var` can be given a new value. A value keeps the type it was
-declared with; only what you declare afterwards gets the new type:
+Because a `type` name can't be reassigned, every value declared with it has a type that's
+known before the program runs. A type can still be held as a value, as a generic's
+parameter (4.3) or inside an `any` (4.5), but always as a `const`: there is no `var` type.
 
 ```go
-var T: type = int;
-var x: T = 3;          // x is an int
-T = int8;
-var y: T = 3;          // y is an int8
-x                      // still an int
+var T: type = int;     // ERROR: a type can't be a var
 ```
 
 ### 4.3 Generics: functions that take a type
@@ -335,8 +340,8 @@ type(3)                // int
 type(add)              // (int, int)int
 type(scores)           // []int
 
-var T: type = type(3); // T is int
-var x: T = 5;          // x is an int
+type Num: type(3) = 0; // Num is int, with default 0
+var x: Num = 5;        // x is an int
 ```
 
 `type(x)` gives the type `x` was declared with, which never changes (4.2).
@@ -442,8 +447,9 @@ Both let one function work with many types (4.3):
 
 - **Why types are values:** it follows from rule 1, so types get names the same way
   everything else does, and a long type can be named once and reused.
-- **Why a `var` type is allowed:** a type is a value like any other, so it can be a `var`
-  like any other.
+- **Why `type` is its own kind of name:** it keeps the `kind name: Shape = value;` shape,
+  gives every type a default after the `=`, and can never change, so types are always known
+  before the program runs.
 - **Why converting is calling a type:** a type is a value, so it can be called like a
   function, and the code shows exactly where a value changes type: `int(3.0)`.
 - **Why `any` is built in:** a function that turned any value into an `any` would need a
@@ -455,8 +461,9 @@ Both let one function work with many types (4.3):
   like any other value.
 - **Why generics are just functions:** types are values, and functions already take
   values, so nothing new is needed. It follows from rule 1.
-- **Why a value keeps its type:** a value's type is fixed when it's declared, just as
-  declaring makes a new value (2.4). Changing `T` later doesn't reach back and change `x`.
+- **Why there's no `var` type:** if a type could change while the program runs, values
+  declared with it couldn't be checked before running. `any` (4.5) covers the cases where a
+  type is only known while running, and it shows them in the code.
 
 ---
 
@@ -1046,7 +1053,7 @@ already says 5.
 `str` is a fat pointer to characters:
 
 ```go
-const str: type = *[]char;
+type str: *[]char = null;
 ```
 
 ### 10.6 `hand`: passing heap data out of a function
@@ -1153,12 +1160,19 @@ recursive function, because every new node is handed to something outside it.
 
 ### 11.1 A struct type is its shape
 
-A struct's type lists its field types in braces, `{int, *Node}`. It's a type like any
-other, so it's named the same way (section 4):
+A struct's type lists its field types in braces, `{int, *Node}`. It's named with `type`
+like any other type (4.1), and its default is a block of its fields with their starting
+values:
 
 ```go
-const Node: type = {int, *Node};
-const Settings: type = {bool, int};
+type Node: {int, *Node} = {
+    var value: int = 0;
+    var next: *Node = null;
+};
+type Settings: {bool, int} = {
+    const debug: bool = false;
+    var size: int = 3;
+};
 ```
 
 ### 11.2 A struct value is a block of declarations
@@ -1256,8 +1270,8 @@ block directly.
 
 ### 11.7 Why
 
-- **Why a struct type is declared like any type:** types are values (section 4), so a
-  struct type needs no special keyword.
+- **Why a struct type is declared like any type:** it uses `type` (4.1), so its default,
+  the starting values of its fields, comes after the `=` like every other default.
 - **Why the type lists only the field types:** it works like a function's type, which
   lists only the parameter types; the names belong in the value.
 - **Why singletons need nothing new:** a struct value can be declared directly with `var`
@@ -1270,9 +1284,9 @@ block directly.
 
 ### 11.8 Other ways that were considered
 
-- **A separate `type` kind of name** (`type Node: {int, *Node} = { … };`). Dropped: types
-  are values (section 4), so `const Node: type = {int, *Node};` already does it, and
-  singletons need nothing extra.
+- **Types as `const`/`var` values** (`const Node: type = {int, *Node};`, `var T: type`).
+  Replaced by the `type` kind: it gives every type a default after the `=`, and a type can
+  never change.
 - **Field names in the struct type** (`{value: int, next: *Node}`). Not decided yet: it's
   the "names inside types" question in section 13.
 - **A struct variable as a fat pointer** to its block on the stack (where the block starts
@@ -1286,8 +1300,8 @@ block directly.
 
 ```go
 // name long types once
-const Op: type = (int, int)int;
-const Row: type = []int;
+type Op: (int, int)int = (const x: int, const y: int){ return x + y; };
+type Row: []int = [0];
 
 // functions are values
 const add: Op = (const x: int, const y: int){ return x + y; };
@@ -1327,6 +1341,11 @@ These are left out on purpose until they're decided:
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
+- **Getting a type's default:** how you ask for it, e.g. `var n: Node = Node();` or
+  `var n: Node = {};`.
+- **Constructors:** whether a type's default can take inputs, e.g.
+  `type Node: {int, int} = (var value: int){ var doubled: int = 2 * value; };` and then
+  `Node(5)`.
 - **Calling a struct type:** built-in types can be called to convert (`int(3.0)`, 4.4).
   Whether a struct type can be called too, e.g. `Node(5)`, isn't decided; for now a struct
   value is written as a block (11.2).
@@ -1407,18 +1426,16 @@ earlier).
 Settled by `hand` (10.6): a function hands its heap value to a pointer or a `ref` in the
 caller, which becomes the owner.
 
-### 14.4 Checking values whose type is a `var`
+### 14.4 Values whose type is a `var` (settled)
 
-Decided (4.2): a type in a `var` can change, and each value keeps the type it was declared
-with. Still open: if `T` changes inside something like an `if`, the type of a later
-declaration `var y: T = …` can't be known before the program runs, so that check has to
-happen while it runs.
+Settled by `type` (4.1, 4.2): a type can never change, so there is no `var` type and every
+value's type is known before the program runs.
 
 ### 14.5 `(Op)` has two meanings when the value is a type
 
 ```go
-const Op: type = (int, int)int;
-const T: type = (Op);    // a function that takes an Op, or just Op in brackets?
+type Op: (int, int)int = add;
+type T: (Op) = …;        // a function that takes an Op, or just Op in brackets?
 ```
 
 Named types are ordinary names, so brackets around one are ambiguous. Since every function
