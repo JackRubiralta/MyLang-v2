@@ -570,7 +570,18 @@ var q: *int = p;       // a second pointer to n
 *q = 7;                // n is now 7
 ```
 
-### 10.3 Going through a pointer
+### 10.3 `null`
+
+A pointer can be `null`: it points at nothing.
+
+```go
+var p: *int = null;    // points at nothing yet
+heap n: int = 5;
+p = &n;                // now it points at n
+p = null;              // and at nothing again
+```
+
+### 10.4 Going through a pointer
 
 Indexing and calling go straight through a pointer, with no `*` needed:
 
@@ -591,7 +602,7 @@ var ps: [2]*int = [&a, &b];
 *ps[0]                 // 1
 ```
 
-### 10.4 Why
+### 10.5 Why
 
 - **Why `*T`:** it goes in front, like every other modifier (section 3).
 - **Why indexing goes straight through:** otherwise you'd need brackets: `(*r)[0]`.
@@ -640,6 +651,7 @@ These are left out on purpose until they're decided:
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
 - **Heap data outliving a function:** a heap variable dies with its scope, so returning
   `&` of one would point at nothing. How a function hands heap data back is open.
+- **Using a `null` pointer:** what `*p` does when `p` is `null`.
 - **Pointer lifetimes:** what `&` may point at, and what happens to a pointer whose
   target's scope has ended.
 - **Returned functions and local values:** whether a function returned from another
