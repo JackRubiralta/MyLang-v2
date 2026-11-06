@@ -26,6 +26,7 @@ decided yet is left out on purpose and listed at the end.
 10. [Pointers](#10-pointers)
 11. [Putting it together](#11-putting-it-together)
 12. [Not decided yet](#12-not-decided-yet)
+13. [Problems to look at later](#13-problems-to-look-at-later)
 
 ---
 
@@ -645,3 +646,113 @@ These are left out on purpose until they're decided:
   function can use that function's local values after it has ended.
 - **A ref into heap data** that a pointer stops reaching.
 - **Reassigning a whole map:** whether the new value needs the same keys.
+
+---
+
+## 13. Problems to look at later
+
+Problems the current rules run into. Each shows an example that the rules allow today and
+some possible fixes. None of the fixes is decided.
+
+### 13.1 Refs don't show in types, so first-class functions can't be checked
+
+```go
+const bump: (int) = (ref x: int){ x = x + 1; };
+const show: (int) = (const x: int){ ... };
+const fs: [2](int) = [bump, show];     // same type, so allowed
+fs[i](n);       // does n change? it depends on i, which is only known when the program runs
+fs[i](3);       // fine for show, an ERROR for bump, and nothing can tell which before running
+```
+
+Possible fixes: mark ref arguments at the call (`bump(ref n)`), or don't allow a function
+with ref parameters to be stored in an array or a map.
+
+### 13.2 A pointer can outlive what it points at
+
+```go
+heap a: int = 1;
+var p: *int = &a;
+{
+    heap n: int = 5;
+    p = &n;
+}               // n dies here
+*p = 6;         // p points at nothing
+```
+
+Pointers are first-class, so they can be stored, returned and copied anywhere. Possible
+fixes: a pointer can't be stored anywhere that lives longer than what it points at (needs a
+checker, like Rust), or the target stays alive while a pointer reaches it (turned down
+earlier).
+
+### 13.3 Heap data can never leave the function that made it
+
+A heap variable dies with its scope, and a pointer to it would point at nothing once the
+function ends (13.2). So a function can only hand back a copy: a big array is copied in
+full, and linked structures like lists and trees can't be built.
+
+### 13.4 A type stored in a `var` can change while the program runs
+
+```go
+var T: type = int;
+var x: T = 3;
+T = bool;       // what type is x now?
+```
+
+Types have to be known before the program runs. Possible fix: a type can only be a `const`.
+
+### 13.5 `(Op)` has two meanings when the value is a type
+
+```go
+const Op: type = (int, int)int;
+const T: type = (Op);    // a function that takes an Op, or just Op in brackets?
+```
+
+Named types are ordinary names, so brackets around one are ambiguous. Possible fix: in a
+type, `( … )` always means a function and is never used for grouping.
+
+### 13.6 Arrays or maps of unsized arrays
+
+```go
+const rows: {int}[]int = {1: [1, 2], 2: [3, 4, 5]};   // values of different lengths
+```
+
+Values of different sizes can't sit side by side on the stack, so finding `rows[k]` isn't a
+simple position. Possible fixes: unsized arrays inside an array or a map must all have the
+same length, or only fixed-size `[n]T` is allowed there.
+
+### 13.7 Which types can be map keys
+
+`{(int)int}bool` or `{[]int}bool`: when are two functions, or two arrays, the same key?
+Possible fix: only types that can be compared can be keys (to decide together with the
+basic types).
+
+### 13.8 A ref into a map entry, then the whole map is reassigned
+
+```go
+var seen: {int}bool = {1: true, 4: false};
+ref four: bool = seen[4];
+seen = {1: true, 2: false};    // if allowed, four's entry is gone
+```
+
+Depends on how reassigning a whole map works (section 12).
+
+### 13.9 A ref to a `const`
+
+```go
+const limit: int = 10;
+bump(limit);    // would change a constant
+```
+
+Because of 13.1 this can't always be caught before the program runs.
+
+### 13.10 A function made inside another function that uses its local values
+
+The returned-function case from section 12, but it also happens when the inner function is
+stored somewhere that lives longer, such as a heap array, without being returned.
+
+### 13.11 Array sizes from names
+
+```go
+const N: int = 3;
+var a: [N]int = [1, 2, 3];     // allowed?
+```
