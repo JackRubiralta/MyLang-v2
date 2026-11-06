@@ -572,7 +572,8 @@ var q: *int = p;       // a second pointer to n
 
 ### 10.3 `null`
 
-A pointer can be `null`: it points at nothing.
+`null` is a pointer value: a pointer of any pointer type (`*int`, `*[3]int`, …) can be
+`null`, meaning it points at nothing.
 
 ```go
 var p: *int = null;    // points at nothing yet
