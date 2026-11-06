@@ -716,7 +716,7 @@ var counter: {int, (int)null} = {
 counter.add(5);                // counter.count is now 5
 ```
 
-### 11.6 Underneath: a block on the stack and a fat pointer
+### 11.6 Underneath: the variable is its block
 
 Writing a value on its own puts it on the stack and removes it again: `4;` adds 4 to the
 stack, and it's gone once the statement is done. A struct block works the same way.
@@ -726,27 +726,31 @@ Writing
 { var value: int = 0; var next: *Node = null; };
 ```
 
-lays its fields out on the stack one after another, and they're removed when the scope
-ends. Saving the block in a variable keeps it: the variable holds a **fat pointer**, where
-the block starts and where it ends on the stack.
+lays its fields out on the stack one after another, and they're removed again. Saving the
+block in a variable keeps it: the variable's own place on the stack holds the whole block,
+just as an `int` variable holds its number. A field is found from the start of that block
+and its position in the shape (`{int, *Node}`: `value` first, `next` second).
+
+A struct doesn't work like a pointer. Every declaration and every assignment copies the
+whole block:
+
+```go
+var n: Node = { var value: int = 0; var next: *Node = null; };
+var m: Node = n;       // a full copy: m gets its own block on the stack
+m.value = 5;           // n.value is still 0
+```
+
+A `const` field can't be changed on its own, but a `var` struct variable can be given a
+whole new value, which copies the new block into its place:
 
 ```go
 var node: {int, *Node} = { const value: int = 0; var next: *Node = null; };
-node.value             // start of node's block + where value sits in the shape
-```
-
-- A field is found from the start of the block and its position in the shape
-  (`{int, *Node}`: `value` first, `next` second).
-- A `const` field can't change, but a `var` struct variable can be pointed at a different
-  block:
-
-```go
 node.value = 1;        // ERROR: value is const
-node = { const value: int = 7; var next: *Node = null; };   // fine: node now points at a new block
+node = { const value: int = 7; var next: *Node = null; };   // fine: the new block is copied in
 ```
 
-This matches the heap (9.4): a heap variable is a hidden pointer to the heap, and a struct
-variable is a hidden fat pointer to a block on the stack.
+A heap variable (9.4) is the one that holds a hidden pointer; a struct variable holds its
+block directly.
 
 ### 11.7 Why
 
@@ -758,9 +762,9 @@ variable is a hidden fat pointer to a block on the stack.
   or `const`, like any other value.
 - **Why no `this`:** a function inside a struct is already in the struct's scope, so the
   fields are just names it can see.
-- **Why a fat pointer:** everything lives on the stack, so a struct variable only needs to
-  say where its block is. Pointing it somewhere else is cheap, and the fields stay where
-  they were written.
+- **Why a struct is copied, not pointed at:** every other value is copied when it's declared
+  or assigned (2.4), and structs behave the same. Because the variable holds its own block,
+  it can never be left pointing at a block that has been removed.
 
 ---
 
@@ -807,11 +811,6 @@ These are left out on purpose until they're decided:
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
 - **Nodes that outlive the function that made them** (for linked lists; see 14.2, 14.3).
-- **Copying a struct:** with fat pointers, does `var m: Node = n;` copy the block (a new
-  value, as in 2.4) or copy the fat pointer, so `m` and `n` share one block?
-- **How long a saved block lives:** it has to last as long as the variable that points at
-  it. A block written in an inner scope, or inside a function that returns it, would be
-  removed first (see 14.13).
 - **Control flow:** `if`, loops and the like.
 - **Refs and `const`:** whether a ref can refer to a `const`.
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
@@ -1011,18 +1010,3 @@ fp.x            // gives a pointer to x
 - A linked list needs nodes that outlive the function that made them, which 14.2 and 14.3
   don't allow yet.
 - `while … else` and `if` are control flow, which isn't decided yet.
-
-### 14.13 A struct variable can outlive its block
-
-```go
-var node: {int, *Node} = { var value: int = 0; var next: *Node = null; };
-{
-    node = { var value: int = 5; var next: *Node = null; };   // this block is in the inner scope
-}                                                             // the block is removed here
-node.value     // node's fat pointer points at a removed block
-```
-
-The same happens when a function returns a struct whose block was written inside it.
-Possible fixes: a block always lives in the scope of the variable it's saved into (so the
-inner block above would be placed in the outer scope), or a struct variable may only point
-at a block from its own scope or an outer one.
