@@ -1,7 +1,7 @@
 # MyLang rules
 
 The rules decided so far: declaring with `const`, `var`, `ref` and `heap`, first-class
-values, and the types for arrays, maps and functions. Structs come later.
+values, and the types for arrays, maps, functions and pointers. Structs come later.
 (Code blocks are marked `go` only for colouring; the code is MyLang.)
 
 ## 1. Everything is a first-class value
@@ -53,6 +53,7 @@ int8  int16  int32  int64  int128  int256
 | map | `{K}V` | `{int}bool` | map from int to bool |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function, no return value | `(P1, P2)` | `(int)` | takes an int, returns nothing |
+| pointer | `*T` | `*int` | pointer to an int |
 
 Because every modifier goes in front, a type reads left to right, the modifiers stack in any
 combination, and a type never needs brackets:
@@ -65,6 +66,9 @@ combination, and a type never needs brackets:
 [3]{int}bool         // array of 3 maps
 {int}[]int           // map from int to arrays of ints
 [2][3]int            // array of 2 arrays of 3 ints
+[3]*int              // array of 3 pointers
+*[3]int              // pointer to an array of 3 ints
+(int)*int            // function that takes an int and returns a pointer
 ```
 
 The grammar:
@@ -73,6 +77,7 @@ The grammar:
 Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array)
           | "{" Type "}" Type                 (map: {key}value)
+          | "*" Type                          (pointer)
           | "(" [ ParamList ] ")" [ Type ]    (function: parameters, then the return type)
 ParamList = Param { "," Param }
 Param     = [ "ref" ] Type                    (ref only here, see section 9)
@@ -104,6 +109,12 @@ primes[0]          // 2
 grid[1][2]         // 6
 ```
 
+An element of a `var` or `heap` array can be changed:
+
+```go
+scores[0] = 15;    // scores is now [15, 20, 30]
+```
+
 The length of an unsized array is set by its first value and never changes:
 
 ```go
@@ -120,10 +131,11 @@ So a function can take or return an unsized array of any length.
 var seen: {int}bool = {1: true, 4: false};
 
 seen[4]            // false
+seen[4] = true;    // change an entry of a var or heap map
 ```
 
 A map has a fixed size, like an array, and lives on the stack. Its size is set by its
-first value and never changes.
+first value and never changes, so `seen[7] = true;` is an ERROR: 7 isn't a key.
 
 ## 8. Functions
 
@@ -167,9 +179,14 @@ variable.
 var b: int = 3;
 ref r: int = b;
 r = 5;             // b is now 5
+
+var scores: []int = [10, 20, 30];
+ref top: int = scores[0];
+top = 99;          // scores is now [99, 20, 30]
 ```
 
-- A ref always refers to a variable, never to a value like `3`.
+- A ref refers to a variable, an array element or a map entry (each is a place in
+  memory), never to a value like `3`.
 - A ref is **not a type**. You can't put one in an array or a map, or return one, so
   `[3]ref int` and `(int)ref int` don't exist. Every type stays first-class.
 - Because a ref can't be stored or returned, it can never outlive what it refers to.
@@ -200,12 +217,14 @@ its value is kept on the heap instead of the stack.
 
 ```go
 heap grid: [3][3]int = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+grid[1][1] = 5;
 ```
 
 - A heap variable dies when its scope ends (the `{ }` it was declared in), just like a
   stack variable.
 - Declaring always makes a new value: `heap copy: [3][3]int = grid;` is a second heap value.
-- To keep heap data alive after a function ends, the function returns a pointer to it.
+- To keep heap data alive after a function ends, the function returns a pointer to it
+  (a function of type `(int)*int`, for example).
 
 ## 11. First-class examples
 
