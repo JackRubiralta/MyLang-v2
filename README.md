@@ -482,6 +482,32 @@ const three: (int)[3]int = (const x: int){
 three(7)[0]                    // 7
 ```
 
+### 7.7 Underneath: a function is a function pointer
+
+A function value is just a **function pointer**: the address of the function's code. Storing
+a function in a name, an array or a map stores that address, and calling it jumps there:
+
+```go
+const ops: [2](int, int)int = [add, sub];   // two function pointers
+ops[1](5, 3)                                // jumps to sub's code
+```
+
+A function that uses a value from outside itself needs more than its code. In this
+example the inner function uses `n`, which belongs to `adder` and is gone once `adder` ends:
+
+```go
+const adder: (int)(int)int = (const n: int){
+    return (const x: int){
+        return x + n;      // n comes from adder
+    };
+};
+```
+
+*Idea, not decided:* such a function value is a function pointer **plus a copy of the
+values it uses**, kept together like a struct (`adder(5)` would hold the code and its own
+copy of `5`). That follows the copy rule (2.4): the values are copied when the function is
+made, so nothing is left pointing at `adder`'s ended scope. See section 13.
+
 **Why:** parameters are declared exactly like names (section 2), the function's type
 reads the same way as every other type (section 3), and functions go everywhere other
 values go (section 1).
@@ -552,7 +578,19 @@ in an array or a map, and can't be returned, so these don't exist:
 (ref int)null          // ERROR: not a type; write (int)null
 ```
 
-### 8.5 Why
+### 8.5 Underneath: a ref is a location
+
+A ref just holds the **location** of what it refers to: the place in memory of the
+variable, array element or map entry. Reading or assigning the ref goes to that place, so
+it reads and changes the original:
+
+```go
+var scores: []int = [10, 20, 30];
+ref top: int = scores[0];      // top holds the location of scores[0]
+top = 99;                      // writes 99 at that location
+```
+
+### 8.6 Why
 
 - **Why a kind of name, not a type:** a reference type couldn't go everywhere other types
   can (an array of references or a returned reference breaks), so it would break rule 1.
@@ -602,11 +640,11 @@ heap copy: [3]int = grid;      // a second heap value
 copy[0] = 0;                   // grid is still [1, 2, 3]
 ```
 
-### 9.4 Underneath: a heap variable is an unofficial pointer
+### 9.4 Underneath: a heap variable is a pointer in disguise
 
-A heap variable's own slot is on the stack, like every name. What that slot holds is the
-address of the value on the heap, and every use of the name goes through it automatically,
-so you never write `*` or `&` for it:
+A heap variable is just a **pointer in disguise**, and that pointer sits on the stack like
+every other name. The pointer holds the address of the value on the heap, and every use of
+the name goes through it automatically, so you never write `*` or `&` for it:
 
 ```go
 heap big: [3]int = [1, 2, 3];
@@ -906,7 +944,8 @@ These are left out on purpose until they're decided:
 - **Pointer lifetimes:** what `&` may point at, and what happens to a pointer whose
   target's scope has ended.
 - **Returned functions and local values:** whether a function returned from another
-  function can use that function's local values after it has ended.
+  function can use that function's local values after it has ended. One idea (7.7): the
+  function value carries a copy of the values it uses.
 - **A ref into heap data** that a pointer stops reaching.
 - **Reassigning a whole map:** whether the new value needs the same keys.
 
