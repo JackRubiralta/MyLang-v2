@@ -301,6 +301,19 @@ const grid: [2][3]int = [[1, 2, 3], [4, 5, 6]];
 grid[1][2]             // 6: row 1, element 2
 ```
 
+### 5.5 Reading the length
+
+`.length` reads an array's length. It can't be assigned, because the length never changes:
+
+```go
+const primes: [3]int = [2, 3, 5];
+var scores: []int = [10, 20, 30];
+
+primes.length          // 3: from the type [3]int
+scores.length          // 3: from the first value
+scores.length = 4;     // ERROR: a length never changes
+```
+
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
 
@@ -333,6 +346,7 @@ A map's keys are set by its first value and never change, just like an array's l
 ```go
 seen[1] = false;       // fine: 1 is a key
 seen[7] = true;        // ERROR: 7 isn't a key, and the map can't grow
+seen.length            // 2: the number of keys
 ```
 
 **Why:** like arrays, maps live on the stack, so their size can't change.
@@ -652,9 +666,37 @@ var ps: [2]*int = [&a, &b];
 *ps[0]                 // 1
 ```
 
-### 10.5 Why
+### 10.5 Fat pointers: `*[]T`
+
+A pointer to an unsized array, `*[]T`, is a **fat pointer**. It's a struct of two things:
+a pointer to where the elements start, and the length.
+
+```go
+var a: [5]int = [1, 2, 3, 4, 5];
+var v: *[]int = &a;    // a fat pointer to a's elements
+
+v.length               // 5: the length part of the struct
+v[0]                   // 1: indexing goes through it (10.4)
+v[4] = 9;              // a is now [1, 2, 3, 4, 9]
+```
+
+A pointer to a fixed array, `*[5]int`, doesn't need the length part, because its type
+already says 5.
+
+`str` is a fat pointer to characters:
+
+```go
+const str: type = *[]char;
+```
+
+### 10.6 Why
 
 - **Why `*T`:** it goes in front, like every other modifier (section 3).
+- **Why a fat pointer is a struct:** it's two values kept together, the start and the
+  length, which is exactly what a struct is (section 11). Nothing about it is hidden: `*`
+  shows it's a pointer, and `[]` shows the length comes with it.
+- **Why `.length`:** the length is part of the value, so it's read like a field. Fixed
+  arrays, unsized arrays, maps and fat pointers all read it the same way.
 - **Why indexing goes straight through:** otherwise you'd need brackets: `(*r)[0]`.
 
 ---
@@ -815,7 +857,8 @@ pb[2] = table[0][1];                // big is now [0, 0, 12]
 
 These are left out on purpose until they're decided:
 
-- **Basic types:** which ones there are and their sizes; strings; converting between types.
+- **Basic types:** which ones there are and their sizes (`char` included); converting between types.
+- **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
   (`{int, *Node}`, `(int, int)int`). Without names in the type, two values of type `Node`
