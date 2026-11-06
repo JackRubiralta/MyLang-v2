@@ -167,8 +167,7 @@ heap grid: [3][3]int = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
 ```
 
 - A heap variable can change, like a `var`.
-- It dies when its scope ends (the `{ }` it was declared in), just like a stack variable,
-  unless a pointer to it is still around (below).
+- It dies when its scope ends (the `{ }` it was declared in), just like a stack variable.
 - Declaring always makes a new value: `heap copy: [3][3]int = grid;` is a second heap value.
 
 **Why a way of declaring:** where a value lives is about the name, like `ref`. A `heap int`
@@ -181,32 +180,18 @@ handed from one name to another without you seeing it.
 
 ### Pointers
 
-To keep heap data alive after a function ends, the function returns a pointer to it:
-
 ```go
-const make: (int)*int = (const x: int){
-    heap n: int = x;
-    return &n;         // n's scope ends, but the pointer keeps its value alive
-};
-
-var p: *int = make(5);
+heap n: int = 5;
+var p: *int = &n;      // & gives a pointer to n
 *p                     // 5
-*p = 6;                // change it through the pointer
+*p = 6;                // n is now 6
 ```
 
-- `&` gives a pointer, and only to something on the heap. `*p` reads or changes what `p`
-  points at.
-- A heap value is freed when its scope has ended **and** no pointer to it is left.
+- `&` gives a pointer, and `*p` reads or changes what `p` points at.
 - Indexing and calling go straight through a pointer: if `q` is a `*[3]int`, `q[0]` is its
   first element.
 
 **Why `*T`:** it goes in front, like every other modifier (rule 3).
-
-**Why `&` only on the heap:** a stack value is freed when its scope ends, so a pointer to it
-could be left pointing at nothing. Refs already share stack values safely.
-
-**Why freed only when nothing reaches it:** a pointer can then never point at freed memory,
-and there's no `delete` to forget.
 
 **Why indexing goes straight through:** `(*q)[0]` would need brackets.
 
@@ -216,6 +201,10 @@ and there's no `delete` to forget.
 - structs
 - whether a ref can refer to a `const`
 - what a `const` pointer allows
-- whether a returned function keeps the values it uses
+- how heap data can outlive the function that made it: a heap variable dies with its
+  scope, so returning `&` of one would point at nothing
+- what `&` may point at, and what happens to a pointer whose target's scope has ended
+- whether a returned function keeps the values it uses (a function returned from another
+  function that uses one of its local values)
 - a ref into heap data that a pointer stops reaching
 - reassigning a whole map
