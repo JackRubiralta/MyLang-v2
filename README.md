@@ -1275,6 +1275,5 @@ fp.x            // gives a pointer to x
   rules don't cover.
 - `var head: Item = Item();`: `Item` is never defined (probably meant `*Node = null`).
 - A linked list needs nodes that outlive the function that made them: now possible with
-  `hand` (10.6), though 14.2 is still open for copies of a pointer. Previously this ran into 14.2 and 14.3
-  don't allow yet.
+  `hand` (10.6). 14.2 is still open for copies of a pointer.
 - `while … else` and `if` are control flow, which isn't decided yet.
