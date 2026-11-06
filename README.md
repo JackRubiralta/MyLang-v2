@@ -513,6 +513,22 @@ sumRef(scores);        // no copy: v is another name for scores
 sumPtr(&scores);       // no copy: a pointer you made with &, which can also be stored
 ```
 
+### 5.7 Underneath: an array is like a struct
+
+An array is like a struct whose fields all have the same type and are reached by position
+instead of by name:
+
+```go
+var a: [3]int = [10, 20, 30];     // like a struct {int, int, int}
+a[1]                              // the second field, by position
+```
+
+- **A fixed array `[3]int`** is exactly that: three `int` fields one after another. Its
+  length is in the type, so it isn't stored anywhere; `a.length` is just the 3 from `[3]`.
+- **An unsized array `[]int`** is like a struct of its length followed by its elements. The
+  type doesn't say how long it is, so the length is stored in the value, which is why
+  `.length` reads like a field: for `[]int` it really is one.
+
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
 
@@ -550,6 +566,12 @@ seen[1] = false;       // fine: 1 is a key
 seen[7] = true;        // ERROR: 7 isn't a key, and the map can't grow
 seen.length            // 2: the number of keys
 ```
+
+### 6.4 Underneath: a map is like a struct too
+
+A map is like a struct whose fields are its keys: `{1: true, 4: false}` holds a value for key
+`1` and a value for key `4`, side by side on the stack. A struct's fields are fixed by its
+shape, and a map's keys are fixed by its first value, so neither can gain a new one.
 
 **Why:** like arrays, maps live on the stack, so their size can't change.
 
