@@ -834,51 +834,92 @@ const str: type = *[]char;
 
 ### 10.6 `hand`: passing heap data out of a function
 
-`hand` ends a function like `return`, but the heap value it names doesn't die: it's handed
-to whatever receives it in the caller, and that receiver becomes its **owner**.
+#### The problem `hand` solves
+
+A heap variable dies when its scope ends (9.2). That's usually what you want, but it means
+a function can't build something on the heap and give it back:
+
+- made in a function, it dies when the function ends;
+- made in a loop body, it dies at the end of that pass;
+- made in a recursive call, it dies when that call ends.
+
+So a growing structure like a linked list can't be built: every new node is gone before
+anything can keep it. Something has to let heap data outlive the scope that made it, and
+in MyLang that has to be written out in the code.
+
+#### What `hand` does
+
+`hand` is used instead of `return` to end a function. The difference is what happens to
+the heap value it names: with `return` the function's heap values die as the function
+ends, but with `hand` that value **doesn't die**. It's handed to whatever receives it in
+the caller, and that receiver becomes its **owner**.
 
 ```go
 const makeNode: (int)*Node = (const v: int){
     heap n: Node = { var value: int = v; var next: *Node = null; };
     hand &n;                       // n is handed out instead of dying
 };
-
-var p: *Node = makeNode(5);        // p owns the node now
 ```
 
-The receiver must be a pointer or a `ref`. A plain `var` just makes a copy (2.4), and the
-handed value is freed straight away:
+#### What can receive it
+
+| Receiver | What happens | Owner |
+|---|---|---|
+| a pointer, `var p: *Node = makeNode(5);` | `p` points at the handed value, which stays on the heap | `p` |
+| a `ref`, `ref b: [1000]int = makeBig(1);` | `b` becomes the name for the handed value, which stays on the heap | `b` |
+| a plain `var`, `var c: [1000]int = makeBig(1);` | this works, but it just makes a copy (2.4); the handed value is freed straight away | nobody |
 
 ```go
 const makeBig: (int)[1000]int = (const x: int){
     heap big: [1000]int = [...];
-    hand big;
+    hand big;                      // hands the value itself
 };
 
-ref b: [1000]int = makeBig(1);     // b is the name for the handed heap value
-var c: [1000]int = makeBig(1);     // a copy; the handed value is freed
+ref b: [1000]int = makeBig(1);     // b owns the handed heap value: no copy
+var c: [1000]int = makeBig(1);     // works, but c is a copy on the stack; the heap value goes
 ```
 
-- A handed value dies with its owner, when the owner's scope ends.
-- When an owner is given a new value, the value it owned before has no owner any more and
-  is freed right there.
+So handing a pointer or giving the value to a `ref` keeps it alive, and giving it to a
+`var` keeps only a copy.
 
-This is what lets linked structures grow: each new node is handed to the `next` that
-points at it, so the whole chain belongs to the first node.
+#### Ownership
+
+- A handed value has exactly one owner, the pointer or `ref` that received it.
+- **It dies with its owner:** when the owner's scope ends, the value is freed.
+- **When an owner gets a new value, the value it owned before has no owner any more and is
+  freed right there.** `hand` passes ownership, so nothing else is holding the old value.
+
+#### A linked list, step by step
 
 ```go
 var list: Node = { var value: int = 1; var next: *Node = null; };
-list.next = makeNode(2);           // owned by list.next
-list.next.next = makeNode(3);      // owned by that node's next
-list.next = makeNode(9);           // the node holding 2 is freed here (and 3 with it)
+
+list.next = makeNode(2);           // the node holding 2 is handed to list.next, which owns it
+list.next.next = makeNode(3);      // the node holding 3 is owned by the node holding 2
+list.next = makeNode(9);           // list.next now owns the node holding 9; the node holding 2
+                                   // has no owner, so it's freed, and the node holding 3 with it
 ```
+
+Each node is owned by the `next` that points at it, so the whole chain belongs to `list`.
+When `list`'s scope ends, every node goes with it. This works the same in a loop or a
+recursive function, because every new node is handed to something outside it.
+
+#### Other ways that were considered
+
+- **The value lives until you free it yourself** (like `delete` in C). Easy to forget, and
+  a freed value can still be used by mistake.
+- **The value lives as long as any pointer reaches it.** Turned down: the code doesn't show
+  when anything is freed.
+- **The value is handed to an outer scope.** Chosen: `hand` shows exactly where ownership
+  moves, and the owner shows exactly when it ends.
 
 ### 10.7 Why
 
 - **Why `hand`:** a heap value dies with its scope (9.2), so getting heap data out of a
   function needs its own word. You can see in the code exactly where ownership moves.
-- **Why the receiver must be a pointer or a `ref`:** only those can take over the value
-  itself; a `var` always makes its own copy.
+- **Why a pointer or a `ref` owns it but a `var` copies:** a pointer or a `ref` can stand
+  for the handed value itself, while a `var` always holds its own value (2.4). Giving the
+  handed value to a `var` therefore works, but only as a copy.
 - **Why the old value is freed:** `hand` passes ownership, so a value whose owner takes
   something new has no owner left.
 - **Why `*T`:** it goes in front, like every other modifier (section 3).
