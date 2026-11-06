@@ -356,7 +356,28 @@ bool(x)                    // fails while running: x holds an int
 ```
 
 Underneath, an `any` is a struct of two things: the value's type and the value, the same
-kind of explanation as a fat pointer (10.5).
+kind of explanation as a fat pointer (10.5). Pictured as a struct:
+
+```go
+var x: any = any(3);
+// pictured as a struct: the type, then a value of that type
+var x: {type, int} = {
+    const T: type = int;          // x.T
+    const value: int = 3;
+};
+
+var y: any = any(true);
+// a different shape inside, because the value is a bool
+var y: {type, bool} = {
+    const T: type = bool;
+    const value: bool = true;
+};
+```
+
+The second field's type depends on the first, so every `any` can have a different shape
+inside. That's why its size is only known when it's made (see "Underneath, on the stack"
+below), and why writing `any` itself as one struct type needs the "names inside types"
+idea: `{T: type, T}` (section 13).
 
 A function can take an `any`, so it can be called with a value of any type:
 
@@ -529,6 +550,28 @@ a[1]                              // the second field, by position
   type doesn't say how long it is, so the length is stored in the value, which is why
   `.length` reads like a field: for `[]int` it really is one.
 
+Either way an array has a length you know, and it's fixed. Written out as structs, just to
+picture them (you never write arrays this way, and the field names are only labels):
+
+```go
+var a: [3]int = [10, 20, 30];
+// pictured as a struct: three int fields; the length 3 is fixed by the type [3]int
+var a: {int, int, int} = {
+    var at0: int = 10;            // a[0]
+    var at1: int = 20;            // a[1]
+    var at2: int = 30;            // a[2]
+};
+
+var b: []int = [7, 8];
+// pictured as a struct: the length is stored, then the elements
+var b: {int, [2]int} = {
+    const length: int = 2;        // b.length: fixed by the first value, so const
+    var elements: [2]int = [7, 8];
+};
+```
+
+The length is `const` in both: it's known, and it never changes (5.3).
+
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
 
@@ -572,6 +615,20 @@ seen.length            // 2: the number of keys
 A map is like a struct whose fields are its keys: `{1: true, 4: false}` holds a value for key
 `1` and a value for key `4`, side by side on the stack. A struct's fields are fixed by its
 shape, and a map's keys are fixed by its first value, so neither can gain a new one.
+
+Pictured as a struct (field names only as labels):
+
+```go
+var seen: {int}bool = {1: true, 4: false};
+// pictured as a struct: each key is const, each value can change
+var seen: {int, bool, int, bool} = {
+    const key0: int = 1;   var value0: bool = true;     // seen[1]
+    const key1: int = 4;   var value1: bool = false;    // seen[4]
+};
+```
+
+That's why `seen[4] = true;` works (a value is `var`) but `seen[7] = true;` doesn't (there's
+no field for key 7, and the keys are fixed).
 
 **Why:** like arrays, maps live on the stack, so their size can't change.
 
@@ -970,6 +1027,17 @@ var v: *[]int = &a;    // a fat pointer to a's elements
 v.length               // 5: the length part of the struct
 v[0]                   // 1: indexing goes through it (10.4)
 v[4] = 9;              // a is now [1, 2, 3, 4, 9]
+```
+
+Pictured as a struct (field names only as labels):
+
+```go
+var v: *[]int = &a;
+// pictured as a struct: where the elements start, and how many there are
+var v: {*int, int} = {
+    var start: *int = &a[0];
+    const length: int = 5;        // v.length
+};
 ```
 
 A pointer to a fixed array, `*[5]int`, doesn't need the length part, because its type
