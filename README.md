@@ -176,9 +176,8 @@ Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
           | "{" Type "}" Type                 (map: {key}value)
           | "*" Type                          (pointer)
-          | "(" [ ParamList ] ")" [ Type ]    (function: parameters, then the return type)
-ParamList = Param { "," Param }
-Param     = [ "ref" ] Type                    (ref only here, see section 8)
+          | "(" [ TypeList ] ")" [ Type ]     (function: parameter types, then the return type)
+TypeList  = Type { "," Type }
 ```
 
 After a function's parameter list, whatever type follows is its return type. If no type
@@ -352,8 +351,8 @@ const countDown: (int)int = (var n: int){
 };
 ```
 
-`const` and `var` on a parameter don't appear in the function's type, because they only
-affect the function's own copy. The caller can't tell the difference.
+`const`, `var` and `ref` on a parameter don't appear in the function's type: the type only
+lists the parameter types.
 
 ### 7.5 Swapping a function in a `var`
 
@@ -446,11 +445,11 @@ ref bad: int = 3;      // ERROR: 3 isn't a variable
 
 ### 8.3 `ref` parameters
 
-A function can take a parameter as a `ref`, so it can change the caller's variable. The
-function's type shows it with `ref` before that parameter's type:
+A function can take a parameter as a `ref`, so it can change the caller's variable. Only
+the parameter in the function's value says `ref`; the function's type stays plain:
 
 ```go
-const bump: (ref int) = (ref x: int){
+const bump: (int) = (ref x: int){
     x = x + 1;
 };
 
@@ -459,7 +458,7 @@ bump(n);               // n is now 4
 bump(scores[1]);       // scores[1] goes up by 1
 bump(3);               // ERROR: 3 isn't a variable
 
-const swap: (ref int, ref int) = (ref a: int, ref c: int){
+const swap: (int, int) = (ref a: int, ref c: int){
     var t: int = a;
     a = c;
     c = t;
@@ -468,12 +467,13 @@ const swap: (ref int, ref int) = (ref a: int, ref c: int){
 
 ### 8.4 A ref is not a type
 
-`ref` can appear in a type only in front of a parameter. A ref can't be put in an array or
-a map, and can't be returned, so these don't exist:
+`ref` never appears in a type, not even in a function's parameter list. A ref can't be put
+in an array or a map, and can't be returned, so these don't exist:
 
 ```go
 [3]ref int             // ERROR: not a type
 (int)ref int           // ERROR: not a type
+(ref int)              // ERROR: not a type; write (int)
 ```
 
 ### 8.5 Why
@@ -484,9 +484,8 @@ a map, and can't be returned, so these don't exist:
 - **Why it's safe:** a ref can't be stored or returned, so it can never outlive the place
   it refers to. That place is always a spot in memory, including an array element or a
   map entry.
-- **Why `ref` shows in the function type:** the caller has to know whether to pass the
-  variable itself or a copy, and with first-class functions (like `ops[i](x)`) the caller
-  only has the type.
+- **Why `ref` stays out of types:** a ref is a kind of name, not a type, so it belongs
+  with the name (`ref x: int`), not in the type.
 
 ---
 
@@ -614,7 +613,7 @@ const ops: {int}Op = {1: add, 2: mul};
 var table: [2]Row = [[1, 2], [3, 4]];
 
 // a function that takes a function and a ref
-const applyTo: (Op, ref int, int) = (const f: Op, ref target: int, const by: int){
+const applyTo: (Op, int, int) = (const f: Op, ref target: int, const by: int){
     target = f(target, by);
 };
 
