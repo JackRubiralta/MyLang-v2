@@ -24,7 +24,7 @@ decided yet is left out on purpose and listed at the end.
 8. [`ref`: another name for a variable](#8-ref-another-name-for-a-variable)
 9. [The stack and the heap](#9-the-stack-and-the-heap)
 10. [Pointers](#10-pointers)
-11. [Structs and `type`](#11-structs-and-type)
+11. [Structs](#11-structs)
 12. [Putting it together](#12-putting-it-together)
 13. [Not decided yet](#13-not-decided-yet)
 14. [Problems to look at later](#14-problems-to-look-at-later) (incl. struct notes, 14.12)
@@ -59,7 +59,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var`, `ref`, `heap` or `type` |
+| `kind` | what sort of name it is: `const`, `var`, `ref` or `heap` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -76,7 +76,7 @@ A number, a function and an array are all declared the same way.
 **Why:** since everything is a value (rule 1), there is no reason for functions or arrays
 to be declared differently from numbers.
 
-### 2.2 The five kinds of name
+### 2.2 The four kinds of name
 
 | Kind | Can it be given a new value? | Where its value lives | Section |
 |---|---|---|---|
@@ -84,7 +84,6 @@ to be declared differently from numbers.
 | `var` | yes | stack | 2.3 |
 | `ref` | it *is* another variable: assigning changes that variable | wherever that variable is | 8 |
 | `heap` | yes | heap | 9 |
-| `type` | no: it names a type | – | 11 |
 
 ### 2.3 `const` and `var`
 
@@ -178,6 +177,7 @@ The type says *call, call, index, int*, and the use says *call, call, index*: sa
 Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
           | "{" Type "}" Type                 (map: {key}value)
+          | "{" TypeList "}"                  (struct: its field types, section 11)
           | "*" Type                          (pointer)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "null"                     (null = returns nothing)
@@ -203,6 +203,8 @@ with `null`: `(int)null`, and `()null` takes nothing and returns nothing.
 
 ## 4. Types are values too
 
+### 4.1 Declaring a type
+
 A type is a value of type `type`, so it's declared like anything else and then used
 wherever a type goes:
 
@@ -216,8 +218,27 @@ const add: Op = (const x: int, const y: int){ return x + y; };
 const ops: [2]Op = [add, add];       // an array of Op
 ```
 
-**Why:** it follows from rule 1, so types get names the same way everything else does.
-A long type can be named once and reused.
+### 4.2 A type in a `var` can change
+
+Like any `var`, a type in a `var` can be given a new value. A value keeps the type it was
+declared with; only what you declare afterwards gets the new type:
+
+```go
+var T: type = int;
+var x: T = 3;          // x is an int
+T = int8;
+var y: T = 3;          // y is an int8
+x                      // still an int
+```
+
+### 4.3 Why
+
+- **Why types are values:** it follows from rule 1, so types get names the same way
+  everything else does, and a long type can be named once and reused.
+- **Why a `var` type is allowed:** a type is a value like any other, so it can be a `var`
+  like any other.
+- **Why a value keeps its type:** a value's type is fixed when it's declared, just as
+  declaring makes a new value (2.4). Changing `T` later doesn't reach back and change `x`.
 
 ---
 
@@ -613,32 +634,25 @@ var ps: [2]*int = [&a, &b];
 
 ---
 
-## 11. Structs and `type`
+## 11. Structs
 
-### 11.1 `type`: naming a type
+### 11.1 A struct type is its shape
 
-`type` is the fifth kind of name, with the same shape as every other declaration:
+A struct's type lists its field types in braces, `{int, *Node}`. It's a type like any
+other, so it's named the same way (section 4):
 
 ```go
-type Name: Type = value;
+const Node: type = {int, *Node};
+const Settings: type = {bool, int};
 ```
 
-After the `:` comes the actual type. After the `=` comes the value: for a struct, its
-fields (11.2); for any other type, its default value.
+### 11.2 A struct value is a block of declarations
+
+A struct value is a block of declarations, one per field and in the same order as the
+type, each with `const` or `var`, a name, a type and a starting value:
 
 ```go
-type Op: (int, int)int = add;
-type Pair: [2]int = [0, 0];
-```
-
-### 11.2 Struct types
-
-A struct's type lists its field types in braces, `{int, *Node}`. Its value is a block of
-declarations, one per field and in the same order, each with `const` or `var`, a name, a
-type and a starting value:
-
-```go
-type Node: {int, *Node} = {
+var n: Node = {
     var value: int = 0;
     var next: *Node = null;
 };
@@ -656,14 +670,12 @@ This mirrors functions: the type lists only the types, and the value gives the n
 `.` reaches a field. A `var` field can change and a `const` field can't:
 
 ```go
-settings.size = 5;          // fine: size is var
-settings.debug = true;      // ERROR: debug is const
+n.value = 5;           // fine: value is var
 ```
 
 ### 11.4 Singletons
 
-A singleton is the same line with `var` or `const` instead of `type`. It declares one
-struct value directly:
+A singleton is just a value whose struct type has no name:
 
 ```go
 var settings: {bool, int} = {
@@ -671,10 +683,9 @@ var settings: {bool, int} = {
     var size: int = 3;
 };
 
-settings.size              // 3
+settings.size = 5;          // fine: size is var
+settings.debug = true;      // ERROR: debug is const
 ```
-
-There is no type name, so there's no way to make a second one.
 
 ### 11.5 Functions inside a struct
 
@@ -694,8 +705,8 @@ counter.add(5);                // counter.count is now 5
 
 ### 11.6 Why
 
-- **Why `type` keeps the `=`:** every declaration has the shape `kind name: Type = value;`
-  (section 2), and naming a type is no exception.
+- **Why a struct type is declared like any type:** types are values (section 4), so a
+  struct type needs no special keyword.
 - **Why the type lists only the field types:** it works like a function's type, which
   lists only the parameter types; the names belong in the value.
 - **Why singletons need nothing new:** a struct value can be declared directly with `var`
@@ -743,12 +754,10 @@ These are left out on purpose until they're decided:
 - **Basic types:** which ones there are and their sizes; strings; converting between types.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
-  (`{int, *Node}`, `(int, int)int`).
-- **Making a value of a named struct type:** `var a: Node = …` (what goes after the `=`).
+  (`{int, *Node}`, `(int, int)int`). Without names in the type, two values of type `Node`
+  can name their fields differently, so `n.value` can't be checked from the type alone.
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
-- **`type` and section 4:** whether `type Op: (int, int)int = …;` replaces
-  `const Op: type = (int, int)int;` or both stay.
 - **Nodes that outlive the function that made them** (for linked lists; see 14.2, 14.3).
 - **Control flow:** `if`, loops and the like.
 - **Refs and `const`:** whether a ref can refer to a `const`.
@@ -806,15 +815,12 @@ A heap variable dies with its scope, and a pointer to it would point at nothing 
 function ends (14.2). So a function can only hand back a copy: a big array is copied in
 full, and linked structures like lists and trees can't be built.
 
-### 14.4 A type stored in a `var` can change while the program runs
+### 14.4 Checking values whose type is a `var`
 
-```go
-var T: type = int;
-var x: T = 3;
-T = bool;       // what type is x now?
-```
-
-Types have to be known before the program runs. Possible fix: a type can only be a `const`.
+Decided (4.2): a type in a `var` can change, and each value keeps the type it was declared
+with. Still open: if `T` changes inside something like an `if`, the type of a later
+declaration `var y: T = …` can't be known before the program runs, so that check has to
+happen while it runs.
 
 ### 14.5 `(Op)` has two meanings when the value is a type
 
