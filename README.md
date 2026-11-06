@@ -261,7 +261,12 @@ firstInt([7, 8])                              // 7: the first element
 
 const firstBool: ([]bool)bool = first(bool);  // the same for bool arrays
 firstBool([true, false])                      // true: the first element
+
+first(bool)([true, false])                    // true: the same, in one line
 ```
+
+The last line is two calls in a row: `first(bool)` makes the function for bool arrays, and
+`([true, false])` calls that function straight away.
 
 `first(int)` gives back a function made for `int`, so what each call works with is
 written right there in the code.
@@ -270,13 +275,18 @@ written right there in the code.
 
 A type is a value, and calling it does two things.
 
-**Calling a type with a value converts the value to that type:**
+**Calling a built-in type with a value converts the value to that type.** A built-in type
+can be called with a value of any type, including an `any` (4.5):
 
 ```go
 int(3.0)               // 3
 float(3)               // 3.0
 var whole: int = int(2.0);
+int(x)                 // x is an any: gives back the int inside it
 ```
+
+If the value's type is only known while the program runs, the conversion is checked
+when that line runs.
 
 **`type(value)` gives back the type of any value.** The result is a type, so it can be
 stored and used like any other type:
@@ -292,7 +302,40 @@ var x: T = 5;          // x is an int
 
 `type(x)` gives the type `x` was declared with, which never changes (4.2).
 
-### 4.5 Why
+### 4.5 `any`: a value of any type
+
+`any` is a built-in type for a value whose type is only known while the program runs.
+Calling it wraps a value, just as calling `int` converts one:
+
+```go
+var x: any = any(3);       // holds the type int and the value 3
+var y: any = any(true);    // holds the type bool and the value true
+
+x.T                        // int: the type inside
+int(x)                     // 3: checked while running that x holds an int
+bool(x)                    // fails while running: x holds an int
+```
+
+Underneath, an `any` is a struct of two things: the value's type and the value, the same
+kind of explanation as a fat pointer (10.5).
+
+A function can take an `any`, so it can be called with a value of any type:
+
+```go
+const describe: (any)null = (const x: any){
+    x.T                    // the type it was given
+    ...
+};
+
+describe(any(3));
+describe(any(true));
+describe(3);               // ERROR: 3 is an int, not an any; write any(3)
+```
+
+`type(x)` gives `any`, because that's the type `x` was declared with (4.4); the type
+inside is `x.T`.
+
+### 4.6 Why
 
 - **Why types are values:** it follows from rule 1, so types get names the same way
   everything else does, and a long type can be named once and reused.
@@ -300,6 +343,11 @@ var x: T = 5;          // x is an int
   like any other.
 - **Why converting is calling a type:** a type is a value, so it can be called like a
   function, and the code shows exactly where a value changes type: `int(3.0)`.
+- **Why `any` is built in:** a function that turned any value into an `any` would need a
+  parameter that already accepts any value, which is `any` itself. Built in, it's just a
+  type you call, like `int`.
+- **Why you write `any(3)`:** a value never turns into an `any` by itself, so the code
+  shows every place a value is wrapped (`any(3)`) or unwrapped (`int(x)`).
 - **Why `type(…)`:** types are values, so the type of a value can be handed back and used
   like any other value.
 - **Why generics are just functions:** types are values, and functions already take
