@@ -1,7 +1,7 @@
 # MyLang rules
 
 The rules decided so far: declaring with `const`, `var`, `ref` and `heap`, first-class
-values, the types for arrays, maps, functions and pointers, and the heap. Structs come later.
+values, and the types for arrays, maps, functions and pointers. Structs come later.
 (Code blocks are marked `go` only for colouring; the code is MyLang.)
 
 ## 1. Everything is a first-class value
@@ -13,7 +13,7 @@ Numbers, arrays, maps, functions and types are all values. Any value can be:
 - passed to a function
 - returned from a function
 
-Values live on the stack, unless they are declared `heap` or made with `new` (section 10).
+Values live on the stack, unless they are declared `heap` (section 10).
 
 ## 2. Declaring
 
@@ -200,12 +200,10 @@ bump(3);           // ERROR: 3 isn't a variable
 (`const` and `var` on a parameter don't show in the type: they only affect the function's
 own copy.)
 
-## 10. The heap and pointers
-
-### `heap`: a variable kept on the heap
+## 10. The heap
 
 `heap` is a fourth way to declare a name. A heap variable can change, like a `var`, but
-its value is kept on the heap instead of the stack, for values too big for the stack.
+its value is kept on the heap instead of the stack.
 
 ```go
 heap grid: [3][3]int = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -213,32 +211,9 @@ grid[1][1] = 5;
 ```
 
 - A heap variable dies when its scope ends (the `{ }` it was declared in), just like a
-  stack variable, and its value is freed then.
+  stack variable.
 - Declaring always makes a new value: `heap copy: [3][3]int = grid;` is a second heap value.
-
-### Pointers: `*T`
-
-`new(value)` puts a value on the heap and gives back a pointer to it. That value isn't tied
-to any scope: it lives until `delete` frees it.
-
-```go
-var p: *int = new(5);
-*p                 // 5: the value p points at
-*p = 6;            // change it
-delete(p);         // free it
-```
-
-A pointer is an ordinary first-class value, so it can go in arrays and maps and be passed
-and returned. To make heap data outlive a function, the function returns a pointer:
-
-```go
-const make: (int)*int = (const x: int){
-    return new(x);
-};
-
-var q: *int = make(5);     // the 5 is still alive after make ends
-delete(q);
-```
+- To keep heap data alive after a function ends, the function returns a pointer to it.
 
 ## 11. First-class examples
 
