@@ -312,7 +312,7 @@ written right there in the code.
 
 ### 4.4 Calling a type
 
-A type is a value, and calling it does two things.
+A type is a value, and calling it does three things.
 
 **Calling a built-in type with a value converts the value to that type.** A built-in type
 can be called with a value of any type, including an `any` (4.5):
@@ -326,6 +326,9 @@ int(x)                 // x is an any: gives back the int inside it
 
 If the value's type is only known while the program runs, the conversion is checked
 when that line runs.
+
+**Calling a struct type makes a new value of it.** `Node(5)` runs the function after the
+`=` in `Node`'s declaration and gives back the block it builds (11.1, 11.2).
 
 **`type(value)` gives back the type of any value.** The result is a type, so it can be
 stored and used like any other type:
@@ -1158,42 +1161,44 @@ recursive function, because every new node is handed to something outside it.
 `struct` is the fifth kind of name, with the same shape as every other declaration:
 
 ```go
-struct Name: Shape = default;
+struct Name: Shape = (inputs){ fields };
 ```
 
 - After the `:` comes the **shape**: the field types in braces, `{int, *Node}`.
-- After the `=` comes its **default**: a block of its fields with their starting values.
+- After the `=` comes a **function that makes the struct**: it takes inputs like any
+  function, and its body is the block of fields with their starting values, which can use
+  the inputs.
 - A `struct` name can never be given a new value, so a struct type never changes.
 
 ```go
-struct Node: {int, *Node} = {
-    var value: int = 0;
+struct Node: {int, *Node} = (const v: int){
+    var value: int = v;
     var next: *Node = null;
 };
-struct Settings: {bool, int} = {
+struct Settings: {bool, int} = (){
     const debug: bool = false;
     var size: int = 3;
 };
 ```
 
-### 11.2 A struct value is a block of declarations
+### 11.2 Making a struct value: call the struct
 
-A struct value is a block of declarations, one per field and in the same order as the
-type, each with `const` or `var`, a name, a type and a starting value:
+A struct is made by calling it like a function. The call runs the function from its
+declaration with the inputs given, and the block it builds becomes the new value:
 
 ```go
-var n: Node = {
-    var value: int = 0;
-    var next: *Node = null;
-};
+var n: Node = Node(5);             // value is 5, next is null
+var s: Settings = Settings();      // no inputs
 ```
 
-This mirrors functions: the type lists only the types, and the value gives the names.
+The block holds one declaration per field, in the same order as the shape, each with
+`const` or `var`, a name, a type and a starting value. This mirrors functions: the type
+lists only the types, and the value gives the names.
 
-| | Type (after `:`) | Value (after `=`) |
+| | Type (after `:`) | Value |
 |---|---|---|
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
-| struct | `{int, *Node}` | `{ var value: int = 0; var next: *Node = null; }` |
+| struct | `{int, *Node}` | the block `Node(…)` builds: `{ var value: int = …; var next: *Node = null; }` |
 
 ### 11.3 Fields
 
@@ -1252,7 +1257,7 @@ A struct doesn't work like a pointer. Every declaration and every assignment cop
 whole block:
 
 ```go
-var n: Node = { var value: int = 0; var next: *Node = null; };
+var n: Node = Node(0);
 var m: Node = n;       // a full copy: m gets its own block on the stack
 m.value = 5;           // n.value is still 0
 ```
@@ -1271,9 +1276,12 @@ block directly.
 
 ### 11.7 Why
 
-- **Why `struct` is its own kind of name:** a struct type has a default, the starting
-  values of its fields, and `struct Name: Shape = default;` gives it a place after the `=`.
-  Other types have no default, so they're named with `const` (4.1).
+- **Why `struct` is its own kind of name:** a struct type comes with the function that
+  makes it, and `struct Name: Shape = (inputs){ fields };` gives that function a place after
+  the `=`. Other types don't need one, so they're named with `const` (4.1).
+- **Why making a struct is a call:** the part after the `=` is a function, so making a
+  struct is calling it, the same as calling any function. Its inputs are written right there
+  in the call (`Node(5)`), and nothing is filled in behind your back.
 - **Why the type lists only the field types:** it works like a function's type, which
   lists only the parameter types; the names belong in the value.
 - **Why singletons need nothing new:** a struct value can be declared directly with `var`
@@ -1287,10 +1295,15 @@ block directly.
 ### 11.8 Other ways that were considered
 
 - **A `type` kind for every named type** (`type Pair: [2]int = [0, 0];`). Replaced: only
-  struct types need a default, so they get `struct`, and every other type is a `const` of
+  struct types need a function that makes them, so they get `struct`, and every other type is a `const` of
   type `type` (4.1).
 - **A struct as a `const` type value** (`const Node: type = {int, *Node};`). Replaced by
-  `struct`, which gives the struct its default after the `=`.
+  `struct`, which gives the struct its making function after the `=`.
+- **A plain default block after the `=`**, copied by `Node()` with no inputs. Replaced by
+  the making function, which can take inputs.
+- **Two blocks, inputs then the rest** (`const Node: type = {var value: int}{ var doubled:
+  int = 2 * value; };`). Replaced by the function form, which reuses how functions already
+  take inputs.
 - **`var` types** (`var T: type`). Dropped: a type can never change (4.2).
 - **Field names in the struct type** (`{value: int, next: *Node}`). Not decided yet: it's
   the "names inside types" question in section 13.
@@ -1346,14 +1359,6 @@ These are left out on purpose until they're decided:
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
-- **Getting a struct's default:** how you ask for it, e.g. `var n: Node = Node();` or
-  `var n: Node = {};`.
-- **Constructors:** whether a struct's default can take inputs, e.g.
-  `struct Node: {int, int} = (var value: int){ var doubled: int = 2 * value; };` and then
-  `Node(5)`.
-- **Calling a struct type:** built-in types can be called to convert (`int(3.0)`, 4.4).
-  Whether a struct type can be called too, e.g. `Node(5)`, isn't decided; for now a struct
-  value is written as a block (11.2).
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
