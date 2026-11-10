@@ -892,11 +892,11 @@ start                  // still 5: countDown changed its own copy
 | `const x: &int` | the caller's value, borrowed to read (8.6) |
 | `var x: &int` | the caller's value, borrowed to change (8.4) |
 | `var x: ^int` | a heap value of its own: a copy of the caller's (8.12) |
-| `var x: @^int` | the ownership of the caller's variable: it can read it, change it and take its value over (8.9) |
+| `var @x: ^int` | the caller's own heap value: the parameter takes it over at the call (8.12) |
 
 `const` and `var` on a parameter don't appear in the function's type. Borrowing, the heap and
-ownership do, because they are part of the parameter's type: `(&int)void`, `(^int)void`,
-`(@^int)void`.
+ownership do: `(&int)void`, `(^int)void`, `(@^int)void`. A parameter written `@x: ^int`
+shows as `@^int`, because that is what the call has to give (8.12).
 
 ### 7.5 Swapping a function in a `var`
 
@@ -1384,7 +1384,7 @@ holder may do to someone else's variable:
 | `h: @T` | yes | yes | yes |
 
 So the mark at a call shows what a function may do to your variable: `f(x)` nothing, because
-it gets a copy, `f(&x)` read or change it, and `f(@x)` take its value (8.12).
+it gets a copy, `f(&x)` read or change it, and `f(@x)` takes its value (8.12).
 
 The rules for an ownership and a move:
 
@@ -1528,14 +1528,11 @@ function's type shows `^`, `&` and `@`, and the call shows `&` and `@`:
 ```go
 const use: (^[1000]int)void = (var a: ^[1000]int){ ... };       // a gets its own copy
 const look: (&[1000]int)void = (const a: &[1000]int){ ... };    // a borrows, to read
-const take: (@^[1000]int)void = (var a: @^[1000]int){           // a is the caller's ownership
-    var @mine: ^[1000]int = a;                                  // mine takes the array over
-    ...
-};
+const take: (@^[1000]int)void = (var @a: ^[1000]int){ ... };    // a takes the caller's array over
 
 use(big);              // use gets its own copy on the heap, and big is unchanged
 look(&big^);           // look borrows the array: nothing is copied and nothing changes owner
-take(@big);            // take is given big's ownership, and moves the array out of big
+take(@big);            // take's parameter takes the array over, and big is left null
 ```
 
 | Parameter type | The call | What the function gets |
@@ -1543,10 +1540,22 @@ take(@big);            // take is given big's ownership, and moves the array out
 | `int` | `f(n)` | its own copy |
 | `^[1000]int` | `use(big)` | its own copy, in a new place on the heap |
 | `&[1000]int` | `look(&big^)` | the caller's array, borrowed: it can read it, and change it when the parameter is a `var` |
-| `@^[1000]int` | `take(@big)` | the ownership of the caller's variable: it can read it, change it, and take the array over |
+| `@^[1000]int` | `take(@big)` | the caller's array itself: the parameter takes it over at the call, and the caller's variable is left `null` |
 
-An ownership gives the function the right to take, not the duty. After `take(@big)`, `big`
-is `null` only if the function moved its value, and `big == null` tells which.
+**A parameter that asks for an ownership takes it.** The parameter is written like the moving
+declaration in 8.9, `var @a: ^[1000]int`, because it is one: the argument is what the
+parameter's ownership is set from. The function's type lists `@^[1000]int`, which is what
+the call has to give. So the move happens at the call itself:
+
+- after `take(@big)`, `big` is always `null`;
+- inside the function, `a` is an ordinary `^[1000]int` that owns the array, and `a^[0]` is
+  its first element;
+- when the call ends, `a` ends, and the array is freed unless the function moved it on or
+  returned it.
+
+An ownership held in a variable is given the same way: `take(h)`, where `h` is an
+`@^[1000]int`. A parameter is never declared with the type `@T` itself, so a function that
+is given an ownership can't leave the value where it was.
 
 A function gives a heap value back by returning it. Its type ends in a `^`, so the caller
 knows it will own what comes back:
@@ -1567,16 +1576,16 @@ This is how a value outlives the scope that made it: it goes on the heap, and it
 passes to something that lives longer.
 
 A function can't return the ownership of one of its own locals, because the local ends with
-the call (8.9). To hand back something it took from the caller, it takes the value into a
-local and returns the local:
+the call (8.9). It returns the value. So a function that changes what the caller owns takes
+it, and gives the result back:
 
 ```go
-const takeNext: (@Node)^Node = (var n: @Node){
-    var @out: ^Node = @n^.next;        // out takes the next node, and n^.next is left null
-    return out;                        // out ends here, so the caller owns that node
-};
+const dropFirst: (@^Node)^Node = (var @first: ^Node){
+    var @rest: ^Node = @first^.next;   // rest takes everything behind the first node
+    return rest;                       // rest ends here, so the caller owns it
+};                                     // first ends here too, and the first node is freed
 
-var second: ^Node = takeNext(@list^);
+list = dropFirst(@list);               // list is left null at the call, then gets the rest back
 ```
 
 (`Node` is the list node from 8.13.)
@@ -1710,6 +1719,7 @@ that another node's `prev` still borrows is the programmer's job to get right (8
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `var @t: ^int = @b^;` where `b` is a borrower | a borrower can read and change, but not take |
 | `return @local;` | the ownership would outlive its variable |
+| `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
 **Checked while the program runs:**
 
@@ -1736,9 +1746,6 @@ b^                         // b still leads to where the 5 was
 
 Not settled yet:
 
-- **The symbol for an ownership.** `@` stands in for it.
-- **Whether a function that is given an ownership has to use it.** If it did, `big` would
-  always be `null` after `take(@big)`.
 - **Read-only borrowing in a function's type.** `(&int)void` doesn't say whether the
   function changes the value, so passing a borrower of a `const` to a function held in a
   variable can't be checked.
@@ -2136,6 +2143,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
 | `@n = @p;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
 | `var @n: ^int = @p;` | the same, for a new variable |
+| `f(@p)` | the same, for a parameter that asks for an ownership: `p` is left `null` at the call |
 | `p = null;` | frees what `p` owns |
 | `p == null` | `true` when `p` owns nothing |
 

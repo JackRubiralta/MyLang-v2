@@ -173,12 +173,13 @@ h: [ address of p ] ----> p: [ null ]
 ## 10. Open
 
 - **Whether `@p` on its own moves nothing** (sections 2 and 7). That is the reading here.
-- **Whether a function that is given an ownership has to use it.** If it did, `q` would
-  always be `null` after `keep(@q)`. A function body runs straight through, with no loops or
-  `if`, so the compiler could check it.
+- ~~Whether a function that is given an ownership has to use it.~~ Settled (Jack): "the
+  function parameter in and of itself, through the type, asks for the ownership." A parameter
+  that asks for one takes the value at the call (`var @a: ^int`, type `(@^int)void`), so the
+  caller's variable is always `null` afterwards. DOCS 8.12.
 - **Whether a `var` borrower can still move a value out** (section 6).
 - **The type slot in `var @q: ^int = h;`.** It says what `q` is. The `@` on the name says
   that `q`'s ownership is what is being set.
-- **The symbol.** `@` is still a placeholder.
+- ~~The symbol.~~ Settled (Jack): "keep the `@`".
 - **What it changes in DOCS.md:** 8.9 (the mark in front, an ownership held as a value),
   8.12 (a parameter of type `@T`), and the moves in 8.13.
