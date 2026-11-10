@@ -1329,6 +1329,17 @@ A heap owner `p` can be used in four ways, and each is written differently:
 
 The rules for a move:
 
+- **Only a heap owner can be moved.** A plain value lives inside its holder, and a borrower
+  owns nothing, so neither has an ownership to pass on:
+
+  ```go
+  var count: int = 3;
+  var other: int = count@;     // ERROR: count is a plain int, so there is nothing to move: write count
+  var b: &int = &count;
+  var c: &int = b@;            // ERROR: a borrower owns nothing: write b
+  ```
+
+  A struct that holds heap owners is moved one owner at a time: `b.next@ = a.next@;`.
 - **Every line that empties an owner shows `@` on that owner.** A plain `=` never changes
   its right-hand side.
 - **Both sides of an assignment carry the mark.** One side alone is an error:
@@ -1611,6 +1622,7 @@ that another node's `prev` still borrows is the programmer's job to get right (8
 | `look = &limit;` where `look` is `const` | a `const` borrower always borrows the same thing |
 | `table^[0] = 9;` where `table` is a `const` owner | a `const` owner's value can't change |
 | `q@ = p;` and `q = p@;` | a move carries `@` on both sides |
+| `count@` where `count` is a plain value, and `b@` where `b` is a borrower | only a heap owner can be moved |
 | `var t: ^int = fixed@;` where `fixed` is `const` | moving would change `fixed` to `null` |
 
 **Checked while the program runs:**
@@ -1639,7 +1651,6 @@ b^                         // b still leads to where the 5 was
 Not settled yet:
 
 - **The symbol for the move.** `@` stands in for it.
-- **`@` on a value that isn't a heap owner,** such as a struct that holds heap owners.
 - **Read-only borrowing in a function's type.** `(&int)void` doesn't say whether the
   function changes the value, so passing a borrower of a `const` to a function held in a
   variable can't be checked.
