@@ -854,6 +854,10 @@ add(1, 2)              // 3
 Each argument is copied into its parameter (2.4). To let a function use the caller's value
 itself, the parameter borrows it (8.4): `bump(&n)`.
 
+A call works out all of its arguments first, from left to right. Then it sets the
+parameters, from left to right. So one argument can't change what another argument reads
+(8.12).
+
 ### 7.3 A function that returns nothing
 
 Its return type is `void`:
@@ -1371,6 +1375,14 @@ o^                         // x itself: 3
 @list^.next                // the ownership of a field: an @^Node (8.13)
 ```
 
+`@` in front of a value made on the spot hands that value straight over. Nothing is left
+`null`, because nothing else held it:
+
+```go
+take(@makeBig(1));                 // the new array goes straight to take's parameter (8.12)
+var h: @^Node = @makeNode(1);      // ERROR: the node has no variable, so h would outlive it (8.5)
+```
+
 **Moving.** A move sets one variable's ownership from another's. Nothing is copied: the
 value stays where it is on the heap, and only its owner changes. Both sides are ownerships,
 so both have the same type:
@@ -1586,8 +1598,32 @@ the call has to give. So the move happens at the call itself:
   returned it.
 
 An ownership held in a variable is given the same way: `take(h)`, where `h` is an
-`@^[1000]int`. A parameter is never declared with the type `@T` itself, so a function that
-is given an ownership can't leave the value where it was.
+`@^[1000]int`. A value made on the spot is handed straight over with `@` in front:
+`take(@makeBig(1));` (8.9). A parameter is never declared with the type `@T` itself, so a
+function that is given an ownership can't leave the value where it was.
+
+**Every argument is worked out before any parameter takes.** A call works out all of its
+arguments first, from left to right, and only then sets the parameters, from left to right
+(7.2). So an argument that reads a variable and an argument that hands the same variable
+over don't get in each other's way:
+
+```go
+const both: (@^int, int)void = (var @owned: ^int, const was: int){ ... };
+
+var x: ^int = ^5;
+both(@x, x^);
+```
+
+| Step | What happens |
+|---|---|
+| 1 | `@x` is worked out: it is `x`'s ownership. Nothing moves yet (8.9) |
+| 2 | `x^` is worked out: it is 5 |
+| 3 | `owned` is set: it takes the heap int over, and `x` is left `null` |
+| 4 | `was` is set: it gets the 5 from step 2 |
+
+If each parameter were set as soon as its argument was worked out, step 3 would come before
+step 2, and `x^` would follow a `null`. With this order, `both(@x, x^)` and a function that
+takes the same two things the other way round both work.
 
 A function gives a heap value back by returning it. Its type ends in a `^`, so the caller
 knows it will own what comes back:
@@ -1772,6 +1808,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `var @t: ^int = @b^;` where `b` is a borrower | a borrower can read and change, but not take |
 | `return @local;` | the ownership would outlive its variable |
+| `var h: @^Node = @makeNode(1);` | the value has no variable, so the ownership would outlive it |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
 **Checked while the program runs:**
@@ -1817,11 +1854,6 @@ b^                         // b still leads to where the 5 was
 Not settled yet:
 
 - **Returning a borrower from a function:** what it may borrow from.
-- **A value made on the spot, given to a parameter that asks for an ownership.**
-  `take(@makeBig(1))` has no variable to take the ownership of. As things stand the value
-  has to be put in a variable first.
-- **The order in which a call's arguments are worked out.** It matters now: in `f(@x, x^)`
-  the second argument reads `x` and the first one empties it.
 - **Moving into an owner that ends sooner** (an inner block, or a parameter). It's allowed
   above, and the value is freed when that owner ends. An earlier rule had it as an error.
 
