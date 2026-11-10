@@ -1292,9 +1292,11 @@ copy[0]^ = 9;              // rows[0]^ is still 1
 
 Copying the first node of a linked list therefore copies every node behind it (8.13).
 
-**What is done to a struct is done to each of its fields.** Copying a struct is copying
-every field, each by the rule for its own type. The same holds for an array and its
-elements. With `foo` and `boo` two structs that have the fields `a` and `b`:
+**What is done to a struct is done to each of its fields.** A struct is used like any other
+variable: it can be copied, moved, put on the heap, borrowed, and have its ownership taken.
+Each of those is the same thing done to every field, each field by the rule for its own
+type. The same holds for an array and its elements. With `foo` and `boo` two structs that
+have the fields `a` and `b`:
 
 | You write | Which is, field by field |
 |---|---|
@@ -1302,6 +1304,7 @@ elements. With `foo` and `boo` two structs that have the fields `a` and `b`:
 | `@foo = @boo;` | `@foo.a = @boo.a; @foo.b = @boo.b;` (8.9) |
 | `var h: ^Boo = ^boo;` | one new heap value, then `h^.a = boo.a; h^.b = boo.b;` |
 | `var r: &Boo = &boo;` | `r^.a` is `boo.a`, and `r^.b` is `boo.b`: the same memory |
+| `var o: @Boo = @boo;` | `o` is the ownership of `boo.a` and of `boo.b` together |
 
 This is why a copy is complete. A field that is a heap owner gets its own heap value, and
 the fields of that value are copied the same way, all the way down.
@@ -1951,6 +1954,9 @@ same^.x = 9;           // p.x is now 9
 
 A struct can hold heap owners and borrowers as fields. A linked list is built that way
 (8.13).
+
+Everything in section 8 works on a struct the way it works on any variable, field by field
+(8.8).
 
 A struct is a value like any other, so it goes in arrays and maps and in and out of
 functions:
