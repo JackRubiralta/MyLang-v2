@@ -8,8 +8,8 @@ MyLang is a **declarative, explicit, first-class** language.
   its type says `^`, it is shared only when you write `&`, and it changes owner only where
   you write `@`. Otherwise every value is copied when it's declared, assigned or passed.
 - **Declarative:** every name is declared in one shape that states what kind of name it
-  is, what it's called, what type it has and what value it starts with. There are no loops
-  and no `if` statements: a choice is a lookup, and repeating is a function calling itself.
+  is, what it's called, what type it has and what value it starts with. There are no loops:
+  repeating is a function calling itself. A choice is an `if`, or a lookup.
 
 This file documents the language: values, names, types, arrays, maps, functions, ownership
 (the heap, borrowing and moving), structs, and choosing and repeating.
@@ -1497,15 +1497,25 @@ later = ^8;                // later owns a new heap int
 ```
 
 **Testing for it:** `p == null` and `p != null` give a `bool`. Comparing doesn't copy
-anything and doesn't change `p`. A choice array (10.1) then picks what to do:
+anything and doesn't change `p`. An `if` (10.1) then picks what to do:
+
+```go
+if (p == null) {
+    p = ^0;                // p owned nothing, so give it a value
+} else {
+    p^ = p^ + 1;           // p owns a value here, so following it is safe
+}
+```
+
+A function that is handed an owner to test borrows the owner itself:
 
 ```go
 const valueOr: (&^int, int)int = (const owner: &^int, const fallback: int){
-    const cases: [bool](&^int, int)int = [
-        (const o: &^int, const f: int){ return o^^; },     // false: it owns a value, so read it
-        (const o: &^int, const f: int){ return f; }        // true: it is null
-    ];
-    return cases[owner^ == null](owner, fallback);
+    if (owner^ == null) {
+        return fallback;
+    } else {
+        return owner^^;
+    }
 };
 
 valueOr(&p, 0)             // p's value, or 0 when p is null
@@ -1683,18 +1693,18 @@ on the next one:
 
 ```go
 const length: (&^Node)int = (const owner: &^Node){
-    const cases: [bool](&^Node)int = [
-        (const o: &^Node){ return 1 + length(&o^^.next); },    // false: count this node, go on
-        (const o: &^Node){ return 0; }                          // true: no node here, so stop
-    ];
-    return cases[owner^ == null](owner);
+    if (owner^ == null) {
+        return 0;                              // no node here, so stop
+    } else {
+        return 1 + length(&owner^^.next);      // count this node, go on with the next owner
+    }
 };
 
 length(&list)                          // the number of nodes
 ```
 
-`o^` is the owner and `o^^` is the node it owns, so `&o^^.next` borrows the next owner.
-Nothing is copied and nothing changes owner on the way.
+`owner^` is the owner and `owner^^` is the node it owns, so `&owner^^.next` borrows the next
+owner. Nothing is copied and nothing changes owner on the way.
 
 ### 8.14 Two links to one value
 
@@ -1724,14 +1734,10 @@ function makes the plain copy, then sets every `prev` inside it:
 
 ```go
 const linkBack: (&^Link, &Link)void = (var owner: &^Link, var before: &Link){
-    const cases: [bool](&^Link, &Link)void = [
-        (var o: &^Link, var back: &Link){
-            o^^.prev = back;                  // this node's prev borrows the node before it
-            linkBack(&o^^.next, &o^^);        // go on: the next owner, with this node before it
-        },
-        (var o: &^Link, var back: &Link){ }   // no node here, so stop
-    ];
-    cases[owner^ == null](owner, before);
+    if (owner^ != null) {
+        owner^^.prev = before;                // this node's prev borrows the node before it
+        linkBack(&owner^^.next, &owner^^);    // go on: the next owner, with this node before it
+    }
 };
 
 const copyLinks: (&^Link)^Link = (const from: &^Link){
@@ -2012,14 +2018,55 @@ and its position in the shape (`{int, int}`: `x` first, `y` second).
 
 ## 10. Choosing and repeating
 
-MyLang has no `if` statement, no `switch` and no loops. A choice is a lookup: the possible
-results are values, and you pick one by its index or key. Repeating is a function calling
-itself.
+A choice is written with `if`, or made by a lookup. MyLang has no loops: repeating is a
+function calling itself.
 
-### 10.1 Choosing between two: `[bool]T`
+### 10.1 `if` and `else`
+
+```go
+if (count > 10) {
+    size = 10;
+} else {
+    size = 3;
+}
+```
+
+| Part | What it says |
+|---|---|
+| `(count > 10)` | the condition, in brackets. It has to be a `bool` |
+| the first `{ }` | runs when the condition is `true` |
+| `else { }` | runs when it is `false`. It can be left out |
+
+Only the chosen side runs. Each `{ }` is a block (2.6), so a name declared inside it ends at
+its `}`. An `if` doesn't end with `;`, the same as a block on its own.
+
+```go
+const abs: (int)int = (const n: int){
+    if (n < 0) {
+        return 0 - n;
+    } else {
+        return n;
+    }
+};
+
+abs(7)                 // 7
+abs(0 - 7)             // 7
+```
+
+`return` inside an `if` ends the whole function.
+
+The condition is never anything but a `bool`, because a value never changes type by itself
+(3.2):
+
+```go
+if (count) { ... }         // ERROR: count is an int, not a bool: write count != 0
+```
+
+### 10.2 Choosing by lookup: `[bool]T`
 
 A choice array (5.8) holds one value for `false` and one for `true`, and a `bool` picks
-between them:
+between them. It is a value, so it goes where a statement can't: in the middle of a
+declaration.
 
 ```go
 const sizes: [bool]int = [3, 10];      // false, then true
@@ -2027,27 +2074,21 @@ const size: int = sizes[count > 10];   // 10 when count is over 10, otherwise 3
 ```
 
 Both values in a choice array are worked out before the lookup. To run code for only the
-chosen side, put **functions** in the slots: look up the function, then call it.
+chosen side, use an `if`, or put **functions** in the slots: look up the function, then call
+it.
 
 ```go
-const abs: (int)int = (const n: int){
-    const cases: [bool](int)int = [
-        (const k: int){ return k; },           // false: n is not below 0
-        (const k: int){ return 0 - k; }        // true: n is below 0
-    ];
-    return cases[n < 0](n);            // pick the function for the answer, then call it
-};
+const absOf: [bool](int)int = [
+    (const k: int){ return k; },           // false: not below 0
+    (const k: int){ return 0 - k; }        // true: below 0
+];
 
-abs(7)                 // 7
-abs(0 - 7)             // 7
+absOf[n < 0](n)        // pick the function for the answer, then call it
 ```
-
-`cases[n < 0]` picks one of the two functions, and `(n)` calls it. The other function is
-never called.
 
 The slot for `false` is written first, because `false` is the first slot.
 
-### 10.2 Choosing between many: a map of functions
+### 10.3 Choosing between many: a map of functions
 
 For more than two cases, put one function per case in a map, with the case as the key.
 Looking up the key picks the function, and calling it runs that case. This does the job of
@@ -2082,17 +2123,17 @@ const cases: {int}(int, int)int = {1: add, 2: sub};
 cases[2](5, 3)         // 2
 ```
 
-### 10.3 Repeating: a function that calls itself
+### 10.4 Repeating: a function that calls itself
 
-A function can call itself by its own name. A choice array decides when to stop:
+A function can call itself by its own name. An `if` decides when to stop:
 
 ```go
 const factorial: (int)int = (const n: int){
-    const cases: [bool](int)int = [
-        (const k: int){ return k * factorial(k - 1); },    // false: keep going
-        (const k: int){ return 1; }                         // true: n is 0, so stop
-    ];
-    return cases[n == 0](n);
+    if (n == 0) {
+        return 1;                      // stop
+    } else {
+        return n * factorial(n - 1);   // keep going
+    }
 };
 
 factorial(4)           // 24
@@ -2102,11 +2143,11 @@ The same shape goes through an array, one index at a time:
 
 ```go
 const sumFrom: (&[]int, int)int = (const values: &[]int, const i: int){
-    const cases: [bool](&[]int, int)int = [
-        (const v: &[]int, const k: int){ return v^[k] + sumFrom(v, k + 1); },   // false: add this one, go on
-        (const v: &[]int, const k: int){ return 0; }                            // true: past the end, so stop
-    ];
-    return cases[i == values^.length](values, i);
+    if (i == values^.length) {
+        return 0;                                      // past the end, so stop
+    } else {
+        return values^[i] + sumFrom(values, i + 1);    // add this one, go on
+    }
 };
 
 var scores: []int = [10, 20, 30];
@@ -2216,11 +2257,12 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 
 ### Choosing and repeating
 
-| Instead of | You write |
+| You want | You write |
 |---|---|
-| `if` / `else` | a choice array of functions: `cases[n < 0](n)` (10.1) |
-| `switch` | a map of functions: `cases[op](a, b)` (10.2) |
-| a loop | a function that calls itself (10.3) |
+| to choose between two | `if (n < 0) { … } else { … }` (10.1) |
+| to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.2) |
+| to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.3) |
+| to repeat, like a loop | a function that calls itself (10.4) |
 
 ### Built-in functions
 
@@ -2274,6 +2316,7 @@ passed.
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
+| `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |

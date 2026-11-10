@@ -54,8 +54,9 @@ new value frees every node of the list.
 
 ## 4. How the compiler checks it
 
-A function body runs from top to bottom, with no `if` and no loops. So the check is one
-pass down the body:
+A function body runs from top to bottom, with no loops. So the check is one pass down the
+body. (MyLang has `if` since 10 Nov 2026. Each side of an `if` is checked on its own, and
+after it a pointer counts as still pointing wherever either side left it.)
 
 1. When a borrower or an ownership is made, note the path it was made from: `&p^` points at
    what `p` owns, `@list^.next` points inside the first node of `list`.
@@ -64,7 +65,7 @@ pass down the body:
    of them points at the value being freed or moved, or inside it, the line is an error.
 
 This is the idea behind Rust's borrow checker. Rust needs a hard analysis because of
-branches and loops. Here it is a read from top to bottom.
+loops. Here it is a read from top to bottom, with two sides to follow at each `if`.
 
 ## 5. What it rejects, and what you write instead
 
