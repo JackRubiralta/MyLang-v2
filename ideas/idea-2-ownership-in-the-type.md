@@ -447,3 +447,60 @@ Open with moving:
   `heap` is not part of the type (9.6). The reason given there was that a reference type
   couldn't go everywhere other types go. Here a `borrower T` can go everywhere, and the
   lifetime rule is what keeps it safe.
+
+## 10. Limits of this version
+
+Found by checking the rules against each other. These are problems and costs, not decisions.
+
+### 10.1 Two holes
+
+**A heap value can be freed while a borrower still points at it.**
+
+```go
+var p: ^int = ^5;
+var b: &int = &p^;      // b borrows the 5
+p = ^6;                 // p takes a new value, so the 5 is freed
+b^                      // b points at freed memory
+```
+
+The scope rule passes this, because `b` and `p` end together. A scope says when a name ends,
+but a heap value ends whenever its owner is set to something else or is freed as part of a
+bigger structure. For a plain value the rule has no gap, because a plain value lives exactly
+as long as its holder. The stored-borrower case (idea 1, section 8.4) is the same hole seen
+from inside a struct.
+
+Ways to close it, none chosen:
+
+| Way | Cost |
+|---|---|
+| an owner can't be set or handed over while a named borrower of its value is alive | checked when compiling, but only for borrowers that are names |
+| checked while running | bookkeeping the code doesn't show |
+| the programmer is trusted | a mistake leaves a dangling borrower |
+
+**Copying a struct that holds a heap link empties the original.**
+
+```go
+var first: Node = list^;     // reads like a copy of the first node,
+                             // but list^.next is handed to first.next and left null
+```
+
+It follows from 8.9 (a link is handed over) together with README 11.4 (setting a struct sets
+every field). One way to close it: only a bare link is handed over, and copying a larger
+value that holds a link is an error unless the old value is ending anyway (a `return` of a
+local). Every hand-over is then a link named in the code.
+
+### 10.2 Limits that come with the design
+
+| Limit | What it means |
+|---|---|
+| one owner, so ownership is tree-shaped | a graph, a cycle, or two lists sharing a tail can't be owned twice; the second link has to be a borrower |
+| `null` is only found while running | following a link that is `null`, including one that was handed over, fails while running |
+| a deep copy is written by hand | `^p^` copies one value; copying a whole list needs a function that walks it |
+| freeing cascades | when an owner ends, everything behind it is freed, one node after another, and the line doesn't show that work |
+| `a = b;` reads the same for a copy and a hand-over | the type tells them apart (8.9) |
+| a function may not be able to take a heap link | if a call counts as an inner scope, "ownership can't be moved into an inner scope" means a function can give a link back but not accept one |
+
+### 10.3 Not decided yet
+
+The open lists in 8.6, 8.8, 8.9 and section 9: returning a borrower from a function,
+read-only borrowers, a returned link that nothing receives, moving out of a `const` owner.
