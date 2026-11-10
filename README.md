@@ -312,23 +312,28 @@ written right there in the code.
 
 ### 4.4 Calling a type
 
-A type is a value, and calling it does three things.
+A type is a value, and calling it does two things.
 
-**Calling a built-in type with a value converts the value to that type.** A built-in type
-can be called with a value of any type, including an `any` (4.5):
+**Calling a built-in type with another type gives back a conversion function.** `int(float)`
+is the function that turns a `float` into an `int`, so its type is `(float)int`. Calling
+that function with a value does the conversion:
 
 ```go
-int(3.0)               // 3
-float(3)               // 3.0
-var whole: int = int(2.0);
-int(x)                 // x is an any: gives back the int inside it
+int(float)(3.0)                        // 3
+float(int)(3)                          // 3.0
+var whole: int = int(float)(2.0);
+
+const toInt: (float)int = int(float);  // the conversion is a function, so it can be named
+toInt(2.0)                             // 2
+
+int(any)(x)                            // x is an any: gives back the int inside it
 ```
 
-If the value's type is only known while the program runs, the conversion is checked
-when that line runs.
+A built-in type is never called with a value directly: `int(3.0)` is an error. The type
+you convert **from** is always written.
 
-**Calling a struct type makes a new value of it.** `Node(5)` runs the function after the
-`=` in `Node`'s declaration and gives back the block it builds (11.1, 11.2).
+Converting from an `any` (4.5) is checked when that line runs, because the type inside is
+only known then.
 
 **`type(value)` gives back the type of any value.** The result is a type, so it can be
 stored and used like any other type:
@@ -347,29 +352,30 @@ var x: Num = 5;        // x is an int
 ### 4.5 `any`: a value of any type
 
 `any` is a built-in type for a value whose type is only known while the program runs.
-Calling it wraps a value, just as calling `int` converts one:
+Nothing takes a value of any type, so `any` is called with a type first, like `int` (4.4):
+`any(int)` gives back the function that wraps an `int`, of type `(int)any`.
 
 ```go
-var x: any = any(3);       // holds the type int and the value 3
-var y: any = any(true);    // holds the type bool and the value true
+var x: any = any(int)(3);        // holds the type int and the value 3
+var y: any = any(bool)(true);    // holds the type bool and the value true
 
-x.T                        // int: the type inside
-int(x)                     // 3: checked while running that x holds an int
-bool(x)                    // fails while running: x holds an int
+x.T                              // int: the type inside
+int(any)(x)                      // 3: checked while running that x holds an int
+bool(any)(x)                     // fails while running: x holds an int
 ```
 
 Underneath, an `any` is a struct of two things: the value's type and the value, the same
 kind of explanation as a fat pointer (10.5). Pictured as a struct:
 
 ```go
-var x: any = any(3);
+var x: any = any(int)(3);
 // pictured as a struct: the type, then a value of that type
 var x: {type, int} = {
     const T: type = int;          // x.T
     const value: int = 3;
 };
 
-var y: any = any(true);
+var y: any = any(bool)(true);
 // a different shape inside, because the value is a bool
 var y: {type, bool} = {
     const T: type = bool;
@@ -390,9 +396,9 @@ const describe: (any)null = (const x: any){
     ...
 };
 
-describe(any(3));
-describe(any(true));
-describe(3);               // ERROR: 3 is an int, not an any; write any(3)
+describe(any(int)(3));
+describe(any(bool)(true));
+describe(3);               // ERROR: 3 is an int, not an any; write any(int)(3)
 ```
 
 `type(x)` gives `any`, because that's the type `x` was declared with (4.4); the type
@@ -416,11 +422,11 @@ is expected until you write the conversion yourself:
 const double: (int)int = (const n: int){ return n * 2; };
 
 double(x);             // ERROR: x is an any
-double(int(x));        // fine: the conversion is written out, so you can see where it could fail
+double(int(any)(x));   // fine: the conversion is written out, so you can see where it could fail
 ```
 
 So every place where something could go wrong while running is visible in the code: each
-wrap is `any(…)` and each unwrap is `int(…)`, `bool(…)` and so on. Everything that doesn't
+wrap is `any(int)(…)` and each unwrap is `int(any)(…)`, `bool(any)(…)` and so on. Everything that doesn't
 touch an `any` is still checked before the program runs.
 
 #### Underneath, on the stack
@@ -436,9 +442,9 @@ Both let one function work with many types (4.3):
 
 | | generic: takes a type | `any` |
 |---|---|---|
-| call | you pass the type: `first(int)` | the type travels with the value: `describe(any(3))` |
+| call | you pass the type: `first(int)` | the type travels with the value: `describe(any(int)(3))` |
 | type known | before the program runs, when you write the type | only while it runs |
-| mistakes show up | before the program runs | when a conversion like `int(x)` runs |
+| mistakes show up | before the program runs | when a conversion like `int(any)(x)` runs |
 | best for | the same code for many types | values whose type you only learn while running |
 
 ### 4.6 Why
@@ -449,12 +455,14 @@ Both let one function work with many types (4.3):
   kind of name of its own, and a `const` can never change, so types are always known before
   the program runs.
 - **Why converting is calling a type:** a type is a value, so it can be called like a
-  function, and the code shows exactly where a value changes type: `int(3.0)`.
-- **Why `any` is built in:** a function that turned any value into an `any` would need a
-  parameter that already accepts any value, which is `any` itself. Built in, it's just a
-  type you call, like `int`.
-- **Why you write `any(3)`:** a value never turns into an `any` by itself, so the code
-  shows every place a value is wrapped (`any(3)`) or unwrapped (`int(x)`).
+  function, and the code shows exactly where a value changes type: `int(float)(3.0)`.
+- **Why the type you convert from is written:** `int(3.0)` would need `int` to accept a
+  value of any type. `int(float)` picks one conversion, an ordinary function of type
+  `(float)int`, so the code says both types and nothing is chosen for you.
+- **Why `any(int)(3)`:** the same reason. No function receives a value of any type, so
+  `any` takes the type and gives back the function for it.
+- **Why wrapping is written out:** a value never turns into an `any` by itself, so the code
+  shows every place a value is wrapped (`any(int)(3)`) or unwrapped (`int(any)(x)`).
 - **Why `type(…)`:** types are values, so the type of a value can be handed back and used
   like any other value.
 - **Why generics are just functions:** types are values, and functions already take
@@ -1161,44 +1169,56 @@ recursive function, because every new node is handed to something outside it.
 `struct` is the fifth kind of name, with the same shape as every other declaration:
 
 ```go
-struct Name: Shape = (inputs){ fields };
+struct Name: Shape = { fields };
 ```
 
 - After the `:` comes the **shape**: the field types in braces, `{int, *Node}`.
-- After the `=` comes a **function that makes the struct**: it takes inputs like any
-  function, and its body is the block of fields with their starting values, which can use
-  the inputs.
+- After the `=` comes the **struct itself**: a block of its fields with their starting
+  values. It's a declaration of what the struct is, not code that runs.
 - A `struct` name can never be given a new value, so a struct type never changes.
 
 ```go
-struct Node: {int, *Node} = (const v: int){
-    var value: int = v;
+struct Node: {int, *Node} = {
+    var value: int = 0;
     var next: *Node = null;
 };
-struct Settings: {bool, int} = (){
+struct Settings: {bool, int} = {
     const debug: bool = false;
     var size: int = 3;
 };
 ```
 
-### 11.2 Making a struct value: call the struct
+### 11.2 A struct value is a block of declarations
 
-A struct is made by calling it like a function. The call runs the function from its
-declaration with the inputs given, and the block it builds becomes the new value:
+A struct value is a block of declarations, one per field and in the same order as the
+shape, each with `const` or `var`, a name, a type and a starting value:
 
 ```go
-var n: Node = Node(5);             // value is 5, next is null
-var s: Settings = Settings();      // no inputs
+var n: Node = {
+    var value: int = 0;
+    var next: *Node = null;
+};
 ```
 
-The block holds one declaration per field, in the same order as the shape, each with
-`const` or `var`, a name, a type and a starting value. This mirrors functions: the type
-lists only the types, and the value gives the names.
+This mirrors functions: the type lists only the types, and the value gives the names.
 
-| | Type (after `:`) | Value |
+| | Type (after `:`) | Value (after `=`) |
 |---|---|---|
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
-| struct | `{int, *Node}` | the block `Node(…)` builds: `{ var value: int = …; var next: *Node = null; }` |
+| struct | `{int, *Node}` | `{ var value: int = 0; var next: *Node = null; }` |
+
+A struct type is never called: there is no `Node(5)`. To make a struct from inputs, write
+an ordinary function that returns one:
+
+```go
+const makeNode: (int)Node = (const v: int){
+    return { var value: int = v; var next: *Node = null; };
+};
+
+var n: Node = makeNode(5);         // value is 5, next is null
+```
+
+(The `makeNode` in 10.6 is the same idea for a node on the heap: it hands out a `*Node`.)
 
 ### 11.3 Fields
 
@@ -1257,7 +1277,7 @@ A struct doesn't work like a pointer. Every declaration and every assignment cop
 whole block:
 
 ```go
-var n: Node = Node(0);
+var n: Node = { var value: int = 0; var next: *Node = null; };
 var m: Node = n;       // a full copy: m gets its own block on the stack
 m.value = 5;           // n.value is still 0
 ```
@@ -1276,12 +1296,12 @@ block directly.
 
 ### 11.7 Why
 
-- **Why `struct` is its own kind of name:** a struct type comes with the function that
-  makes it, and `struct Name: Shape = (inputs){ fields };` gives that function a place after
-  the `=`. Other types don't need one, so they're named with `const` (4.1).
-- **Why making a struct is a call:** the part after the `=` is a function, so making a
-  struct is calling it, the same as calling any function. Its inputs are written right there
-  in the call (`Node(5)`), and nothing is filled in behind your back.
+- **Why `struct` is its own kind of name:** a struct has its fields and their starting
+  values, and `struct Name: Shape = { fields };` gives them a place after the `=`. Other
+  types don't need one, so they're named with `const` (4.1).
+- **Why the part after the `=` is a block, not a function:** MyLang is declarative, so a
+  struct declaration says what the struct is. Code that builds one from inputs belongs in an
+  ordinary function like `makeNode`, where you can see it being called.
 - **Why the type lists only the field types:** it works like a function's type, which
   lists only the parameter types; the names belong in the value.
 - **Why singletons need nothing new:** a struct value can be declared directly with `var`
@@ -1295,15 +1315,16 @@ block directly.
 ### 11.8 Other ways that were considered
 
 - **A `type` kind for every named type** (`type Pair: [2]int = [0, 0];`). Replaced: only
-  struct types need a function that makes them, so they get `struct`, and every other type is a `const` of
+  struct types need a block after the `=`, so they get `struct`, and every other type is a `const` of
   type `type` (4.1).
 - **A struct as a `const` type value** (`const Node: type = {int, *Node};`). Replaced by
-  `struct`, which gives the struct its making function after the `=`.
-- **A plain default block after the `=`**, copied by `Node()` with no inputs. Replaced by
-  the making function, which can take inputs.
+  `struct`, which gives the struct its block after the `=`.
+- **A function after the `=`, called to make the struct**
+  (`struct Node: {int, *Node} = (const v: int){ … };` and `Node(5)`). Dropped: a struct
+  declaration is declarative, and making one from inputs is an ordinary function's job
+  (`makeNode`, 11.2).
 - **Two blocks, inputs then the rest** (`const Node: type = {var value: int}{ var doubled:
-  int = 2 * value; };`). Replaced by the function form, which reuses how functions already
-  take inputs.
+  int = 2 * value; };`). Dropped for the same reason.
 - **`var` types** (`var T: type`). Dropped: a type can never change (4.2).
 - **Field names in the struct type** (`{value: int, next: *Node}`). Not decided yet: it's
   the "names inside types" question in section 13.
@@ -1351,14 +1372,16 @@ These are left out on purpose until they're decided:
 
 - **Basic types:** which ones there are and their sizes (`char` included), and what type a
   plain number like `3` or `3.0` has.
-- **Conversions:** which types can be converted to which, how `int(3.7)` rounds, and what
-  happens when a value doesn't fit (`int8(300)`).
+- **Conversions:** which types can be converted to which, how `int(float)(3.7)` rounds, and
+  what happens when a value doesn't fit (`int8(int)(300)`).
 - **Generic function types:** in `(type)([]T)T` the return type uses `T`, the type passed
   in, without naming it first. How a function's type refers to its own parameter ties in
   with names inside types (above).
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
+- **Using a struct's own block:** what the block after the `=` in a `struct` declaration
+  gives you, e.g. whether a `Node` can be declared without writing its fields out again.
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
