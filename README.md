@@ -75,7 +75,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var`, `ref`, `heap` or `struct` |
+| `kind` | what sort of name it is: `const`, `var`, `ref` or `heap` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -92,7 +92,7 @@ A number, a function and an array are all declared the same way.
 **Why:** since everything is a value (rule 1), there is no reason for functions or arrays
 to be declared differently from numbers.
 
-### 2.2 The five kinds of name
+### 2.2 The four kinds of name
 
 | Kind | Can it be given a new value? | Where its value lives | Section |
 |---|---|---|---|
@@ -100,7 +100,6 @@ to be declared differently from numbers.
 | `var` | yes | stack | 2.3 |
 | `ref` | it *is* another variable: assigning changes that variable | wherever that variable is | 8 |
 | `heap` | yes | heap | 9 |
-| `struct` | no: it is one actual struct, and its `var` fields can change | stack | 11.4 |
 
 ### 2.3 `const` and `var`
 
@@ -369,15 +368,15 @@ kind of explanation as a fat pointer (10.5). Pictured as a struct:
 var x: any = wrap(int)(3);
 // pictured as a struct: the type, then a value of that type
 var x: {type, int} = {
-    const T: type = int;          // x.T
-    const value: int = 3;
+    T: type = int;                // x.T
+    value: int = 3;
 };
 
 var y: any = wrap(bool)(true);
 // a different shape inside, because the value is a bool
 var y: {type, bool} = {
-    const T: type = bool;
-    const value: bool = true;
+    T: type = bool;
+    value: bool = true;
 };
 ```
 
@@ -572,20 +571,20 @@ picture them (you never write arrays this way, and the field names are only labe
 var a: [3]int = [10, 20, 30];
 // pictured as a struct: three int fields; the length 3 is fixed by the type [3]int
 var a: {int, int, int} = {
-    var at0: int = 10;            // a[0]
-    var at1: int = 20;            // a[1]
-    var at2: int = 30;            // a[2]
+    at0: int = 10;                // a[0]
+    at1: int = 20;                // a[1]
+    at2: int = 30;                // a[2]
 };
 
 var b: []int = [7, 8];
 // pictured as a struct: the length is stored, then the elements
 var b: {int, [2]int} = {
-    const length: int = 2;        // b.length: fixed by the first value, so const
-    var elements: [2]int = [7, 8];
+    length: int = 2;              // b.length: set by the first value, and it never changes
+    elements: [2]int = [7, 8];
 };
 ```
 
-The length is `const` in both: it's known, and it never changes (5.3).
+In both, the length is known and it never changes (5.3).
 
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
@@ -653,15 +652,15 @@ Pictured as a struct (field names only as labels):
 
 ```go
 var seen: {int}bool = {1: true, 4: false};
-// pictured as a struct: each key is const, each value can change
+// pictured as a struct: each key, then its value
 var seen: {int, bool, int, bool} = {
-    const key0: int = 1;   var value0: bool = true;     // seen[1]
-    const key1: int = 4;   var value1: bool = false;    // seen[4]
+    key0: int = 1;   value0: bool = true;     // seen[1]
+    key1: int = 4;   value1: bool = false;    // seen[4]
 };
 ```
 
-That's why `seen[4] = true;` works (a value is `var`) but `seen[7] = true;` doesn't (there's
-no field for key 7, and the keys are fixed).
+The keys never change, and the values can when the map is a `var`. That's why
+`seen[4] = true;` works but `seen[7] = true;` doesn't: there's no field for key 7.
 
 **Why:** like arrays, maps live on the stack, so their size can't change.
 
@@ -1152,8 +1151,8 @@ Pictured as a struct (field names only as labels):
 var v: *[]int = &a;
 // pictured as a struct: where the elements start, and how many there are
 var v: {*int, int} = {
-    var start: *int = &a[0];
-    const length: int = 5;        // v.length
+    start: *int = &a[0];
+    length: int = 5;              // v.length
 };
 ```
 
@@ -1190,7 +1189,7 @@ the caller, and that receiver becomes its **owner**.
 
 ```go
 const makeNode: (int)*Node = (const v: int){
-    heap n: Node = { var value: int = v; var next: *Node = null; };
+    heap n: Node = { value: int = v; next: *Node = null; };
     hand &n;                       // n is handed out instead of dying
 };
 ```
@@ -1226,7 +1225,7 @@ So handing a pointer or giving the value to a `ref` keeps it alive, and giving i
 #### A linked list, step by step
 
 ```go
-var list: Node = { var value: int = 1; var next: *Node = null; };
+var list: Node = { value: int = 1; next: *Node = null; };
 
 list.next = makeNode(2);           // the node holding 2 is handed to list.next, which owns it
 list.next.next = makeNode(3);      // the node holding 3 is owned by the node holding 2
@@ -1319,32 +1318,35 @@ const Node: type = {int, *Node};
 const Settings: type = {bool, int};
 ```
 
-### 11.2 A struct value is a block of declarations
+### 11.2 A struct value is a block of fields
 
-A struct value is a block of declarations, one per field and in the same order as the
-shape, each with `const` or `var`, a name, a type and a starting value:
+A struct value is a block of fields, one per type in the shape and in the same order. Each
+field is a name, a type and a starting value:
 
 ```go
 var n: Node = {
-    var value: int = 0;
-    var next: *Node = null;
+    value: int = 0;
+    next: *Node = null;
 };
 ```
+
+A struct is declared with `const` or `var`, like any other value. The fields carry no
+`const` or `var` of their own (11.3).
 
 This mirrors functions: the type lists only the types, and the value gives the names.
 
 | | Type (after `:`) | Value (after `=`) |
 |---|---|---|
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
-| struct | `{int, *Node}` | `{ var value: int = 0; var next: *Node = null; }` |
+| struct | `{int, *Node}` | `{ value: int = 0; next: *Node = null; }` |
 
-A struct's name is a type. It is not a value of that type, and it is never called: there
-is no `var n: Node = Node;` and no `Node(5)`. To make a struct from inputs, write an
-ordinary function that returns a `Node`:
+`Node` is a type. It is not a value of that type, and it is never called: there is no
+`var n: Node = Node;` and no `Node(5)`. To make a struct from inputs, write an ordinary
+function that returns a `Node`:
 
 ```go
 const makeNode: (int)Node = (const v: int){
-    var n: Node = { var value: int = v; var next: *Node = null; };
+    var n: Node = { value: int = v; next: *Node = null; };
     return n;
 };
 
@@ -1353,40 +1355,51 @@ var n: Node = makeNode(5);         // value is 5, next is null
 
 (The `makeNode` in 10.6 is the same idea for a node on the heap: it hands out a `*Node`.)
 
-### 11.3 Fields
+### 11.3 Fields follow the struct's `const` or `var`
 
-`.` reaches a field. A `var` field can change and a `const` field can't:
+`.` reaches a field. The word the struct is declared with covers every field in it: the
+fields of a `var` struct can all be changed, and the fields of a `const` struct never can.
 
 ```go
-n.value = 5;           // fine: value is var
+var n: Node = { value: int = 0; next: *Node = null; };
+const fixed: Node = { value: int = 9; next: *Node = null; };
+
+n.value = 5;           // fine: n is a var
+fixed.value = 1;       // ERROR: fixed is const
 ```
 
-### 11.4 `struct`: one actual struct
+### 11.4 Setting a struct to another struct
 
-`struct` is the fifth kind of name. It declares a single, actual struct: a singleton. The
-shape comes after the `:` and the block after the `=`, like every declaration:
+A `var` struct can be given a whole new value of the same type. Every field is set:
 
 ```go
-struct settings: {bool, int} = {
-    const debug: bool = false;
-    var size: int = 3;
+n = fixed;                                 // n.value is now 9
+n = { value: int = 7; next: *Node = null; };   // a block works too
+fixed = n;                                 // ERROR: fixed is const
+```
+
+### 11.5 Singletons
+
+A singleton is just a value whose struct type has no name:
+
+```go
+var settings: {bool, int} = {
+    debug: bool = false;
+    size: int = 3;
 };
 
-settings.size = 5;          // fine: size is var
-settings.debug = true;      // ERROR: debug is const
+settings.size = 5;          // fine: settings is a var
 ```
 
-`struct` declares a value, not a type. A struct **type** is named with `const` (11.1).
-
-### 11.5 Functions inside a struct
+### 11.6 Functions inside a struct
 
 A function declared inside a struct is in the struct's scope, so it uses the struct's
 fields directly. There is no `this`:
 
 ```go
-struct counter: {int, (int)void} = {
-    var count: int = 0;
-    const add: (int)void = (const n: int){
+var counter: {int, (int)void} = {
+    count: int = 0;
+    add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
     };
 };
@@ -1394,14 +1407,14 @@ struct counter: {int, (int)void} = {
 counter.add(5);                // counter.count is now 5
 ```
 
-### 11.6 Underneath: the variable is its block
+### 11.7 Underneath: the variable is its block
 
 Writing a value on its own puts it on the stack and removes it again: `4;` adds 4 to the
 stack, and it's gone once the statement is done. A struct block works the same way.
 Writing
 
 ```go
-{ var value: int = 0; var next: *Node = null; };
+{ value: int = 0; next: *Node = null; };
 ```
 
 lays its fields out on the stack one after another, and they're removed again. Saving the
@@ -1413,29 +1426,24 @@ A struct doesn't work like a pointer. Every declaration and every assignment cop
 whole block:
 
 ```go
-var n: Node = { var value: int = 0; var next: *Node = null; };
+var n: Node = { value: int = 0; next: *Node = null; };
 var m: Node = n;       // a full copy: m gets its own block on the stack
 m.value = 5;           // n.value is still 0
-```
-
-A `const` field can't be changed on its own, but a `var` struct variable can be given a
-whole new value, which copies the new block into its place:
-
-```go
-var node: {int, *Node} = { const value: int = 0; var next: *Node = null; };
-node.value = 1;        // ERROR: value is const
-node = { const value: int = 7; var next: *Node = null; };   // fine: the new block is copied in
 ```
 
 A heap variable (9.4) is the one that holds a hidden pointer; a struct variable holds its
 block directly.
 
-### 11.7 Why
+### 11.8 Why
 
 - **Why a struct type is named with `const`:** it is a type like any other, so it is a
   value of type `type` and needs no kind of its own (4.1).
-- **Why `struct` declares a struct and not a type:** `struct` declares an actual struct, the
-  thing itself. That keeps a name from being both a type and a value of that type.
+- **Why fields carry no `const` or `var`:** a struct is declared with `const` or `var`, and
+  that word covers everything inside it, the same as an array or a map. With a `const` field
+  inside a `var` struct, setting the struct to another struct would have to change a
+  `const`.
+- **Why there is no `struct` keyword:** a struct value is declared with `const` or `var`
+  like any other value, so a singleton needs nothing new.
 - **Why making a struct from inputs is a function:** MyLang is declarative, so code that
   builds a struct belongs in an ordinary function like `makeNode`, where you can see it being
   called.
@@ -1447,13 +1455,20 @@ block directly.
   or assigned (2.4), and structs behave the same. Because the variable holds its own block,
   it can never be left pointing at a block that has been removed.
 
-### 11.8 Other ways that were considered
+### 11.9 Other ways that were considered
 
+- **`const` or `var` on each field** (`{ const debug: bool = false; var size: int = 3; }`).
+  Dropped: a `var` struct with a `const` field couldn't be set to another struct.
+- **A `struct` keyword that declares one actual struct** (`struct settings: {bool, int} =
+  { … };`). Dropped: `const` and `var` already declare a struct value.
+- **A struct name that works like a `ref`,** pointing at a block somewhere. Dropped: pointing
+  it at another block would change `const` fields, share without the code saying so, and
+  could leave it pointing at a block that's gone.
+- **`struct Name: Shape = { fields };` as the way to declare a struct type,** with the block
+  as the type's own fields. Replaced: a struct type is named with `const` like every other
+  type.
 - **A `type` kind for every named type** (`type Pair: [2]int = [0, 0];`). Replaced: every
   type is a `const` of type `type` (4.1).
-- **`struct Name: Shape = { fields };` as the way to declare a struct type,** with the block
-  as the type's own fields. Replaced: `struct` declares one actual struct, and a struct type
-  is named with `const` like every other type.
 - **`var n: Node = Node;` to start from the struct's own block.** Dropped: `Node` is a type,
   so the same name can't also be a value of type `Node`.
 - **A function after the `=`, called to make the struct**

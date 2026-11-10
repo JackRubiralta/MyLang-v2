@@ -66,7 +66,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var`, `ref` or `struct` |
+| `kind` | what sort of name it is: `const`, `var` or `ref` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -80,14 +80,13 @@ const scores: [3]int = [10, 20, 30];
 
 A number, a function and an array are all declared the same way.
 
-### 2.2 The four kinds of name
+### 2.2 The three kinds of name
 
 | Kind | Can it be given a new value? | Section |
 |---|---|---|
 | `const` | no | 2.3 |
 | `var` | yes | 2.3 |
 | `ref` | it *is* another variable: assigning to it changes that variable | 8 |
-| `struct` | no: it is one actual struct, and its `var` fields can change | 9.4 |
 
 ### 2.3 `const` and `var`
 
@@ -550,15 +549,15 @@ An `any` is a struct of two things: the value's type and the value. Pictured as 
 var x: any = wrap(int)(3);
 // pictured as a struct: the type, then a value of that type
 var x: {type, int} = {
-    const T: type = int;          // x.T
-    const value: int = 3;
+    T: type = int;                // x.T
+    value: int = 3;
 };
 
 var y: any = wrap(bool)(true);
 // a different shape inside, because the value is a bool
 var y: {type, bool} = {
-    const T: type = bool;
-    const value: bool = true;
+    T: type = bool;
+    value: bool = true;
 };
 ```
 
@@ -693,20 +692,20 @@ picture them (you never write arrays this way, and the field names are only labe
 var a: [3]int = [10, 20, 30];
 // pictured as a struct: three int fields; the length 3 is fixed by the type [3]int
 var a: {int, int, int} = {
-    var at0: int = 10;            // a[0]
-    var at1: int = 20;            // a[1]
-    var at2: int = 30;            // a[2]
+    at0: int = 10;                // a[0]
+    at1: int = 20;                // a[1]
+    at2: int = 30;                // a[2]
 };
 
 var b: []int = [7, 8];
 // pictured as a struct: the length is stored, then the elements
 var b: {int, [2]int} = {
-    const length: int = 2;        // b.length: fixed by the first value, so const
-    var elements: [2]int = [7, 8];
+    length: int = 2;              // b.length: set by the first value, and it never changes
+    elements: [2]int = [7, 8];
 };
 ```
 
-The length is `const` in both: it's known, and it never changes.
+In both, the length is known and it never changes.
 
 ### 5.8 A choice array: `[bool]T`
 
@@ -782,15 +781,15 @@ Pictured as a struct (field names only as labels):
 
 ```go
 var seen: {int}bool = {1: true, 4: false};
-// pictured as a struct: each key is const, each value can change
+// pictured as a struct: each key, then its value
 var seen: {int, bool, int, bool} = {
-    const key0: int = 1;   var value0: bool = true;     // seen[1]
-    const key1: int = 4;   var value1: bool = false;    // seen[4]
+    key0: int = 1;   value0: bool = true;     // seen[1]
+    key1: int = 4;   value1: bool = false;    // seen[4]
 };
 ```
 
-That's why `seen[4] = true;` works (a value is `var`) but `seen[7] = true;` doesn't (there's
-no field for key 7, and the keys are fixed).
+The keys never change, and the values can when the map is a `var`. That's why
+`seen[4] = true;` works but `seen[7] = true;` doesn't: there's no field for key 7.
 
 ---
 
@@ -1071,22 +1070,25 @@ const Settings: type = {bool, int};
 
 ### 9.2 Making a struct value
 
-A struct value is a block of declarations, one per field and in the same order as the
-shape. Each field is `const` or `var`, a name, a type and a starting value:
+A struct value is a block of fields, one per type in the shape and in the same order. Each
+field is a name, a type and a starting value:
 
 ```go
 var p: Point = {
-    var x: int = 1;
-    var y: int = 2;
+    x: int = 1;
+    y: int = 2;
 };
 ```
+
+A struct is declared with `const` or `var`, like any other value. The fields carry no
+`const` or `var` of their own (9.3).
 
 This mirrors functions: the type lists only the types, and the value gives the names.
 
 | | Type (after `:`) | Value (after `=`) |
 |---|---|---|
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
-| struct | `{int, int}` | `{ var x: int = 1; var y: int = 2; }` |
+| struct | `{int, int}` | `{ x: int = 1; y: int = 2; }` |
 
 `Point` is a type. It is not a value of that type, and it is never called:
 
@@ -1099,64 +1101,66 @@ To make a struct from inputs, write an ordinary function that returns one:
 
 ```go
 const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = { var x: int = a; var y: int = b; };
+    var p: Point = { x: int = a; y: int = b; };
     return p;
 };
 
 var corner: Point = makePoint(3, 4);   // x is 3, y is 4
 ```
 
-### 9.3 Fields
+### 9.3 Fields follow the struct's `const` or `var`
 
-`.` reaches a field. A `var` field can change and a `const` field can't:
+`.` reaches a field. The word the struct is declared with covers every field in it:
+
+| Declared with | Its fields |
+|---|---|
+| `var` | can all be changed |
+| `const` | can never be changed |
 
 ```go
-var s: Settings = { const debug: bool = false; var size: int = 3; };
+var p: Point = { x: int = 1; y: int = 2; };
+const origin: Point = { x: int = 0; y: int = 0; };
 
-p.x                    // reads the field
-p.x = 5;               // fine: x is var
-s.size = 8;            // fine: size is var
-s.debug = true;        // ERROR: debug is const
+p.x                    // 1
+p.x = 5;               // fine: p is a var
+origin.x = 1;          // ERROR: origin is const
 ```
 
-### 9.4 `struct`: one actual struct
+Arrays and maps follow the same rule (5.2, 6.2).
 
-`struct` is a kind of name. It declares a single, actual struct: a singleton. It has the
-same shape as every other declaration, with the shape after the `:` and the block after the
-`=`:
+### 9.4 Setting a struct to another struct
+
+A `var` struct can be given a whole new value of the same type. Every field is set:
 
 ```go
-struct settings: {bool, int} = {
-    const debug: bool = false;
-    var size: int = 3;
+p = origin;                        // p.x is now 0 and p.y is now 0
+p = { x: int = 7; y: int = 9; };   // a block works too
+origin = p;                        // ERROR: origin is const
+```
+
+### 9.5 Singletons
+
+A singleton is a value whose struct type has no name. It's declared directly, like any
+other value:
+
+```go
+var settings: {bool, int} = {
+    debug: bool = false;
+    size: int = 3;
 };
 
-settings.size = 5;          // fine: size is var
-settings.debug = true;      // ERROR: debug is const
+settings.size = 5;          // fine: settings is a var
 ```
 
-`struct` declares a value, not a type. `settings` is the struct itself, so nothing else is
-made from it:
-
-```go
-var other: settings = { ... };     // ERROR: settings is a struct, not a type
-```
-
-| You want | You write |
-|---|---|
-| a struct type that many values share | `const Point: type = {int, int};` |
-| a value of that type | `var p: Point = { var x: int = 1; var y: int = 2; };` |
-| one struct on its own | `struct settings: {bool, int} = { ... };` |
-
-### 9.5 Functions inside a struct
+### 9.6 Functions inside a struct
 
 A function declared inside a struct is in the struct's scope, so it uses the struct's
 fields directly. There is no `this`:
 
 ```go
-struct counter: {int, (int)void} = {
-    var count: int = 0;
-    const add: (int)void = (const n: int){
+var counter: {int, (int)void} = {
+    count: int = 0;
+    add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
     };
 };
@@ -1165,24 +1169,13 @@ counter.add(5);                // counter.count is now 5
 counter.add(2);                // counter.count is now 7
 ```
 
-### 9.6 A struct is copied, like every value
+### 9.7 A struct is copied, like every value
 
 Every declaration and every assignment copies the whole block:
 
 ```go
-var p: Point = { var x: int = 1; var y: int = 2; };
 var q: Point = p;      // a full copy: q gets its own block
-q.x = 5;               // p.x is still 1
-```
-
-A `const` field can't be changed on its own, but a `var` struct variable can be given a
-whole new value, which copies the new block into its place:
-
-```go
-const Range: type = {int, int};
-var limits: Range = { const low: int = 0; var high: int = 10; };
-limits.low = 1;        // ERROR: low is const
-limits = { const low: int = 5; var high: int = 20; };   // fine: the new block is copied in
+q.x = 5;               // p.x doesn't change
 ```
 
 To share a struct instead of copying it, use a `ref` (section 8):
@@ -1202,14 +1195,14 @@ const sumOf: (Point)int = (const pt: Point){
 sumOf(p)               // the function gets its own copy of p
 ```
 
-### 9.7 Underneath: the variable is its block
+### 9.8 Underneath: the variable is its block
 
 Writing a value on its own puts it on the stack and removes it again: `4;` adds 4 to the
 stack, and it's gone once the statement is done. A struct block works the same way.
 Writing
 
 ```go
-{ var x: int = 1; var y: int = 2; };
+{ x: int = 1; y: int = 2; };
 ```
 
 lays its fields out on the stack one after another, and they're removed again. Saving the
@@ -1353,7 +1346,7 @@ applyTo(ops[2], table[1][0], 2);    // table[1][0] is now 6
 const Point: type = {int, int};
 
 const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = { var x: int = a; var y: int = b; };
+    var p: Point = { x: int = a; y: int = b; };
     return p;
 };
 
@@ -1373,7 +1366,6 @@ c.x = 0;                            // corner.x is now 0
 | `const` | a value that never changes | no |
 | `var` | a value that can change | yes |
 | `ref` | another name for an existing variable | assigning changes that variable |
-| `struct` | one actual struct (a singleton) | no, but its `var` fields can change |
 
 ### Type forms
 
@@ -1465,7 +1457,7 @@ passed.
 | `[3]ref int`, `(int)ref int`, `(ref int)void` | `ref` is not a type |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
-| `settings.debug = true;` | `debug` is a `const` field |
+| `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
 
 Three checks happen while the program runs:
 
