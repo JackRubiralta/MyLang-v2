@@ -1352,26 +1352,11 @@ This mirrors functions: the type lists only the types, and the value gives the n
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
 | struct | `{int, *Node}` | `{ var value: int = 0; var next: *Node = null; }` |
 
-The struct's name also stands for its own block (11.1), so a new value can start as a copy
-of it, and the fields are set afterwards:
+A struct's name is a type. It is not a value of that type, and it is never called: there
+is no `var n: Node = Node;` and no `Node(5)`. To make a struct from inputs, write an
+ordinary function that returns a `Node`:
 
 ```go
-var n: Node = Node;                // a copy of Node's own block: value is 0, next is null
-n.value = 5;
-```
-
-A struct has no initializer and is never called: there is no `Node(5)`. To make a struct
-from inputs, write an ordinary function that returns a `Node`. It can start from the
-struct's own block and set the fields, or write the block out:
-
-```go
-const makeNode: (int)Node = (const v: int){
-    var n: Node = Node;            // start from Node's own block
-    n.value = v;
-    return n;
-};
-
-// the same function, writing the block out instead
 const makeNode: (int)Node = (const v: int){
     var n: Node = { var value: int = v; var next: *Node = null; };
     return n;
@@ -1461,8 +1446,6 @@ block directly.
 - **Why `struct` is its own kind of name:** a struct has its fields and their starting
   values, and `struct Name: Shape = { fields };` gives them a place after the `=`. Other
   types don't need one, so they're named with `const` (4.1).
-- **Why `var n: Node = Node;`:** a struct has no initializer, so its own block is the
-  starting value, and you change the fields you want afterwards.
 - **Why the part after the `=` is a block, not a function:** MyLang is declarative, so a
   struct declaration says what the struct is. Code that builds one from inputs belongs in an
   ordinary function like `makeNode`, where you can see it being called.
@@ -1483,6 +1466,8 @@ block directly.
   type `type` (4.1).
 - **A struct as a `const` type value** (`const Node: type = {int, *Node};`). Replaced by
   `struct`, which gives the struct its block after the `=`.
+- **`var n: Node = Node;` to start from the struct's own block.** Dropped: `Node` is a type,
+  so the same name can't also be a value of type `Node`.
 - **A function after the `=`, called to make the struct**
   (`struct Node: {int, *Node} = (const v: int){ … };` and `Node(5)`). Dropped: a struct
   declaration is declarative, and making one from inputs is an ordinary function's job
@@ -1545,6 +1530,8 @@ These are left out on purpose until they're decided:
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
+- **Using a struct's own block:** what the block after the `=` in a `struct` declaration
+  gives you, e.g. whether a `Node` can be declared without writing its fields out again.
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now

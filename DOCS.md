@@ -1105,32 +1105,16 @@ This mirrors functions: the type lists only the types, and the value gives the n
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
 | struct | `{int, int}` | `{ var x: int = 1; var y: int = 2; }` |
 
-The struct's name also stands for its own block, so a new value can start as a copy of it,
-and the fields are set afterwards:
+A struct's name is a type. It is not a value of that type, and it is never called:
 
 ```go
-var p: Point = Point;              // a copy of Point's own block: x is 0, y is 0
-p.x = 5;
-```
-
-A struct has no initializer and is never called:
-
-```go
+var p: Point = Point;              // ERROR: Point is a type, not a value of type Point
 var p: Point = Point(1, 2);        // ERROR: a type is never called
 ```
 
-To make a struct from inputs, write an ordinary function that returns one. It can start
-from the struct's own block and set the fields, or write the block out:
+To make a struct from inputs, write an ordinary function that returns one:
 
 ```go
-const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = Point;          // start from Point's own block
-    p.x = a;
-    p.y = b;
-    return p;
-};
-
-// the same function, writing the block out instead
 const makePoint: (int, int)Point = (const a: int, const b: int){
     var p: Point = { var x: int = a; var y: int = b; };
     return p;
@@ -1144,7 +1128,7 @@ var corner: Point = makePoint(3, 4);   // x is 3, y is 4
 `.` reaches a field. A `var` field can change and a `const` field can't:
 
 ```go
-var s: Settings = Settings;
+var s: Settings = { const debug: bool = false; var size: int = 3; };
 
 p.x                    // reads the field
 p.x = 5;               // fine: x is var
@@ -1374,9 +1358,7 @@ struct Point: {int, int} = {
 };
 
 const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = Point;
-    p.x = a;
-    p.y = b;
+    var p: Point = { var x: int = a; var y: int = b; };
     return p;
 };
 
@@ -1487,6 +1469,7 @@ passed.
 | `ref top: int = three(7)[0];` | the ref would outlive what it refers to |
 | `[3]ref int`, `(int)ref int`, `(ref int)void` | `ref` is not a type |
 | `Point(1, 2)` | a type is never called |
+| `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `settings.debug = true;` | `debug` is a `const` field |
 
 Three checks happen while the program runs:
