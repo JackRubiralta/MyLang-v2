@@ -1649,6 +1649,19 @@ Not settled yet:
 
 ### 8.17 Underneath: addresses
 
+`^T` and `&T` are both pointers. One owns what it points at, and the other doesn't:
+
+| | `^T` | `&T` |
+|---|---|---|
+| holds | an address | an address |
+| can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap |
+| frees what it points at | yes | never |
+| made with | `^v`, or by taking a value over with `@` | `&x` |
+| followed with | `p^` | `p^` |
+
+An owning pointer can only point at the heap, because a value on the stack already has an
+owner: the holder it lives in.
+
 - **A `^T` holder** has a place on the stack like every name. That place holds the
   **address** of the value on the heap, and `p^` goes to that address.
 - **A `&T` holder** holds the address of what it borrows: a variable, an array element, a
