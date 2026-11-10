@@ -2037,7 +2037,8 @@ if (count > 10) {
 |---|---|
 | `(count > 10)` | the condition, in brackets. It has to be a `bool` |
 | the first `{ }` | runs when the condition is `true` |
-| `else { }` | runs when it is `false`. It can be left out |
+| `else if (…) { }` | another test, tried only when every test above it was `false`. There can be several |
+| `else { }` | runs when every test was `false`. It can be left out |
 
 Only the chosen side runs. Each `{ }` is a block (2.6), so a name declared inside it ends at
 its `}`. An `if` doesn't end with `;`, the same as a block on its own.
@@ -2056,6 +2057,21 @@ abs(0 - 7)             // 7
 ```
 
 `return` inside an `if` ends the whole function.
+
+With `else if`, the tests are tried from the top, and the first one that is `true` runs:
+
+```go
+if (n < 0) {
+    sign = 0 - 1;
+} else if (n == 0) {
+    sign = 0;
+} else {
+    sign = 1;
+}
+```
+
+`else if` is the same as an `if` written inside the `else` block, with one pair of braces
+fewer.
 
 The condition is never anything but a `bool`, because a value never changes type by itself
 (3.2):
@@ -2261,7 +2277,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 
 | You want | You write |
 |---|---|
-| to choose between two | `if (n < 0) { … } else { … }` (10.1) |
+| to choose | `if (n < 0) { … } else if (n == 0) { … } else { … }` (10.1) |
 | to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.2) |
 | to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.3) |
 | to repeat, like a loop | a function that calls itself (10.4) |
