@@ -20,200 +20,164 @@ be written. Lines marked **(open)** still need a decision.
 - In memory: "similar to the way borrowed works, but instead we can transition ownership, so
   more like a real pointer."
 - "In theory, this should work not only on heap."
-- **"I would have `@` in the type, as `q@` returns the type of `@`… I want all this type stuff
-  to be consistent and elegant."**
-- **"My idea is that `@x` is a type, or gives one: if `int x = 3`, `@x` is the type `@int`. Then
-  I have to use `^` to own it and give [it to a] variable, like I do with the others."**
+- "I would have `@` in the type, as `q@` returns the type of `@`… I want all this type stuff
+  to be consistent and elegant."
+- "My idea is that `@x` is a type, or gives one: if `int x = 3`, `@x` is the type `@int`. Then
+  I have to use `^` … like I do with the others."
+- On `var q: ^int = h^;` as the move: "No, this wouldn't work. `@` is ownership, like as a
+  variable, so `var @q =`. That's how we would have to move the ownership to `q`."
 
-## 2. What an ownership is in memory
+## 2. The model in one example
 
-A heap owner `p: ^int` is a place on the stack that holds the address of a value on the
-heap. That stored address is the ownership. Nothing else has to exist in memory for it.
+```go
+var p: ^int = ^5;
 
+var h: @^int = @p;       // h is p's ownership. Nothing has moved, and p still owns the 5. (sketch)
+h^                       // follow it: p itself, a ^int
+h^^                      // the 5
+
+var c: ^int = h^;        // a copy, like every =. This is not a move. (Jack)
+var @q: ^int = h;        // the move: q owns the 5 now, and p is left null (Jack)
 ```
-before                              after  @q = @p;
 
-p: [ address ] ----> [ 5 ]          p: [ null ]
-q: [ null ]                         q: [ address ] ----> [ 5 ]
-```
+| Written | What it is |
+|---|---|
+| `@p` | `p`'s ownership. Its type is `@^int` |
+| `h^` | follow an ownership: the variable it is the ownership of |
+| `@q = h;` and `var @q: ^int = h;` | set `q`'s ownership: `q` takes the value over |
+| `@q = @p;` | the same, straight from `p` |
 
-`p` names the address as something to copy from, `p^` follows it, and `@p` names it as
-something to let go of.
-
-A borrower keeps pointing at the original. Letting go leaves nothing pointing back: the
-address is copied into the new owner and `null` is written in the old one. If an ownership
-were kept as a pointer to the original, to be taken from later, the line `f(@r)` would no
-longer say whether `r` is empty afterwards.
-
-## 3. `@` as a type that works like the other two (Jack)
-
-### 3.1 Three marks, written and used the same way (Jack)
+## 3. The three marks side by side
 
 | Type | Made with | Followed with | Following gives |
 |---|---|---|---|
 | `^T` | `^v` | `p^` | the value on the heap |
-| `&T` | `&x` | `b^` | the value it borrows |
-| `@T` | `@x` | `o^` | the value, as yours: the variable it is put in owns it |
+| `&T` | `&x` | `b^` | the variable it borrows |
+| `@T` | `@x` | `h^` | the variable it is the ownership of |
 
 Each mark goes in front in the type and in front of the value that makes it, so every
-expression looks like its type. Each one is followed with `^` behind.
+expression looks like its type: `^5` is a `^int`, `&count` is an `&int`, `@p` is an `@^int`.
+Each one is followed with `^` behind.
+
+It works on every variable, not only heap owners (Jack):
 
 ```go
 var x: int = 3;
 var o: @int = @x;        // @x is an @int
-var y: int = o^;         // follow it: y has the 3
-
-var p: ^int = ^5;
-var h: @^int = @p;       // @p is an @^int
-var q: ^int = h^;        // follow it: q owns the heap int now
+o^                       // x itself: 3
 ```
 
-### 3.2 Making one: `@x` (sketch)
+## 4. Moving: setting a variable's ownership (Jack)
 
-- `@x` has type `@T` when `x` is a `T`. It works on every variable.
-- **`x` lets go at that moment.** Every heap owner in `x` is left `null` on the line that
-  shows `@x`. Nothing is copied.
-- A plain value has nothing on the heap to let go of, so `@x` on an `int` holds a copy and
-  `x` keeps its value.
-- `@` in front of a value made on the spot wraps it, and nothing is emptied: `@^5` is an
-  `@^int`.
+"Every variable would be able to be called on to get its ownership and then change that, or
+get its ownership to set it to another variable."
 
-### 3.3 Following one: `o^` (sketch)
-
-- `o^` gives the `T`. Put in a variable, that variable owns it. Nothing is copied.
-- **Following hands the value over, so an ownership is followed once.** After `h^`, `h` is
-  empty, and following it again fails while running.
-- So there is no looking through an ownership. Land it in a variable first, then use that
-  variable. `var n: int = h^^;` reads the int once, and the heap value is then freed at the
-  end of the line, because nothing received it.
-
-### 3.4 Setting one ownership from another (Jack)
-
-"`p@` gives that ownership type. That's why we're able to set it to something else." Both
-sides have the same type, so this is an ordinary assignment:
+`@q` on the left is `q`'s ownership, and what is put there has to be an ownership too. Both
+sides have the type `@T`, so "the mark on both sides" is the ordinary rule that the types
+match:
 
 ```go
 @q = @p;                 // both are @^int: q owns p's heap int, and p is left null
                          // q's old value is freed
 
-@list^.next = @list^.next^.next;     // the third node moves up
+var @r: ^int = @q;       // a new variable that takes q's value over
+
+q = @p;                  // ERROR: q is a ^int and @p is an @^int
+@q = p;                  // ERROR: @q is an @^int and p is a ^int
 ```
 
-An ownership can't be copied, so a named ownership given to another holder is an error:
-`var h2: @^int = h;`. Passing one on is written `@h^` (follow it, and hand that over).
+What the move does depends on what the variable holds (sketch). It mirrors a copy:
 
-### 3.5 In a function's type (Jack)
+| The variable is | `=` (copy) | setting its ownership (move) |
+|---|---|---|
+| a heap owner, `^T` | a new heap value | the same heap value, and the source is left `null` |
+| a struct or array that holds heap owners | every heap value inside is copied | the plain parts are copied, and every owner inside is handed over and left `null` |
+| a plain value that owns nothing on the heap | a copy | the same as a copy: there is nothing to hand over |
+
+## 5. In a function's type (Jack)
 
 "That function should be explicit that it's receiving the owner type." The parameter is
 declared with exactly the type the function's type lists:
 
 ```go
 const keep: (@^int)void = (var owned: @^int){
-    var mine: ^int = owned^;     // follow it to own it
+    var @mine: ^int = owned;     // mine takes it over, and the caller's variable is left null
     ...
 };
 
-keep(@q);                // fine: q is left null
-keep(@^5);               // fine: a value made on the spot, handed over
+keep(@q);                // fine
 keep(q);                 // ERROR: q is a ^int, not an @^int: write @q
 ```
 
-A function that hands back something it took returns an ownership, and the caller follows
-it:
+## 6. Three levels: look, change, take (sketch)
 
-```go
-const takeNext: (&Node)@^Node = (var n: &Node){
-    return @n^.next;                 // n^.next is left null
-};
+An ownership sits beside a borrower as one more level of what a holder may do to someone
+else's variable:
 
-var second: ^Node = takeNext(&list^)^;
+| | read it | change it | take it away |
+|---|---|---|---|
+| `const b: &T` | yes | no | no |
+| `var b: &T` | yes | yes | no |
+| `h: @T` | yes | yes | yes |
+
+The mark at a call then shows what the function is allowed to do to your variable: nothing
+(`f(x)`, a copy), change it (`f(&x)`), or take it (`f(@x)`).
+
+DOCS.md lets a `var` borrower move a value out today (`takeNext` in 8.12). With an ownership
+type that right would belong to `@T`. Whether a borrower keeps it is open.
+
+## 7. In memory (sketch)
+
+"Similar to the way borrowed works, but instead we can transition ownership." (Jack)
+
+An ownership holds the **address of the variable**, the same as a borrower. For `h: @^int`
+that is a pointer to a pointer, and each `^` is one jump:
+
+```
+h: [ address of p ] ----> p: [ address ] ----> [ 5 ]
+
+after  @q = h;
+
+h: [ address of p ] ----> p: [ null ]
+                          q: [ address ] ----> [ 5 ]
 ```
 
-### 3.6 In memory (sketch)
+- The ownership always sits in a real variable: `p` until the move, `q` after it. An `@T`
+  value is only a pointer to a variable, with the right to pull its value out.
+- Copying an `@T` copies the address, like copying a borrower. Nothing has two owners.
 
-- **An `@^int` is the address the heap owner was holding:** the real pointer. `@p` moves
-  that address out of `p` and leaves `null` there. `h^` moves it into the variable that
-  follows it. The value on the heap never moves.
-- **An `@int` is the int itself.**
-- **It doesn't point back at the variable it came from.** If it did, like a borrower, it
-  could outlive that variable, and after `keep(@q)` nothing would say whether `q` is empty.
-  (Jack described it as "similar to the way borrowed works… more like a real pointer": it is
-  a pointer when the value is on the heap, but to the value, not to the variable.)
+## 8. What follows from that
 
-### 3.7 What it costs
+- **An ownership can't outlive its variable,** because it points at it. This is the rule
+  borrowers already have (DOCS 8.5). So `@local` can't be returned from a function. A
+  function still gives a heap value back by returning it (DOCS 8.12).
+- **`keep(@q)` gives `keep` the right to take `q`, not a promise that it will.** After the
+  call `q` is `null` only if `keep` moved it.
+- **After a move, an ownership still points at the old variable,** which is now `null`.
+  Following it twice (`h^^`) then fails while running.
+- **A `const` has no ownership to give:** `@limit` would allow changing or emptying it.
 
-- **One `^` that isn't a jump in memory.** An `@^int` and a `^int` both hold the same
-  address, so the first `^` in `h^` only changes the type.
-- **A move into a new plain variable takes two lines** (`var h: @^int = @p;` then
-  `var q: ^int = h^;`), because `(@p)^` would need brackets.
-- **An ownership is used once,** so a parameter of type `@^int` has to be landed in a
-  variable before its value is used.
+## 9. Considered and dropped
 
-## 4. A handle on someone else's ownership: `&^T`
-
-DOCS.md already has a way to hold on to another variable's owner and move from it later: a
-borrower of the owner itself, made with `&p`. It is the address of the owner's own place, a
-pointer to a pointer.
-
-```go
-const takeFrom: (&^int)@^int = (var o: &^int){
-    return @o^;                // the ownership of the caller's heap int; the caller's owner is left null
-};
-
-var p: ^int = ^5;
-var mine: ^int = takeFrom(&p)^;    // p is null, and mine owns the 5
-```
-
-| Written, for `o: &^int` | Gives |
-|---|---|
-| `o^` | the owner: compare it with `null`, copy it, or give it a new value |
-| `o^^` | the plain value |
-| `@o^` | the ownership of that value: the caller's owner is left `null` |
-
-## 5. Not only on the heap (sketch)
-
-`@` works on every variable, as the mirror of copying. A copy duplicates the heap values
-inside. Letting go hands them over:
-
-| `x` is | `x` (copy) | `@x` (let go) |
-|---|---|---|
-| a heap owner, `^T` | a new heap value | the same heap value; `x` is left `null` |
-| a struct or array that holds heap owners | every heap value inside is copied | the plain parts are copied, and every owner inside is handed over and left `null` |
-| a plain value that owns nothing on the heap | a copy | the same as a copy: there is nothing to let go of |
-| a borrower | another borrower | another borrower: it owns nothing |
-
-```go
-var a: Node = { value: int = 1; next: ^Node = makeNode(2); };
-var h: @Node = @a;      // a.next is left null
-var b: Node = h^;       // b.value is a copy of a.value, and b.next owns the node a.next owned
-```
-
-It has to work on every type for functions that take a type (DOCS 4.3): such a function
-can't know whether a `T` is on the heap.
-
-**The limit.** A value on the stack can't change place: it lives in its holder's own memory
-until that holder ends. So letting go of a plain value never avoids copying its bytes, and
-can't make it outlive its block. Only what is on the heap really changes owner.
-
-## 6. Considered and dropped
-
+- **Following an ownership as the move** (`var q: ^int = h^;`). Dropped (Jack): following
+  gives the variable, and `=` copies it. The move is setting a variable's ownership.
+- **The variable lets go as soon as `@x` is written,** with the ownership holding the value
+  on its way. Dropped with the line above: the ownership points at the variable, and nothing
+  moves until it is set into another variable.
 - **An `@T` used directly as a `T`, with nothing to follow.** Dropped (Jack): the three marks
-  should work the same way. An ownership is made in front and followed with `^`.
-- **The mark on the receiving name** (`var r@: ^int = q@;`). Dropped (Jack): `@q` has a type,
-  so the holder's type should say it.
+  work the same way.
 - **`^` or `&` on a declared name** (`var x^: int = 3;`). The type slot would say `int` for a
   `^int`, and it couldn't tell an owner from a borrower, since both are followed with `^`.
-- **An ownership that points back at the original variable,** taken from when it is followed
-  (3.6).
 
-## 7. Open
+## 10. Open
 
-- **When `x` lets go:** at `@x` (the sketch), or when the ownership is followed.
-- **Whether a second follow is caught when compiling.** There are no loops or `if`, so a
-  function body runs straight through and the compiler could see it.
-- **In front or behind:** `@x` reads like its type. `x@` would let a move into a plain
-  variable be one line, `var q: ^int = p@^;`, with no brackets.
-- **`@` on a value with no heap owners:** a copy (3.2), or an error.
+- **Whether `@p` on its own moves nothing** (sections 2 and 7). That is the reading here.
+- **Whether a function that is given an ownership has to use it.** If it did, `q` would
+  always be `null` after `keep(@q)`. A function body runs straight through, with no loops or
+  `if`, so the compiler could check it.
+- **Whether a `var` borrower can still move a value out** (section 6).
+- **The type slot in `var @q: ^int = h;`.** It says what `q` is. The `@` on the name says
+  that `q`'s ownership is what is being set.
 - **The symbol.** `@` is still a placeholder.
-- **What it changes in DOCS.md:** 8.9 (the mark in front, both sides typed `@T`, and the
-  follow), 8.12 (a parameter of type `@T`), and the list in 8.13.
+- **What it changes in DOCS.md:** 8.9 (the mark in front, an ownership held as a value),
+  8.12 (a parameter of type `@T`), and the moves in 8.13.
