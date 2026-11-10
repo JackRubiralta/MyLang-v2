@@ -286,6 +286,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | struct | `{T1, T2}` | `{bool, int}` | a struct with a bool field and an int field |
 | on the heap | `^T` | `^int` | an int on the heap, owned by this holder (section 8) |
 | borrowed | `&T` | `&int` | an int that another holder owns (section 8) |
+| ownership | `@T` | `@int` | the ownership of an int variable (8.9) |
 
 ### 3.4 Modifiers stack in any combination
 
@@ -304,6 +305,7 @@ Read every type from left to right, one modifier at a time:
 ^[3]int                // on the heap → an array of 3 ints
 [2]&int                // array of 2 → borrowed ints
 (&int)void             // function taking a borrowed int → returning nothing
+(@^int)void            // function taking the ownership of a heap int → returning nothing
 (int)^[3]int           // function taking int → returning an array of 3 ints on the heap
 ```
 
@@ -350,6 +352,7 @@ Type      = BasicType
           | "{" TypeList "}"                  (struct: its field types, section 9)
           | "^" Type                          (a value on the heap, section 8)
           | "&" Type                          (a borrowed value, section 8)
+          | "@" Type                          (the ownership of a variable, section 8)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "void"                     (void = returns nothing)
 TypeList  = Type { "," Type }
@@ -888,10 +891,12 @@ start                  // still 5: countDown changed its own copy
 | `var x: int` | a copy it can change |
 | `const x: &int` | the caller's value, borrowed to read (8.6) |
 | `var x: &int` | the caller's value, borrowed to change (8.4) |
-| `var x: ^int` | a heap value of its own: a copy, or the caller's own value moved in with `@` (8.12) |
+| `var x: ^int` | a heap value of its own: a copy of the caller's (8.12) |
+| `var x: @^int` | the ownership of the caller's variable: it can read it, change it and take its value over (8.9) |
 
-`const` and `var` on a parameter don't appear in the function's type. Borrowing and the heap
-do, because they are part of the parameter's type: `(&int)void`, `(^int)void`.
+`const` and `var` on a parameter don't appear in the function's type. Borrowing, the heap and
+ownership do, because they are part of the parameter's type: `(&int)void`, `(^int)void`,
+`(@^int)void`.
 
 ### 7.5 Swapping a function in a `var`
 
@@ -986,19 +991,24 @@ are always marked, so no mark can only mean "mine, right here".
 A plain value never changes owner. It lives inside its holder, so it can be copied but
 never passed on. Only a value on the heap can go from one owner to another (8.9).
 
+A fourth mark, `@T`, is not a fourth case. It is the **ownership** of a variable: a pointer
+to the variable that is allowed to take its value (8.9).
+
 ### 8.2 The symbols
 
 | Written | Where | Meaning |
 |---|---|---|
 | `^T` | in a type | a `T` on the heap, owned by this holder |
 | `&T` | in a type | a `T` that another holder owns |
+| `@T` | in a type | the ownership of a `T` variable (8.9) |
 | `^v` | in front of a value | a new value on the heap, holding a copy of `v` |
 | `&x` | in front of a variable | a borrower of `x` |
-| `p^` | behind a heap owner or a borrower | the value itself |
-| `p@` | behind a heap owner | its ownership, to move it (8.9) |
+| `@x` | in front of a variable | the ownership of `x` |
+| `p^` | behind a heap owner, a borrower or an ownership | what it leads to |
 
-What **makes** a marked value goes in front, like the mark in its type: `^5` is a `^int` and
-`&count` is an `&int`. What **uses** one goes behind, like `a[0]` and `f(1)`.
+What **makes** a marked value goes in front, like the mark in its type: `^5` is a `^int`,
+`&count` is an `&int`, and `@p` is an `@^int`. What **uses** one goes behind, like `a[0]` and
+`f(1)`.
 
 What is behind a name is read first, from left to right. What is in front is applied after
 it. So nothing ever needs brackets:
@@ -1007,6 +1017,7 @@ it. So nothing ever needs brackets:
 &big^[0]               // follow big, take element 0, then borrow it
 ^p^                    // follow p, then make a new heap value from what's there
 list^.next^.value      // follow, field, follow, field
+@list^.next            // follow, field, then the ownership of that field
 ```
 
 The marks in a type and the `^`s in its use come in the same order (3.5):
@@ -1018,6 +1029,7 @@ The marks in a type and the `^`s in its use come in the same order (3.5):
 | `[2]&int` | two borrowers | `a[1]^` |
 | `&[2]int` | one borrower of a whole array | `a^[1]` |
 | `&^int` | a borrower of a heap owner | `a^^` |
+| `@^int` | the ownership of a heap owner | `a^^` |
 
 ### 8.3 A value on the heap: `^T`
 
@@ -1190,6 +1202,8 @@ A borrower of a heap value is measured against the variable that owns it:
 var view: &[1000]int = &big^;      // fine: view ends no later than big
 ```
 
+An ownership (8.9) holds a variable's address too, so the same rule applies to it.
+
 ### 8.6 `const`, `var` and borrowing
 
 Whether a borrower can change the value it borrows depends on how the borrower is declared:
@@ -1253,6 +1267,7 @@ never changed.
 | `T` | its own copy |
 | `^T` | its own copy, in a new place on the heap |
 | `&T` | a borrower of the same value: a borrower owns nothing, so there is nothing to copy |
+| `@T` | an ownership of the same variable: it holds an address, like a borrower, and nothing moves |
 
 ```go
 var a: int = 3;
@@ -1293,30 +1308,130 @@ var made: ^[1000]int = makeBig(1);     // the same for what a function gives bac
 
 To take over a value that another owner still holds, without copying it, move it (8.9).
 
-### 8.9 Moving ownership: `@`
+### 8.9 Ownership as a type: `@T`, and moving
 
-A move passes a heap value from one owner to another. Nothing is copied: the value stays
-where it is on the heap, and only its owner changes. `@` goes behind the variable on **both
-sides**, the same way `arr[1] = 3` says on the left which part is being set.
+Every variable has an **ownership**: the right to its value. `@` in front of a variable
+gives that ownership as a value of its own, with its own type.
+
+| Written | What it is |
+|---|---|
+| `@p` | `p`'s ownership. When `p` is a `^int`, its type is `@^int` |
+| `h^` | follow an ownership: the variable it is the ownership of |
+| `@q = h;` | set `q`'s ownership: `q` takes the value over, and the old variable lets go |
+| `var @q: ^int = h;` | the same, for a new variable |
 
 ```go
 var p: ^int = ^5;
-var q: ^int = ^1;
 
-q@ = p@;                   // q takes over p's heap int: nothing is copied
-                           // q's old value, the 1, is freed
-                           // p is left null (8.10)
-q^                         // 5
+var h: @^int = @p;         // h is p's ownership. Nothing has moved: p still owns the 5
+h^                         // p itself, a ^int
+h^^                        // 5
+
+var c: ^int = h^;          // a copy, like every = (8.8). This is not a move
+var @q: ^int = h;          // the move: q owns the 5 now, and p is left null (8.10)
 ```
 
-Where the left side isn't an existing variable, only the right side carries the mark:
+`@` is the third mark, and it is written and used like the other two:
+
+| Type | Made with | Followed with | Following gives |
+|---|---|---|---|
+| `^T` | `^v` | `p^` | the value on the heap |
+| `&T` | `&x` | `b^` | the variable it borrows |
+| `@T` | `@x` | `h^` | the variable it is the ownership of |
+
+It works on every variable, and on a field or an element, not only on heap owners:
 
 ```go
-const keep: (^int)void = (var owned: ^int){ ... };
+var x: int = 3;
+var o: @int = @x;          // @x is an @int
+o^                         // x itself: 3
 
-var r: ^int = q@;          // a declaration: r takes q's value over, and q is left null
-keep(r@);                  // a call: the parameter takes it over, and r is left null (8.12)
+@list^.next                // the ownership of a field: an @^Node (8.13)
 ```
+
+**Moving.** A move sets one variable's ownership from another's. Nothing is copied: the
+value stays where it is on the heap, and only its owner changes. Both sides are ownerships,
+so both have the same type:
+
+```go
+@q = @p;                   // both are @^int: q takes over p's heap int, and p is left null
+                           // the value q owned before is freed
+
+var @r: ^int = @q;         // a new variable that takes q's value over
+
+q = @p;                    // ERROR: q is a ^int and @p is an @^int
+@q = p;                    // ERROR: @q is an @^int and p is a ^int
+```
+
+In `var @r: ^int = @q;` the type says what `r` is, a `^int`. The `@` on the name says that
+`r`'s ownership is what is being set.
+
+What a move does depends on what the variable holds. It mirrors a copy (8.8):
+
+| The variable is | `=` copies | A move |
+|---|---|---|
+| a heap owner, `^T` | a new heap value | the same heap value: the old variable is left `null` |
+| a struct or array that holds heap owners | every heap value inside is copied | the plain parts are copied, and every owner inside is handed over and left `null` |
+| a plain value that owns nothing on the heap | a copy | the same as a copy: there is nothing to hand over |
+
+**Look, change, take.** An ownership sits beside a borrower as one more level of what a
+holder may do to someone else's variable:
+
+| | read it | change it | take its value away |
+|---|---|---|---|
+| `const b: &T` | yes | no | no |
+| `var b: &T` | yes | yes | no |
+| `h: @T` | yes | yes | yes |
+
+So the mark at a call shows what a function may do to your variable: `f(x)` nothing, because
+it gets a copy, `f(&x)` read or change it, and `f(@x)` take its value (8.12).
+
+The rules for an ownership and a move:
+
+- **Nothing moves when `@p` is written.** `p` lets go only when its ownership is set into
+  another variable. Until then `p` still owns its value.
+- **Both sides of a move are ownerships.** A plain `=` never changes its right-hand side.
+- **The old variable is left `null`,** so the value still has exactly one owner.
+- **The new owner's old value is freed,** as with any owner that is given something new. The
+  value is taken out of the old variable before that happens (8.13 uses this).
+- **An ownership can't outlive its variable.** It holds the variable's address, so the rule
+  for borrowers applies (8.5):
+
+  ```go
+  const bad: ()@^int = (){
+      var local: ^int = ^5;
+      return @local;         // ERROR: local ends here, but its ownership would still be there
+  };
+  ```
+
+- **Only an owner can give an ownership.** A borrower can read and change, but not take:
+
+  ```go
+  var b: &^int = &p;
+  var @t: ^int = @b^;        // ERROR: b only borrows p
+  ```
+
+- **A `const` has no ownership to give,** because an ownership allows changing it and
+  emptying it:
+
+  ```go
+  const fixed: ^int = ^5;
+  var @t: ^int = @fixed;     // ERROR: fixed is const
+  ```
+
+- **Copying an ownership copies the address,** like copying a borrower. `var h2: @^int = h;`
+  is a second ownership of the same variable. The value still has one owner: the variable.
+- **After a move, an ownership still points at the old variable,** which is now `null`.
+  `h^ == null` is `true` after `var @q: ^int = h;`.
+- **The new owner decides how long the value lives from then on:**
+
+  ```go
+  var data: ^[1000]int = ^[...];
+  {
+      var @inner: ^[1000]int = @data;
+  }                          // inner ends here, so the array is freed
+  data == null               // true
+  ```
 
 A heap owner `p` can be used in four ways, and each is written differently:
 
@@ -1325,41 +1440,10 @@ A heap owner `p` can be used in four ways, and each is written differently:
 | `p^` | the value | unchanged |
 | `&p^` | a borrower of the value | unchanged |
 | `p` | a copy of the value, in a new place on the heap | unchanged |
-| `p@` | the value itself, for a new owner | `null` |
+| `@p` | `p`'s ownership | unchanged, until that ownership is set into another variable: then `null` |
 
-The rules for a move:
-
-- **Every line that empties an owner shows `@` on that owner.** A plain `=` never changes
-  its right-hand side.
-- **Both sides of an assignment carry the mark.** One side alone is an error:
-
-  ```go
-  q@ = p;                  // ERROR: the mark goes on both sides: q@ = p@
-  q = p@;                  // ERROR: the mark goes on both sides: q@ = p@
-  ```
-
-- **The old owner is left `null`,** so the value still has exactly one owner.
-- **The new owner's old value is freed,** as with any owner that is given something new.
-- **The right side is taken before the left side's old value is freed** (8.13 uses this).
-- **A `const` owner can't be moved from,** because the move would change it to `null`:
-
-  ```go
-  const fixed: ^int = ^5;
-  var t: ^int = fixed@;    // ERROR: fixed is const, and moving would change it
-  ```
-
-- **The new owner decides how long the value lives from then on:**
-
-  ```go
-  var data: ^[1000]int = ^[...];
-  {
-      var inner: ^[1000]int = data@;
-  }                        // inner ends here, so the array is freed
-  data == null             // true
-  ```
-
-A local that a function returns needs no mark (8.12): it ends there anyway, so no owner is
-left behind to be emptied.
+A local that a function returns needs no ownership (8.12): it ends there anyway, so nothing
+is left behind to be emptied.
 
 ### 8.10 `null`
 
@@ -1369,13 +1453,13 @@ A heap owner that owns nothing is `null`.
 
 | How | What happens to the value it owned |
 |---|---|
-| its value is moved away with `@` | it lives on with the new owner |
+| its value is moved to another variable (8.9) | it lives on with the new owner |
 | it is set to `null` | it is freed |
 | it is declared with `null` | there was no value |
 
 ```go
 var p: ^int = ^5;
-var q: ^int = p@;          // moved away: p is null, and q owns the 5
+var @q: ^int = @p;         // moved away: p is null, and q owns the 5
 
 var r: ^int = ^7;
 r = null;                  // set to null: the 7 is freed
@@ -1387,7 +1471,7 @@ var later: ^int = null;    // declared null: it owns nothing yet
 
 ```go
 later = ^8;                // later owns a new heap int
-p@ = later@;               // p takes it over, and now later is null
+@p = @later;               // p takes it over, and now later is null
 ```
 
 **Testing for it:** `p == null` and `p != null` give a `bool`. Comparing doesn't copy
@@ -1428,7 +1512,7 @@ A heap value is freed at the moment it has no owner left:
 |---|---|
 | its owner ends | the `}` of the block the owner was declared in, or the end of the call for a parameter |
 | its owner is given a new value with `=` | `q = p;` frees what `q` owned before |
-| its owner takes another value over with `@` | `q@ = p@;` frees what `q` owned before |
+| its owner takes another value over in a move | `@q = @p;` frees what `q` owned before |
 | its owner is set to `null` | `r = null;` |
 | it has no name and nothing receives it | `makeBig(1);` on its own: freed at the end of the statement (2.6) |
 | the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
@@ -1439,23 +1523,30 @@ borrower.
 ### 8.12 Functions and ownership
 
 A parameter is declared like any name (7.4), so the rules above apply to it unchanged. The
-function's type shows `^` and `&`, and the call shows `&` and `@`:
+function's type shows `^`, `&` and `@`, and the call shows `&` and `@`:
 
 ```go
-const use: (^[1000]int)void = (var a: ^[1000]int){ ... };      // a owns what it is given
-const look: (&[1000]int)void = (const a: &[1000]int){ ... };   // a borrows, to read
+const use: (^[1000]int)void = (var a: ^[1000]int){ ... };       // a gets its own copy
+const look: (&[1000]int)void = (const a: &[1000]int){ ... };    // a borrows, to read
+const take: (@^[1000]int)void = (var a: @^[1000]int){           // a is the caller's ownership
+    var @mine: ^[1000]int = a;                                  // mine takes the array over
+    ...
+};
 
 use(big);              // use gets its own copy on the heap, and big is unchanged
-use(big@);             // use takes the array over, and big is left null
-look(&big^);           // look borrows it: nothing is copied and nothing changes owner
+look(&big^);           // look borrows the array: nothing is copied and nothing changes owner
+take(@big);            // take is given big's ownership, and moves the array out of big
 ```
 
 | Parameter type | The call | What the function gets |
 |---|---|---|
 | `int` | `f(n)` | its own copy |
 | `^[1000]int` | `use(big)` | its own copy, in a new place on the heap |
-| `^[1000]int` | `use(big@)` | the caller's array itself. The caller's owner is left `null`, and the array is freed when the call ends unless the function passes it on |
-| `&[1000]int` | `look(&big^)` | the caller's array, borrowed |
+| `&[1000]int` | `look(&big^)` | the caller's array, borrowed: it can read it, and change it when the parameter is a `var` |
+| `@^[1000]int` | `take(@big)` | the ownership of the caller's variable: it can read it, change it, and take the array over |
+
+An ownership gives the function the right to take, not the duty. After `take(@big)`, `big`
+is `null` only if the function moved its value, and `big == null` tells which.
 
 A function gives a heap value back by returning it. Its type ends in a `^`, so the caller
 knows it will own what comes back:
@@ -1475,16 +1566,19 @@ makeBig(1);                            // nothing receives it, so it is freed ri
 This is how a value outlives the scope that made it: it goes on the heap, and its ownership
 passes to something that lives longer.
 
-Returning an owner that **lives on** after the call is a move like any other, so it's
-written with `@`:
+A function can't return the ownership of one of its own locals, because the local ends with
+the call (8.9). To hand back something it took from the caller, it takes the value into a
+local and returns the local:
 
 ```go
-const takeNext: (&Node)^Node = (var n: &Node){
-    return n^.next@;                   // n^.next is left null: the caller owns that node now
+const takeNext: (@Node)^Node = (var n: @Node){
+    var @out: ^Node = @n^.next;        // out takes the next node, and n^.next is left null
+    return out;                        // out ends here, so the caller owns that node
 };
+
+var second: ^Node = takeNext(@list^);
 ```
 
-Without the `@`, `return n^.next;` gives the caller a copy and leaves the list as it was.
 (`Node` is the list node from 8.13.)
 
 ### 8.13 A linked list, step by step
@@ -1517,8 +1611,10 @@ When `list` ends, the first node is freed, and every node behind it with it.
 **Removing a node.** The node holding 3 moves up into the place of the node holding 2:
 
 ```go
-list^.next@ = list^.next^.next@;
+@list^.next = @list^.next^.next;
 ```
+
+Both sides are the ownership of a `next` field, so both are `@^Node`.
 
 1. The right side is taken first: the node holding 3 leaves the second node's `next`,
    which is left `null`.
@@ -1541,8 +1637,8 @@ list^.next = makeNode(9);              // the old second node, and all the nodes
 
 ```go
 var first: ^Node = makeNode(0);
-first^.next@ = list@;                  // first takes over the whole old list, and list is null
-list@ = first@;                        // list takes over the new first node, and first is null
+@first^.next = @list;                  // first's next takes over the whole old list, and list is null
+@list = @first;                        // list takes over the new first node, and first is null
 ```
 
 **Copying the list.** `=` makes a complete copy (8.8):
@@ -1610,8 +1706,10 @@ that another node's `prev` still borrows is the programmer's job to get right (8
 | `c^ = 11;` where `c` is a `const` borrower | a `const` borrower can only read |
 | `look = &limit;` where `look` is `const` | a `const` borrower always borrows the same thing |
 | `table^[0] = 9;` where `table` is a `const` owner | a `const` owner's value can't change |
-| `q@ = p;` and `q = p@;` | a move carries `@` on both sides |
-| `var t: ^int = fixed@;` where `fixed` is `const` | moving would change `fixed` to `null` |
+| `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
+| `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
+| `var @t: ^int = @b^;` where `b` is a borrower | a borrower can read and change, but not take |
+| `return @local;` | the ownership would outlive its variable |
 
 **Checked while the program runs:**
 
@@ -1638,8 +1736,9 @@ b^                         // b still leads to where the 5 was
 
 Not settled yet:
 
-- **The symbol for the move.** `@` stands in for it.
-- **`@` on a value that isn't a heap owner,** such as a struct that holds heap owners.
+- **The symbol for an ownership.** `@` stands in for it.
+- **Whether a function that is given an ownership has to use it.** If it did, `big` would
+  always be `null` after `take(@big)`.
 - **Read-only borrowing in a function's type.** `(&int)void` doesn't say whether the
   function changes the value, so passing a borrower of a `const` to a function held in a
   variable can't be checked.
@@ -1649,15 +1748,16 @@ Not settled yet:
 
 ### 8.17 Underneath: addresses
 
-`^T` and `&T` are both pointers. One owns what it points at, and the other doesn't:
+`^T`, `&T` and `@T` are all pointers. They differ in what they may do with what they point
+at:
 
-| | `^T` | `&T` |
-|---|---|---|
-| holds | an address | an address |
-| can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap |
-| frees what it points at | yes | never |
-| made with | `^v`, or by taking a value over with `@` | `&x` |
-| followed with | `p^` | `p^` |
+| | `^T` | `&T` | `@T` |
+|---|---|---|---|
+| holds | an address | an address | an address |
+| can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap | a variable, a field or an element |
+| frees what it points at | yes | never | never, but the value can be taken out through it |
+| made with | `^v` | `&x` | `@x` |
+| followed with | `p^` | `p^` | `p^` |
 
 An owning pointer can only point at the heap, because a value on the stack already has an
 owner: the holder it lives in.
@@ -1668,8 +1768,10 @@ owner: the holder it lives in.
   map entry, a field, or a value on the heap.
 - **`null`** is "no address".
 - **`=` between two heap owners** makes room on the heap and copies the value into it.
-- **A move** copies the address into the new owner and sets the old owner to `null`. The
-  value itself doesn't move.
+- **An `@T` holder** holds the address of the variable it is the ownership of. For
+  `h: @^int` that is a pointer to a pointer, and each `^` in `h^^` is one jump.
+- **A move** copies the heap address out of the old owner into the new one and sets the old
+  owner to `null`. The value itself doesn't move.
 - **A link to an unsized array** (`^[]int`, `&[]int`) holds two things: where the elements
   start, and how many there are. That is how `v^.length` works.
 
@@ -1976,10 +2078,10 @@ var corner: Point = makePoint(table[0][1], table[1][0]);   // x is 12, y is 6
 var c: &Point = &corner;
 c^.x = 0;                           // corner.x is now 0
 
-// a value on the heap: copied with =, moved with @
+// a value on the heap: copied with =, moved by setting an ownership
 var big: ^Row = ^[1, 2];
 var copy: ^Row = big;               // copy gets its own array on the heap
-var mine: ^Row = big@;              // mine takes big's array over, and big is left null
+var @mine: ^Row = @big;             // mine takes big's array over, and big is left null
 ```
 
 ---
@@ -2014,6 +2116,7 @@ var mine: ^Row = big@;              // mine takes big's array over, and big is l
 | `{T1, T2}` | struct with fields of types `T1` and `T2` |
 | `^T` | a `T` on the heap, owned by this holder |
 | `&T` | a `T` borrowed from another holder |
+| `@T` | the ownership of a `T` variable |
 
 ### Operators
 
@@ -2028,9 +2131,11 @@ var mine: ^Row = big@;              // mine takes big's array over, and big is l
 |---|---|
 | `^v` | puts a copy of `v` on the heap: a `^T` |
 | `&x` | borrows `x`: an `&T` |
-| `p^` | the value behind a heap owner or a borrower |
+| `@x` | the ownership of `x`: an `@T` |
+| `p^` | what a heap owner, a borrower or an ownership leads to |
 | `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
-| `n@ = p@;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
+| `@n = @p;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
+| `var @n: ^int = @p;` | the same, for a new variable |
 | `p = null;` | frees what `p` owns |
 | `p == null` | `true` when `p` owns nothing |
 
@@ -2065,7 +2170,8 @@ passed.
 | `var x: int = p^;` | `x` is a plain copy of the heap value |
 | `var b: &int = &a;` | `b` borrows `a`: no copy |
 | `f(&a)` with an `&int` parameter | the parameter borrows the caller's `a`: no copy |
-| `var r: ^int = p@;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
+| `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
+| `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 
 ### What never changes
 
@@ -2102,8 +2208,8 @@ passed.
 | `var b: &int = &3;` | `3` has no owner to borrow from |
 | `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
-| `q@ = p;` and `q = p@;` | a move carries `@` on both sides |
-| `var t: ^int = fixed@;` where `fixed` is `const` | moving would change `fixed` to `null` |
+| `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
+| `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |

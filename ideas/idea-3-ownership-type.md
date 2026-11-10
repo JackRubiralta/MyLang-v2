@@ -1,7 +1,8 @@
 # Idea 3: an ownership type
 
-**Status:** an idea being explored. It builds on section 8 of `DOCS.md`, and nothing here is
-in `DOCS.md`.
+**Status:** taken into `DOCS.md` on 10 Nov 2026 (Jack: "I think this is good, update
+DOCS.md"). Section 8.9 there is the rule now. This file keeps how the idea was reached and
+what was dropped on the way.
 
 Lines marked **(Jack)** are things Jack said. Lines marked **(sketch)** are one way it could
 be written. Lines marked **(open)** still need a decision.
