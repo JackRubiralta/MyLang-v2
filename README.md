@@ -321,72 +321,57 @@ The last line is two calls in a row: `first(bool)` makes the function for bool a
 `first(int)` gives back a function made for `int`, so what each call works with is
 written right there in the code.
 
-### 4.4 Calling a type
+### 4.4 Converting: `convert`
 
-A type is a value, and calling it does two things.
-
-**Calling a built-in type with another type gives back a conversion function.** `int(float)`
-is the function that turns a `float` into an `int`, so its type is `(float)int`. Calling
-that function with a value does the conversion:
+A type is a value, not a function, so it is never called: `int(3.0)` is an error.
+Converting is done by `convert`, a built-in function that is separate from the types. It
+takes the type you convert **from** and the type you convert **to**, and gives back the
+function that does the conversion:
 
 ```go
-int(float)(3.0)                        // 3
-float(int)(3)                          // 3.0
-var whole: int = int(float)(2.0);
+convert(float, int)(3.0)               // 3
+convert(int, float)(3)                 // 3.0
+var whole: int = convert(float, int)(2.0);
 
-const toInt: (float)int = int(float);  // the conversion is a function, so it can be named
+const toInt: (float)int = convert(float, int);  // an ordinary function value, so it can be named
 toInt(2.0)                             // 2
-
-int(any)(x)                            // x is an any: gives back the int inside it
 ```
 
-A built-in type is never called with a value directly: `int(3.0)` is an error. The type
-you convert **from** is always written.
+`convert(float, int)` has the type `(float)int`. Built-ins are first-class values like
+everything else.
 
-Converting from an `any` (4.5) is checked when that line runs, because the type inside is
-only known then.
-
-**`type(value)` gives back the type of any value.** The result is a type, so it can be
-stored and used like any other type:
-
-```go
-type(3)                // int
-type(add)              // (int, int)int
-type(scores)           // []int
-
-const Num: type = type(3);   // Num is int
-var x: Num = 5;        // x is an int
-```
-
-`type(x)` gives the type `x` was declared with, which never changes (4.2).
+There is no `type(3)`: `type` is a type, so it isn't called either. A value's type is the
+one it was declared with, and the type inside an `any` is read with `x.T` (4.5).
 
 ### 4.5 `any`: a value of any type
 
 `any` is a built-in type for a value whose type is only known while the program runs.
-Nothing takes a value of any type, so `any` is called with a type first, like `int` (4.4):
-`any(int)` gives back the function that wraps an `int`, of type `(int)any`.
+Nothing takes a value of any type, and `any` is a type, so it isn't called. Two built-in
+functions move a value into an `any` and back out. Each takes a type first: `wrap(int)`
+gives back the function that wraps an `int`, of type `(int)any`, and `unwrap(int)` gives
+back the function that takes it out again, of type `(any)int`.
 
 ```go
-var x: any = any(int)(3);        // holds the type int and the value 3
-var y: any = any(bool)(true);    // holds the type bool and the value true
+var x: any = wrap(int)(3);       // holds the type int and the value 3
+var y: any = wrap(bool)(true);   // holds the type bool and the value true
 
 x.T                              // int: the type inside
-int(any)(x)                      // 3: checked while running that x holds an int
-bool(any)(x)                     // fails while running: x holds an int
+unwrap(int)(x)                   // 3: checked while running that x holds an int
+unwrap(bool)(x)                  // fails while running: x holds an int
 ```
 
 Underneath, an `any` is a struct of two things: the value's type and the value, the same
 kind of explanation as a fat pointer (10.5). Pictured as a struct:
 
 ```go
-var x: any = any(int)(3);
+var x: any = wrap(int)(3);
 // pictured as a struct: the type, then a value of that type
 var x: {type, int} = {
     const T: type = int;          // x.T
     const value: int = 3;
 };
 
-var y: any = any(bool)(true);
+var y: any = wrap(bool)(true);
 // a different shape inside, because the value is a bool
 var y: {type, bool} = {
     const T: type = bool;
@@ -407,13 +392,12 @@ const describe: (any)null = (const x: any){
     ...
 };
 
-describe(any(int)(3));
-describe(any(bool)(true));
-describe(3);               // ERROR: 3 is an int, not an any; write any(int)(3)
+describe(wrap(int)(3));
+describe(wrap(bool)(true));
+describe(3);               // ERROR: describe takes an any; write wrap(int)(3)
 ```
 
-`type(x)` gives `any`, because that's the type `x` was declared with (4.4); the type
-inside is `x.T`.
+`x` itself has the type `any`; the type inside is `x.T`.
 
 #### What `any` is for
 
@@ -427,17 +411,17 @@ inside is `x.T`.
 #### The rule that keeps it explicit
 
 A value whose type is only known while the program runs can't be used where a fixed type
-is expected until you write the conversion yourself:
+is expected until you unwrap it yourself:
 
 ```go
 const double: (int)int = (const n: int){ return n * 2; };
 
 double(x);             // ERROR: x is an any
-double(int(any)(x));   // fine: the conversion is written out, so you can see where it could fail
+double(unwrap(int)(x));   // fine: the unwrap is written out, so you can see where it could fail
 ```
 
 So every place where something could go wrong while running is visible in the code: each
-wrap is `any(int)(…)` and each unwrap is `int(any)(…)`, `bool(any)(…)` and so on. Everything that doesn't
+wrap is `wrap(int)(…)` and each unwrap is `unwrap(int)(…)`, `unwrap(bool)(…)` and so on. Everything that doesn't
 touch an `any` is still checked before the program runs.
 
 #### Underneath, on the stack
@@ -453,9 +437,9 @@ Both let one function work with many types (4.3):
 
 | | generic: takes a type | `any` |
 |---|---|---|
-| call | you pass the type: `first(int)` | the type travels with the value: `describe(any(int)(3))` |
+| call | you pass the type: `first(int)` | the type travels with the value: `describe(wrap(int)(3))` |
 | type known | before the program runs, when you write the type | only while it runs |
-| mistakes show up | before the program runs | when a conversion like `int(any)(x)` runs |
+| mistakes show up | before the program runs | when an unwrap like `unwrap(int)(x)` runs |
 | best for | the same code for many types | values whose type you only learn while running |
 
 ### 4.6 Why
@@ -465,17 +449,22 @@ Both let one function work with many types (4.3):
 - **Why types are named with `const`:** a type is a value of type `type`, so it needs no
   kind of name of its own, and a `const` can never change, so types are always known before
   the program runs.
-- **Why converting is calling a type:** a type is a value, so it can be called like a
-  function, and the code shows exactly where a value changes type: `int(float)(3.0)`.
-- **Why the type you convert from is written:** `int(3.0)` would need `int` to accept a
-  value of any type. `int(float)` picks one conversion, an ordinary function of type
-  `(float)int`, so the code says both types and nothing is chosen for you.
-- **Why `any(int)(3)`:** the same reason. No function receives a value of any type, so
-  `any` takes the type and gives back the function for it.
+- **Why a type is never called:** `int` is a type, a value of type `type`, and not a
+  function. Everything is a first-class value, built-ins included, so the function that
+  converts is its own value, separate from the type.
+- **Why `convert` takes both types:** no function accepts a value of any type.
+  `convert(float, int)` picks one conversion, an ordinary function of type `(float)int`, so
+  the code says both types and nothing is chosen for you.
+- **Why `wrap(int)(3)` and `unwrap(int)(x)`:** the same reason. `wrap` takes the type and
+  gives back the function for it, and so does `unwrap`.
 - **Why wrapping is written out:** a value never turns into an `any` by itself, so the code
-  shows every place a value is wrapped (`any(int)(3)`) or unwrapped (`int(any)(x)`).
-- **Why `type(…)`:** types are values, so the type of a value can be handed back and used
-  like any other value.
+  shows every place a value is wrapped (`wrap(int)(3)`) or unwrapped (`unwrap(int)(x)`).
+- **Why there's no `type(3)`:** `type` is a type, so it can't be called, and a function
+  that accepted any value couldn't exist anyway. A value's type is in its declaration, and
+  an `any` has `x.T`.
+- **Other ways that were considered:** calling the type itself, first as `int(3.0)` and
+  then as `int(float)(3.0)`, `any(int)(3)` and `type(3)`. Dropped because a type is not a
+  function.
 - **Why generics are just functions:** types are values, and functions already take
   values, so nothing new is needed. It follows from rule 1.
 - **Why there's no `var` type:** if a type could change while the program runs, values
@@ -1467,8 +1456,8 @@ These are left out on purpose until they're decided:
 - **Basic types:** `int8`, `uint8`, `int` and `char` are decided (10 Nov). The rest of the
   list, the sizes, and how a plain number like `3` or `3.0` gets its type are written out in
   [DOCS.md](DOCS.md) section 3 as a proposal, waiting for a yes.
-- **Conversions:** which types can be converted to which, how `int(float)(3.7)` rounds, and
-  what happens when a value doesn't fit (`int8(int)(300)`).
+- **Conversions:** which types can be converted to which, how `convert(float, int)(3.7)` rounds, and
+  what happens when a value doesn't fit (`convert(int, int8)(300)`).
 - **Generic function types:** in `(type)([]T)T` the return type uses `T`, the type passed
   in, without naming it first. How a function's type refers to its own parameter ties in
   with names inside types (above).
