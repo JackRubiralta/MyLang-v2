@@ -274,12 +274,11 @@ const add: Op = (const x: int, const y: int){ return x + y; };
 const ops: [2]Op = [add, add];       // an array of Op
 ```
 
-`type` is itself a type, and a basic type can be named too. The new name is the same type
-under another name:
+`type` is itself a type, so it goes wherever a type goes, including inside other types:
 
 ```go
-const bitboard: type = uint;
-var board: bitboard = 0;
+const wholeTypes: [2]type = [int8, int];     // an array of types
+const bitboard: type = uint;                 // a basic type under another name
 ```
 
 Struct types are the one exception: they have their own kind of name, `struct` (11.1).

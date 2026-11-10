@@ -324,39 +324,47 @@ returns nothing.
 
 ## 4. Types are values
 
-### 4.1 Naming a type
+### 4.1 `type` is a type
 
-A type is a value, and its type is `type`. So a type is named with `const`, like any other
-value:
+A type is a value, and the type of that value is `type`. `type` is a type like any other,
+so a type can be named, stored and passed around like every other value.
+
+**Naming a type** uses `const`:
 
 ```go
 const Pair: type = [2]int;
 const Table: type = {int}[2]int;
 const Op: type = (int, int)int;
+const bitboard: type = uint;         // a basic type can be named too
 
 var p: Pair = [1, 2];
 const add: Op = (const x: int, const y: int){ return x + y; };
 const ops: [2]Op = [add, add];       // an array of Op
-```
-
-A named type can be used anywhere a type can, including inside other types (`[2]Op`).
-
-A basic type can be named the same way. The new name is the same type under another name:
-
-```go
-const bitboard: type = uint;
-
 var board: bitboard = 0;
-var plain: uint = board;       // fine: bitboard and uint are the same type
 ```
 
-`type` is itself a type, so it goes wherever a type goes: after the `:` of a declaration,
-in a function's parameter list (4.3) and inside other types:
+A named type can be used anywhere a type can, including inside other types (`[2]Op`). A
+name for a type is the same type under another name, so a `bitboard` can be used wherever
+a `uint` can:
 
 ```go
-const wholeTypes: [2]type = [int8, int];     // an array of types
-type(int)                                    // type: the type of a type
+var plain: uint = board;             // fine: bitboard and uint are the same type
 ```
+
+**`type` goes wherever a type goes,** including inside other types:
+
+```go
+const wholeTypes: [2]type = [int8, int];          // an array of types
+const byCode: {int}type = {1: int, 2: bool};      // a map whose values are types
+
+wholeTypes[1]                // int
+byCode[2]                    // bool
+wholeTypes.length            // 2
+type(wholeTypes)             // [2]type
+type(int)                    // type: the type of a type
+```
+
+A function can take a type as a parameter too, which is how generics work (4.3).
 
 Struct types are the one exception: they have their own kind of name, `struct` (9.1).
 
@@ -366,11 +374,12 @@ A named type is always a `const` or a `struct`, so it can't be given a new value
 value declared with it has a type that's known before the program runs:
 
 ```go
-var T: type = int;     // ERROR: a type can't be a var
+var T: type = int;                   // ERROR: a type can't be a var
+var kinds: [2]type = [int, bool];    // ERROR: an array of types can't be a var either
 ```
 
-A type can still be held as a value, as a function's parameter (4.3) or inside an `any`
-(4.5), but always as a `const`.
+A type can still be held as a value: in an array or a map (4.1), as a function's parameter
+(4.3) or inside an `any` (4.5). It is always held as a `const`.
 
 ### 4.3 Generics: functions that take a type
 
