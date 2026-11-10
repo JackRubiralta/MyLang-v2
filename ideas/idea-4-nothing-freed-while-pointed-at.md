@@ -126,9 +126,11 @@ point.
 
 ## 8. What it needs
 
-- **Whether a `&T` parameter reads or changes has to be in the function's type.** Today
-  `(&int)void` covers both (DOCS 8.16). Without it every `&` argument has to count as "may
-  change", and then even a helper that only reads can't be called while a cursor is in use.
+- **Whether a `&T` parameter reads or changes.** A function's type doesn't say: `(&int)void`
+  covers both, and that stays as it is (Jack, 10 Nov 2026: "leave it, that's fine"). So for a
+  function called by its own name, the compiler looks at the function's parameter (`const`
+  reads, `var` changes). For a function called through a variable, an array or a map, every
+  `&` argument has to count as "may change".
 - **A rule for a borrower that a function returns:** it points into what the function's
   borrowed arguments point into.
 

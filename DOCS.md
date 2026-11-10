@@ -1799,6 +1799,11 @@ b^                         // b still leads to where the 5 was
 - **A copy of a value whose borrowers point back into itself,** like the `prev` list in
   8.14. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
   original until they are set again.
+- **A borrower of a `const` given to a function that is held in a variable.** A function's
+  type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
+  (7.4). When a function is called by its own name the compiler looks at the function. When
+  it is called through a variable, an array or a map, as in `fs[i](&limit)`, only the type is
+  known.
 - **An ownership kept in a variable that points inside a heap value.** It holds the address
   of a field in a node, and rule 8.5 can't see when that node is freed:
 
@@ -1811,9 +1816,6 @@ b^                         // b still leads to where the 5 was
 
 Not settled yet:
 
-- **Read-only borrowing in a function's type.** `(&int)void` doesn't say whether the
-  function changes the value, so passing a borrower of a `const` to a function held in a
-  variable can't be checked.
 - **Returning a borrower from a function:** what it may borrow from.
 - **A value made on the spot, given to a parameter that asks for an ownership.**
   `take(@makeBig(1))` has no variable to take the ownership of. As things stand the value
