@@ -168,7 +168,96 @@ var first: owner Node = makeNode(1);
 | Converting | nothing to write | `&` and `*` written out |
 | Kinds of name | `const`, `var` plus a role word | `const`, `var` |
 
-## 8. What is still open
+## 8. Symbols instead of the words (sketch)
+
+Since `owner T` and `borrower T` replace the pointer type, the pointer and reference symbols
+are free to be used instead of the words. (Jack)
+
+### 8.1 The rule for where a symbol goes
+
+MyLang already has this pattern: what **builds** goes in front, and what **uses** goes
+behind.
+
+| | Type (in front) | Building a value (in front) | Using it (behind) |
+|---|---|---|---|
+| array | `[3]int` | `[1, 2, 3]` | `a[0]` |
+| function | `(int)int` | `(const x: int){ … }` | `f(1)` |
+| struct | `{int, int}` | `{ x: int = 1; … }` | `p.x` |
+| owner link | `^int` | `^5` | `p^` |
+| borrower link | `&int` | `&count` | `b^` |
+
+So the symbols go **before** in a type and when making a link, and **after** when following
+one. That keeps rule 3.3 of the README true: a type reads in the order you use the value.
+
+### 8.2 The three symbols
+
+| Symbol | Where | Meaning |
+|---|---|---|
+| `^T` | in a type | an owner link to a `T` |
+| `&T` | in a type | a borrower link to a `T` |
+| `^v` | in front of a value | a new owned copy of `v`, on the heap |
+| `&x` | in front of a variable | a borrower of `x` |
+| `p^` | behind a link | the value the link points at (works for both kinds) |
+
+```go
+var count: int = 3;
+var b: &int = &count;               // b borrows count
+b^ = 5;                             // follow b: count is now 5
+var copy: int = b^;                 // copy is 5
+
+var big: ^[1000]int = ^[...];       // big owns an array on the heap
+var view: &[1000]int = &big^;       // borrow what big owns
+view^[0]                            // follow, then index
+
+const Node: type = {int, ^Node, &Node};      // value, next (owns), prev (borrows)
+
+const bump: (&int)void = (var x: &int){ x^ = x^ + 1; };
+bump(&count);
+```
+
+### 8.3 The conversions with symbols
+
+| From | To | Written |
+|---|---|---|
+| a value | a borrower | `&x` |
+| an owner | a borrower | `&p^` (borrow what `p` points at) |
+| either link | the value | `p^` |
+| a value | an owner | `^v` |
+| a borrower | an owner | not allowed; `^b^` makes a new owner holding a copy |
+
+What is behind a name is read before what is in front of it, so none of these needs brackets:
+`&p^` is "follow `p`, then borrow".
+
+### 8.4 Why these symbols
+
+- **Types read in the order they're used, with no brackets.** For `ps: [2]&int` the use is
+  `ps[0]^`: index, then follow. For `p: ^[3]int` it is `p^[0]`: follow, then index. With the
+  C form `*p` in front, the second one needs brackets, `(*p)[0]`.
+- **`^` is not an operator between two values,** so `a^ * b` can only mean "follow `a`, times
+  `b`". A `*` behind a name would be confused with multiplying.
+- **`&` already means "borrow"** in C, C++, Go and Rust.
+- **Pascal and Odin use this form:** the pointer type is `^T`, following is `p^`, and Odin
+  takes an address with `&x`.
+
+### 8.5 Other spellings considered
+
+| Spelling | Type | Follow | Problem |
+|---|---|---|---|
+| words | `owner T`, `borrower T` | `*p` | long, and still needs symbols for converting |
+| C style | `*T`, `&T` | `*p` in front | breaks the order rule and needs brackets |
+| Zig style | `*T`, `&T` | `p.*` behind | works, but `*T` reads like an unchecked C pointer |
+| symbols behind the type | `int^`, `int&` | `p^` | MyLang puts every modifier in front (3.1): `[3]int^` could be read two ways |
+
+### 8.6 Open with this spelling
+
+- **Fields, indexing and calls through a link.** The README (10.4) lets `p[0]` and `p.x` go
+  straight through a pointer. With `^` behind there is no bracket problem, so every hop could
+  be written: `list.next^.next^.value`. More to write, but each `^` shows a jump to another
+  place in memory.
+- **A block written straight into an owner place** (section 5) would no longer be needed:
+  `list.next = ^{ … };` keeps the same type on both sides of the `=`.
+
+## 9. What is still open
 
 - **The spellings** of the conversions in section 3, and how a value becomes an `owner`.
 - **Read-only borrowers:** where it's written that a borrower can't change what it borrows.
