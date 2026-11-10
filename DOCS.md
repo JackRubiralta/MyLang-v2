@@ -87,7 +87,7 @@ A number, a function and an array are all declared the same way.
 | `const` | no | 2.3 |
 | `var` | yes | 2.3 |
 | `ref` | it *is* another variable: assigning to it changes that variable | 8 |
-| `struct` | no: a struct type never changes | 9 |
+| `struct` | no: it is one actual struct, and its `var` fields can change | 9.4 |
 
 ### 2.3 `const` and `var`
 
@@ -356,6 +356,8 @@ const ops: [2]Op = [add, add];       // an array of Op
 var board: bitboard = 0;
 ```
 
+A struct type is named the same way: `const Point: type = {int, int};` (9.1).
+
 A named type can be used anywhere a type can, including inside other types (`[2]Op`). A
 name for a type is the same type under another name, so a `bitboard` can be used wherever
 a `uint` can:
@@ -383,11 +385,9 @@ A function can take a type as a parameter too, which is how generics work (4.3).
 int(3.0)                     // ERROR: int is a type, not a function; use convert (4.4)
 ```
 
-Struct types are the one exception: they have their own kind of name, `struct` (9.1).
-
 ### 4.2 Types never change
 
-A named type is always a `const` or a `struct`, so it can't be given a new value. Every
+A named type is always a `const`, so it can't be given a new value. Every
 value declared with it has a type that's known before the program runs:
 
 ```go
@@ -1059,37 +1059,20 @@ long as the ref exists.
 
 ## 9. Structs
 
-### 9.1 Declaring a struct: `struct`
+### 9.1 A struct type
 
-`struct` is a kind of name, with the same shape as every other declaration:
-
-```go
-struct Name: Shape = { fields };
-```
-
-- After the `:` comes the **shape**: the field types in braces, `{int, int}`.
-- After the `=` comes the **struct itself**: a block of its fields with their starting
-  values. It's a declaration of what the struct is, not code that runs.
-- A `struct` name can never be given a new value, so a struct type never changes.
+A struct's type is its shape: the field types in braces. Like every type, it is named with
+`const` (4.1):
 
 ```go
-struct Point: {int, int} = {
-    var x: int = 0;
-    var y: int = 0;
-};
-struct Settings: {bool, int} = {
-    const debug: bool = false;
-    var size: int = 3;
-};
+const Point: type = {int, int};
+const Settings: type = {bool, int};
 ```
-
-Each field is a declaration: `const` or `var`, a name, a type and a starting value. The
-fields come in the same order as the types in the shape.
 
 ### 9.2 Making a struct value
 
 A struct value is a block of declarations, one per field and in the same order as the
-shape:
+shape. Each field is `const` or `var`, a name, a type and a starting value:
 
 ```go
 var p: Point = {
@@ -1105,7 +1088,7 @@ This mirrors functions: the type lists only the types, and the value gives the n
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
 | struct | `{int, int}` | `{ var x: int = 1; var y: int = 2; }` |
 
-A struct's name is a type. It is not a value of that type, and it is never called:
+`Point` is a type. It is not a value of that type, and it is never called:
 
 ```go
 var p: Point = Point;              // ERROR: Point is a type, not a value of type Point
@@ -1136,13 +1119,14 @@ s.size = 8;            // fine: size is var
 s.debug = true;        // ERROR: debug is const
 ```
 
-### 9.4 Singletons
+### 9.4 `struct`: one actual struct
 
-A singleton is a value whose struct type has no name. It's declared directly with `var` or
-`const`, like any other value:
+`struct` is a kind of name. It declares a single, actual struct: a singleton. It has the
+same shape as every other declaration, with the shape after the `:` and the block after the
+`=`:
 
 ```go
-var settings: {bool, int} = {
+struct settings: {bool, int} = {
     const debug: bool = false;
     var size: int = 3;
 };
@@ -1151,13 +1135,26 @@ settings.size = 5;          // fine: size is var
 settings.debug = true;      // ERROR: debug is const
 ```
 
+`struct` declares a value, not a type. `settings` is the struct itself, so nothing else is
+made from it:
+
+```go
+var other: settings = { ... };     // ERROR: settings is a struct, not a type
+```
+
+| You want | You write |
+|---|---|
+| a struct type that many values share | `const Point: type = {int, int};` |
+| a value of that type | `var p: Point = { var x: int = 1; var y: int = 2; };` |
+| one struct on its own | `struct settings: {bool, int} = { ... };` |
+
 ### 9.5 Functions inside a struct
 
 A function declared inside a struct is in the struct's scope, so it uses the struct's
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)void} = {
+struct counter: {int, (int)void} = {
     var count: int = 0;
     const add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
@@ -1182,7 +1179,8 @@ A `const` field can't be changed on its own, but a `var` struct variable can be 
 whole new value, which copies the new block into its place:
 
 ```go
-var limits: {int, int} = { const low: int = 0; var high: int = 10; };
+const Range: type = {int, int};
+var limits: Range = { const low: int = 0; var high: int = 10; };
 limits.low = 1;        // ERROR: low is const
 limits = { const low: int = 5; var high: int = 20; };   // fine: the new block is copied in
 ```
@@ -1351,11 +1349,8 @@ const applyTo: (Op, int, int)void = (const f: Op, ref target: int, const by: int
 applyTo(ops[1], table[0][1], 10);   // table[0][1] is now 12
 applyTo(ops[2], table[1][0], 2);    // table[1][0] is now 6
 
-// a struct, a function that makes one, and a ref to share it
-struct Point: {int, int} = {
-    var x: int = 0;
-    var y: int = 0;
-};
+// a struct type, a function that makes one, and a ref to share it
+const Point: type = {int, int};
 
 const makePoint: (int, int)Point = (const a: int, const b: int){
     var p: Point = { var x: int = a; var y: int = b; };
@@ -1378,7 +1373,7 @@ c.x = 0;                            // corner.x is now 0
 | `const` | a value that never changes | no |
 | `var` | a value that can change | yes |
 | `ref` | another name for an existing variable | assigning changes that variable |
-| `struct` | a struct type | no |
+| `struct` | one actual struct (a singleton) | no, but its `var` fields can change |
 
 ### Type forms
 
@@ -1441,7 +1436,7 @@ passed.
 | Thing | Fixed by |
 |---|---|
 | a `const` | its declaration |
-| a named type or a struct | its declaration |
+| a named type | its declaration |
 | the type of a value | its declaration |
 | the length of an array | the type `[n]T`, or the first value of a `[]T` |
 | the keys of a map | its first value |

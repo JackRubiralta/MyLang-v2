@@ -100,7 +100,7 @@ to be declared differently from numbers.
 | `var` | yes | stack | 2.3 |
 | `ref` | it *is* another variable: assigning changes that variable | wherever that variable is | 8 |
 | `heap` | yes | heap | 9 |
-| `struct` | no: a struct type never changes | – | 11 |
+| `struct` | no: it is one actual struct, and its `var` fields can change | stack | 11.4 |
 
 ### 2.3 `const` and `var`
 
@@ -283,11 +283,11 @@ const wholeTypes: [2]type = [int8, int];     // an array of types
 const bitboard: type = uint;                 // a basic type under another name
 ```
 
-Struct types are the one exception: they have their own kind of name, `struct` (11.1).
+A struct type is named the same way: `const Node: type = {int, *Node};` (11.1).
 
 ### 4.2 Types never change
 
-A named type is always a `const` (4.1) or a `struct` (11.1), so it can't be reassigned, and
+A named type is always a `const` (4.1), so it can't be reassigned, and
 every value declared with it has a type that's known before the program runs. A type can still be held as a value, as a generic's
 parameter (4.3) or inside an `any` (4.5), but always as a `const`: there is no `var` type.
 
@@ -1309,28 +1309,14 @@ with it.
 
 ## 11. Structs
 
-### 11.1 Declaring a struct: `struct`
+### 11.1 A struct type is its shape
 
-`struct` is the fifth kind of name, with the same shape as every other declaration:
-
-```go
-struct Name: Shape = { fields };
-```
-
-- After the `:` comes the **shape**: the field types in braces, `{int, *Node}`.
-- After the `=` comes the **struct itself**: a block of its fields with their starting
-  values. It's a declaration of what the struct is, not code that runs.
-- A `struct` name can never be given a new value, so a struct type never changes.
+A struct's type is its shape: the field types in braces, `{int, *Node}`. Like every type,
+it is named with `const` (4.1):
 
 ```go
-struct Node: {int, *Node} = {
-    var value: int = 0;
-    var next: *Node = null;
-};
-struct Settings: {bool, int} = {
-    const debug: bool = false;
-    var size: int = 3;
-};
+const Node: type = {int, *Node};
+const Settings: type = {bool, int};
 ```
 
 ### 11.2 A struct value is a block of declarations
@@ -1375,12 +1361,13 @@ var n: Node = makeNode(5);         // value is 5, next is null
 n.value = 5;           // fine: value is var
 ```
 
-### 11.4 Singletons
+### 11.4 `struct`: one actual struct
 
-A singleton is just a value whose struct type has no name:
+`struct` is the fifth kind of name. It declares a single, actual struct: a singleton. The
+shape comes after the `:` and the block after the `=`, like every declaration:
 
 ```go
-var settings: {bool, int} = {
+struct settings: {bool, int} = {
     const debug: bool = false;
     var size: int = 3;
 };
@@ -1389,13 +1376,15 @@ settings.size = 5;          // fine: size is var
 settings.debug = true;      // ERROR: debug is const
 ```
 
+`struct` declares a value, not a type. A struct **type** is named with `const` (11.1).
+
 ### 11.5 Functions inside a struct
 
 A function declared inside a struct is in the struct's scope, so it uses the struct's
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)void} = {
+struct counter: {int, (int)void} = {
     var count: int = 0;
     const add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
@@ -1443,16 +1432,15 @@ block directly.
 
 ### 11.7 Why
 
-- **Why `struct` is its own kind of name:** a struct has its fields and their starting
-  values, and `struct Name: Shape = { fields };` gives them a place after the `=`. Other
-  types don't need one, so they're named with `const` (4.1).
-- **Why the part after the `=` is a block, not a function:** MyLang is declarative, so a
-  struct declaration says what the struct is. Code that builds one from inputs belongs in an
-  ordinary function like `makeNode`, where you can see it being called.
+- **Why a struct type is named with `const`:** it is a type like any other, so it is a
+  value of type `type` and needs no kind of its own (4.1).
+- **Why `struct` declares a struct and not a type:** `struct` declares an actual struct, the
+  thing itself. That keeps a name from being both a type and a value of that type.
+- **Why making a struct from inputs is a function:** MyLang is declarative, so code that
+  builds a struct belongs in an ordinary function like `makeNode`, where you can see it being
+  called.
 - **Why the type lists only the field types:** it works like a function's type, which
   lists only the parameter types; the names belong in the value.
-- **Why singletons need nothing new:** a struct value can be declared directly with `var`
-  or `const`, like any other value.
 - **Why no `this`:** a function inside a struct is already in the struct's scope, so the
   fields are just names it can see.
 - **Why a struct is copied, not pointed at:** every other value is copied when it's declared
@@ -1461,11 +1449,11 @@ block directly.
 
 ### 11.8 Other ways that were considered
 
-- **A `type` kind for every named type** (`type Pair: [2]int = [0, 0];`). Replaced: only
-  struct types need a block after the `=`, so they get `struct`, and every other type is a `const` of
-  type `type` (4.1).
-- **A struct as a `const` type value** (`const Node: type = {int, *Node};`). Replaced by
-  `struct`, which gives the struct its block after the `=`.
+- **A `type` kind for every named type** (`type Pair: [2]int = [0, 0];`). Replaced: every
+  type is a `const` of type `type` (4.1).
+- **`struct Name: Shape = { fields };` as the way to declare a struct type,** with the block
+  as the type's own fields. Replaced: `struct` declares one actual struct, and a struct type
+  is named with `const` like every other type.
 - **`var n: Node = Node;` to start from the struct's own block.** Dropped: `Node` is a type,
   so the same name can't also be a value of type `Node`.
 - **A function after the `=`, called to make the struct**
@@ -1530,8 +1518,6 @@ These are left out on purpose until they're decided:
 - **Generics and returned functions:** `first` returns a function that uses `T`, one of
   `first`'s parameters, which is the open question about returned functions and local
   values (below).
-- **Using a struct's own block:** what the block after the `=` in a `struct` declaration
-  gives you, e.g. whether a `Node` can be declared without writing its fields out again.
 - **Pointing at part of an array:** a fat pointer to only some elements, e.g. `&a[1:3]`.
 - **Names inside types:** whether struct and function types include the names, e.g.
   `{value: int, next: *Node}` and `(x: int, y: int)int`, or only the types, as now
@@ -1617,7 +1603,7 @@ caller, which becomes the owner.
 
 ### 14.4 Values whose type is a `var` (settled)
 
-Settled (4.1, 4.2): named types are `const` or `struct`, so a type can never change, so there is no `var` type and every
+Settled (4.1, 4.2): named types are `const`, so a type can never change, so there is no `var` type and every
 value's type is known before the program runs.
 
 ### 14.5 `(Op)` has two meanings when the value is a type
