@@ -147,6 +147,7 @@ A type is a basic type, or a modifier followed by a type:
 |---|---|---|---|
 | fixed array | `[n]T` | `[3]int` | array of 3 ints |
 | unsized array | `[]T` | `[]int` | array of ints |
+| choice array | `[bool]T` | `[bool]int` | two ints: one for `false`, one for `true` (5.8) |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
@@ -193,6 +194,7 @@ The type says *call, call, index, int*, and the use says *call, call, index*: sa
 ```
 Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
+          | "[" "bool" "]" Type               (choice array: indexed by a bool)
           | "{" Type "}" Type                 (map: {key}value)
           | "{" TypeList "}"                  (struct: its field types, section 11)
           | "*" Type                          (pointer)
@@ -588,6 +590,24 @@ The length is `const` in both: it's known, and it never changes (5.3).
 **Why fixed sizes:** arrays live on the stack (section 9), and a value on the stack has a
 fixed size.
 
+### 5.8 A choice array: `[bool]T`
+
+`[bool]T` is an array with exactly two slots that is indexed with a `bool` instead of a
+number. The first slot is for `false` and the second is for `true`:
+
+```go
+const sizes: [bool]int = [3, 10];      // the slot for false, then the slot for true
+sizes[false]                           // 3
+sizes[true]                            // 10
+sizes[1]                               // ERROR: a [bool] array is indexed with a bool
+```
+
+Underneath it is laid out exactly like a `[2]T`. Its main use is choosing (7.8).
+
+**Why a type of its own:** indexing a plain `[2]T` with a `bool` would turn the `bool` into
+a number without the code saying so. With `[bool]T` the index is meant to be a `bool`, and
+the type shows that the array is a choice.
+
 ---
 
 ## 6. Maps
@@ -785,6 +805,66 @@ made, so nothing is left pointing at `adder`'s ended scope. See section 13.
 **Why:** parameters are declared exactly like names (section 2), the function's type
 reads the same way as every other type (section 3), and functions go everywhere other
 values go (section 1).
+
+### 7.8 Choosing and repeating: no `if`, no loops
+
+MyLang has no `if` statement, no `switch` and no loops. A choice is a lookup, and repeating
+is a function calling itself.
+
+**Comparing** two values of the same type gives a `bool`: `==`, `!=`, `<`, `>`, `<=`, `>=`.
+
+**Choosing between two** uses a choice array (5.8) of functions: look up the function for
+the answer, then call it. Only the chosen function runs.
+
+```go
+const abs: (int)int = (const n: int){
+    const cases: [bool](int)int = [
+        (const k: int){ return k; },           // false: n is not below 0
+        (const k: int){ return 0 - k; }        // true: n is below 0
+    ];
+    return cases[n < 0](n);            // pick the function for the answer, then call it
+};
+```
+
+**Choosing between many** uses a map of functions, with the case as the key. This does the
+job of a `switch`:
+
+```go
+const calc: (char, int, int)int = (const op: char, const a: int, const b: int){
+    const cases: {char}(int, int)int = {
+        '+': (const x: int, const y: int){ return x + y; },
+        '-': (const x: int, const y: int){ return x - y; },
+        '*': (const x: int, const y: int){ return x * y; }
+    };
+    return cases[op](a, b);            // pick the function for op, then call it
+};
+```
+
+**Repeating** is a function that calls itself by its own name, with a choice array deciding
+when to stop:
+
+```go
+const factorial: (int)int = (const n: int){
+    const cases: [bool](int)int = [
+        (const k: int){ return k * factorial(k - 1); },    // false: keep going
+        (const k: int){ return 1; }                         // true: n is 0, so stop
+    ];
+    return cases[n == 0](n);
+};
+```
+
+**Why:**
+
+- **Why no loops and no `if`:** the language is purely declarative, so there are no
+  statements that steer the program. There is only declaring values and calling functions.
+- **Why a lookup:** arrays, maps and functions as values already exist, so choosing needs
+  nothing new. The branches are first-class values, both are written out, and only the one
+  you look up gets called.
+- **Why a choice array for two and a map for many:** a `[bool]T` always has both slots and
+  stores no keys, and a map names each case by its key.
+- **Other ways that were considered:** an `if` statement (a new kind of statement that
+  isn't a value), `if` as a value (`return if (n < 0) 0 - n else n;`, which adds a keyword),
+  and a `{bool}` map of functions (it could be written with only one key).
 
 ---
 
@@ -1484,7 +1564,9 @@ These are left out on purpose until they're decided:
     `(T: type, T)void` and `{T: type, T}`, with every other type left without names.
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
-- **Control flow:** `if`, loops and the like.
+- **Boolean operators:** how to write "and", "or" and "not".
+- **A default case:** what a map of functions (7.8) does for a key it doesn't have. DOCS.md
+  says the lookup fails while the program runs, as a proposal.
 - **Refs and `const`:** whether a ref can refer to a `const`.
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
 - **`hand` in function types:** with first-class functions the caller only sees the type,

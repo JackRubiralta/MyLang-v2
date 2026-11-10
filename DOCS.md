@@ -7,10 +7,11 @@ MyLang is a **declarative, explicit, first-class** language.
 - **Explicit:** reading the code tells you what happens. A value is shared only when you
   write `ref`. Otherwise every value is copied when it's declared, assigned or passed.
 - **Declarative:** every name is declared in one shape that states what kind of name it
-  is, what it's called, what type it has and what value it starts with.
+  is, what it's called, what type it has and what value it starts with. There are no loops
+  and no `if` statements: a choice is a lookup, and repeating is a function calling itself.
 
 This file documents the core of the language: values, names, types, arrays, maps,
-functions, refs and structs.
+functions, refs, structs, and choosing and repeating.
 
 **Reading the examples**
 
@@ -31,8 +32,9 @@ functions, refs and structs.
 7. [Functions](#7-functions)
 8. [`ref`: another name for a variable](#8-ref-another-name-for-a-variable)
 9. [Structs](#9-structs)
-10. [Putting it together](#10-putting-it-together)
-11. [Quick reference](#11-quick-reference)
+10. [Choosing and repeating](#10-choosing-and-repeating)
+11. [Putting it together](#11-putting-it-together)
+12. [Quick reference](#12-quick-reference)
 
 ---
 
@@ -246,6 +248,23 @@ var mixed: int = count + small;                       // ERROR: an int and an in
 var fixed: int = count + convert(int8, int)(small);   // fine
 ```
 
+**Comparing two values of the same type gives a `bool`:**
+
+| Operator | `true` when |
+|---|---|
+| `==` | the two values are equal |
+| `!=` | the two values are different |
+| `<` | the left value is smaller |
+| `>` | the left value is bigger |
+| `<=` | the left value is smaller or equal |
+| `>=` | the left value is bigger or equal |
+
+```go
+const isBig: bool = count > 10;
+const isFive: bool = small == 5;       // 5 is an int8 here
+const wrong: bool = count == small;    // ERROR: an int and an int8
+```
+
 ### 3.3 Every modifier goes in front
 
 A type is a basic type, or a modifier followed by a type. A basic type is a built-in type
@@ -255,6 +274,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 |---|---|---|---|
 | fixed array | `[n]T` | `[3]int` | array of 3 ints |
 | unsized array | `[]T` | `[]int` | array of ints |
+| choice array | `[bool]T` | `[bool]int` | two ints: one for `false`, one for `true` |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
@@ -301,6 +321,7 @@ order.
 ```
 Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
+          | "[" "bool" "]" Type               (choice array: indexed by a bool)
           | "{" Type "}" Type                 (map: {key}value)
           | "{" TypeList "}"                  (struct: its field types, section 9)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
@@ -686,6 +707,36 @@ var b: {int, [2]int} = {
 ```
 
 The length is `const` in both: it's known, and it never changes.
+
+### 5.8 A choice array: `[bool]T`
+
+`[bool]T` is an array with exactly two slots that is indexed with a `bool` instead of a
+number. The first slot is for `false` and the second is for `true`:
+
+```go
+const sizes: [bool]int = [3, 10];      // the slot for false, then the slot for true
+sizes[false]                           // 3
+sizes[true]                            // 10
+
+const big: bool = count > 10;
+sizes[big]                             // 3 or 10, picked by big
+sizes.length                           // 2
+```
+
+| Type | Slots | Indexed by |
+|---|---|---|
+| `[3]T` | 3 | `0`, `1`, `2` |
+| `[bool]T` | 2 | `false`, `true` |
+
+The two kinds of index don't mix:
+
+```go
+sizes[1]                               // ERROR: a [bool] array is indexed with a bool
+primes[true]                           // ERROR: a [3] array is indexed with a number
+```
+
+Underneath, a `[bool]T` is laid out exactly like a `[2]T`: `false` is the first slot and
+`true` is the second. Its main use is choosing (section 10).
 
 ---
 
@@ -1186,7 +1237,114 @@ and its position in the shape (`{int, int}`: `x` first, `y` second).
 
 ---
 
-## 10. Putting it together
+## 10. Choosing and repeating
+
+MyLang has no `if` statement, no `switch` and no loops. A choice is a lookup: the possible
+results are values, and you pick one by its index or key. Repeating is a function calling
+itself.
+
+### 10.1 Choosing between two: `[bool]T`
+
+A choice array (5.8) holds one value for `false` and one for `true`, and a `bool` picks
+between them:
+
+```go
+const sizes: [bool]int = [3, 10];      // false, then true
+const size: int = sizes[count > 10];   // 10 when count is over 10, otherwise 3
+```
+
+Both values in a choice array are worked out before the lookup. To run code for only the
+chosen side, put **functions** in the slots: look up the function, then call it.
+
+```go
+const abs: (int)int = (const n: int){
+    const cases: [bool](int)int = [
+        (const k: int){ return k; },           // false: n is not below 0
+        (const k: int){ return 0 - k; }        // true: n is below 0
+    ];
+    return cases[n < 0](n);            // pick the function for the answer, then call it
+};
+
+abs(7)                 // 7
+abs(0 - 7)             // 7
+```
+
+`cases[n < 0]` picks one of the two functions, and `(n)` calls it. The other function is
+never called.
+
+The slot for `false` is written first, because `false` is the first slot.
+
+### 10.2 Choosing between many: a map of functions
+
+For more than two cases, put one function per case in a map, with the case as the key.
+Looking up the key picks the function, and calling it runs that case. This does the job of
+a `switch`:
+
+```go
+const calc: (char, int, int)int = (const op: char, const a: int, const b: int){
+    const cases: {char}(int, int)int = {
+        '+': (const x: int, const y: int){ return x + y; },
+        '-': (const x: int, const y: int){ return x - y; },
+        '*': (const x: int, const y: int){ return x * y; }
+    };
+    return cases[op](a, b);            // pick the function for op, then call it
+};
+
+calc('+', 2, 3)        // 5
+calc('-', 2, 3)        // -1
+calc('*', 2, 3)        // 6
+```
+
+Every case is a key of the map. Looking up a key that isn't in the map fails while the
+program runs:
+
+```go
+calc('/', 2, 3)        // fails while running: '/' isn't a key of cases
+```
+
+The cases are ordinary values, so they can be named functions too:
+
+```go
+const cases: {int}(int, int)int = {1: add, 2: sub};
+cases[2](5, 3)         // 2
+```
+
+### 10.3 Repeating: a function that calls itself
+
+A function can call itself by its own name. A choice array decides when to stop:
+
+```go
+const factorial: (int)int = (const n: int){
+    const cases: [bool](int)int = [
+        (const k: int){ return k * factorial(k - 1); },    // false: keep going
+        (const k: int){ return 1; }                         // true: n is 0, so stop
+    ];
+    return cases[n == 0](n);
+};
+
+factorial(4)           // 24
+```
+
+The same shape goes through an array, one index at a time:
+
+```go
+const sumFrom: ([]int, int)int = (ref values: []int, const i: int){
+    const cases: [bool]([]int, int)int = [
+        (ref v: []int, const k: int){ return v[k] + sumFrom(v, k + 1); },   // false: add this one, go on
+        (ref v: []int, const k: int){ return 0; }                           // true: past the end, so stop
+    ];
+    return cases[i == values.length](values, i);
+};
+
+var scores: []int = [10, 20, 30];
+sumFrom(scores, 0)     // 60
+```
+
+`sumFrom` takes the array as a `ref`, so no call copies it (5.6).
+
+---
+
+## 11. Putting it together
 
 ```go
 // name long types once
@@ -1229,7 +1387,7 @@ c.x = 0;                            // corner.x is now 0
 
 ---
 
-## 11. Quick reference
+## 12. Quick reference
 
 ### Kinds of name
 
@@ -1254,10 +1412,26 @@ c.x = 0;                            // corner.x is now 0
 | `any` | a value of any type, with its type inside |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
+| `[bool]T` | choice array: one `T` for `false`, one for `true` |
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
 | `(P1)void` | function returning nothing |
 | `{T1, T2}` | struct with fields of types `T1` and `T2` |
+
+### Operators
+
+| Operators | Work on | Give |
+|---|---|---|
+| `+` `-` `*` | two numbers of the same type | a number of that type |
+| `==` `!=` `<` `>` `<=` `>=` | two values of the same type | a `bool` |
+
+### Choosing and repeating
+
+| Instead of | You write |
+|---|---|
+| `if` / `else` | a choice array of functions: `cases[n < 0](n)` (10.1) |
+| `switch` | a map of functions: `cases[op](a, b)` (10.2) |
+| a loop | a function that calls itself (10.3) |
 
 ### Built-in functions
 
@@ -1305,6 +1479,7 @@ passed.
 | `describe(3);` | `describe` takes an `any`: write `wrap(int)(3)` |
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
 | `primes[0] = 7;` | `primes` is `const` |
+| `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
@@ -1314,9 +1489,10 @@ passed.
 | `Point(1, 2)` | a type is never called |
 | `settings.debug = true;` | `debug` is a `const` field |
 
-Two checks happen while the program runs:
+Three checks happen while the program runs:
 
 | Line | Fails when |
 |---|---|
 | `convert(int, int8)(n)` and other conversions to a smaller or differently signed type | the value doesn't fit |
 | `unwrap(bool)(x)` and other unwraps of an `any` | `x` holds a different type |
+| `cases[op]` and other map lookups | the key isn't in the map |
