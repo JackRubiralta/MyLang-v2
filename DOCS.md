@@ -1292,6 +1292,18 @@ copy[0]^ = 9;              // rows[0]^ is still 1
 
 Copying the first node of a linked list therefore copies every node behind it (8.13).
 
+**A borrower inside the value is copied with it.** If it borrows another part of the same
+value, the copy's borrower borrows the same part of the copy, so the copy keeps the whole
+shape and stays separate from the original. If it borrows something outside the value, the
+copy borrows that same outside thing. An ownership kept inside a value is copied the same
+way.
+
+```go
+var b: ^Link = a;          // every node is copied, and each copy's prev borrows a node of b, not of a
+```
+
+(`Link` is the node with a `prev` from 8.14.)
+
 **An owner that is given a new value frees the one it had:**
 
 ```go
@@ -1752,9 +1764,6 @@ b^                         // b still leads to where the 5 was
   var @n: ^Node = h;               // h points into freed memory
   ```
 
-- **A copy of a value that has borrowers inside.** `=` copies a borrower as another borrower
-  of the same thing (8.8). So a copy of the list in 8.14 has `prev` links that still point
-  into the original list, and they are left dangling if the original ends first.
 
 Not settled yet:
 
