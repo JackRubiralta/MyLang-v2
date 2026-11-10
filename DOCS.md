@@ -1743,6 +1743,18 @@ b^                         // b still leads to where the 5 was
   new value, set to `null`, or moved to an owner that ends sooner.
 - **A borrower stored inside a heap value** (the `prev` in 8.14) whose target is removed
   first.
+- **An ownership kept in a variable that points inside a heap value.** It holds the address
+  of a field in a node, and rule 8.5 can't see when that node is freed:
+
+  ```go
+  var h: @^Node = @list^.next;     // the address of a field inside the first node
+  list = makeNode(9);              // the first node is freed
+  var @n: ^Node = h;               // h points into freed memory
+  ```
+
+- **A copy of a value that has borrowers inside.** `=` copies a borrower as another borrower
+  of the same thing (8.8). So a copy of the list in 8.14 has `prev` links that still point
+  into the original list, and they are left dangling if the original ends first.
 
 Not settled yet:
 
@@ -1750,6 +1762,11 @@ Not settled yet:
   function changes the value, so passing a borrower of a `const` to a function held in a
   variable can't be checked.
 - **Returning a borrower from a function:** what it may borrow from.
+- **A value made on the spot, given to a parameter that asks for an ownership.**
+  `take(@makeBig(1))` has no variable to take the ownership of. As things stand the value
+  has to be put in a variable first.
+- **The order in which a call's arguments are worked out.** It matters now: in `f(@x, x^)`
+  the second argument reads `x` and the first one empties it.
 - **Moving into an owner that ends sooner** (an inner block, or a parameter). It's allowed
   above, and the value is freed when that owner ends. An earlier rule had it as an error.
 
