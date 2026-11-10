@@ -4,14 +4,15 @@ MyLang is a **declarative, explicit, first-class** language.
 
 - **First-class:** everything is a value. Numbers, arrays, maps, functions, structs and
   even types are all declared, stored, passed and returned the same way.
-- **Explicit:** reading the code tells you what happens. A value is shared only when you
-  write `ref`. Otherwise every value is copied when it's declared, assigned or passed.
+- **Explicit:** reading the code tells you what happens. A value goes on the heap only when
+  its type says `^`, it is shared only when you write `&`, and it changes owner only where
+  you write `@`. Otherwise every value is copied when it's declared, assigned or passed.
 - **Declarative:** every name is declared in one shape that states what kind of name it
   is, what it's called, what type it has and what value it starts with. There are no loops
   and no `if` statements: a choice is a lookup, and repeating is a function calling itself.
 
-This file documents the core of the language: values, names, types, arrays, maps,
-functions, refs, structs, and choosing and repeating.
+This file documents the language: values, names, types, arrays, maps, functions, ownership
+(the heap, borrowing and moving), structs, and choosing and repeating.
 
 **Reading the examples**
 
@@ -30,7 +31,7 @@ functions, refs, structs, and choosing and repeating.
 5. [Arrays](#5-arrays)
 6. [Maps](#6-maps)
 7. [Functions](#7-functions)
-8. [`ref`: another name for a variable](#8-ref-another-name-for-a-variable)
+8. [Ownership: plain, heap and borrowed values](#8-ownership-plain-heap-and-borrowed-values)
 9. [Structs](#9-structs)
 10. [Choosing and repeating](#10-choosing-and-repeating)
 11. [Putting it together](#11-putting-it-together)
@@ -66,7 +67,7 @@ kind name: Type = value;
 
 | Part | What it says |
 |---|---|
-| `kind` | what sort of name it is: `const`, `var` or `ref` |
+| `kind` | what sort of name it is: `const` or `var` |
 | `name` | the name |
 | `Type` | what the value is (section 3) |
 | `value` | the value it starts with |
@@ -80,13 +81,15 @@ const scores: [3]int = [10, 20, 30];
 
 A number, a function and an array are all declared the same way.
 
-### 2.2 The three kinds of name
+### 2.2 The two kinds of name
 
-| Kind | Can it be given a new value? | Section |
-|---|---|---|
-| `const` | no | 2.3 |
-| `var` | yes | 2.3 |
-| `ref` | it *is* another variable: assigning to it changes that variable | 8 |
+| Kind | Can it be given a new value? |
+|---|---|
+| `const` | no |
+| `var` | yes |
+
+Where a value lives and who owns it is not a kind of name. It is part of the type
+(section 8).
 
 ### 2.3 `const` and `var`
 
@@ -121,7 +124,7 @@ var second: [3]int = first;    // a copy of all three elements
 second[0] = 9;                 // first is still [1, 2, 3]
 ```
 
-To get a second name for the *same* variable instead of a copy, use `ref` (section 8).
+To use the *same* value instead of a copy, borrow it with `&` (section 8).
 
 ### 2.5 Statements end with `;`
 
@@ -136,8 +139,9 @@ const add: (int, int)int = (const x: int, const y: int){
 
 ### 2.6 Where values live, and for how long
 
-Every value lives on the stack. A value on the stack has a fixed size, which is why the
-length of an array (5.3) and the keys of a map (6.3) never change.
+Every value lives on the stack, unless its type says `^`, which puts it on the heap
+(section 8). A value on the stack has a fixed size, which is why the length of an array
+(5.3) and the keys of a map (6.3) never change.
 
 A **block** is the code between `{` and `}`: a function body, or a block written on its
 own. How long something lives depends on where it's written:
@@ -147,6 +151,7 @@ own. How long something lives depends on where it's written:
 | a name | the end of the block it's declared in |
 | a parameter | its function call ends |
 | a value that isn't given a name | the end of its statement |
+| a value on the heap | its owner ends, or gives it up (8.11) |
 
 ```go
 var a: int = 1;
@@ -159,7 +164,8 @@ var a: int = 1;
 4;                         // a value with no name: it's gone once the statement is done
 ```
 
-When a name ends, its value is removed from the stack.
+When a name ends, its value is removed from the stack. If the name owns a value on the
+heap, that value is freed too.
 
 ---
 
@@ -278,6 +284,8 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
 | struct | `{T1, T2}` | `{bool, int}` | a struct with a bool field and an int field |
+| on the heap | `^T` | `^int` | an int on the heap, owned by this holder (section 8) |
+| borrowed | `&T` | `&int` | an int that another holder owns (section 8) |
 
 ### 3.4 Modifiers stack in any combination
 
@@ -292,6 +300,11 @@ Read every type from left to right, one modifier at a time:
 {int}[3]int            // map from int → to arrays of 3 ints
 [3]{int}bool           // array of 3 → maps from int to bool
 [2][3]int              // array of 2 → arrays of 3 ints
+[3]^int                // array of 3 → ints on the heap
+^[3]int                // on the heap → an array of 3 ints
+[2]&int                // array of 2 → borrowed ints
+(&int)void             // function taking a borrowed int → returning nothing
+(int)^[3]int           // function taking int → returning an array of 3 ints on the heap
 ```
 
 Swapping two modifiers swaps the meaning, and the order shows it:
@@ -302,6 +315,8 @@ Swapping two modifiers swaps the meaning, and the order shows it:
 | `(int)[3]int` | function returning an array of 3 |
 | `[2]{int}bool` | array of 2 maps |
 | `{int}[2]bool` | map whose values are arrays of 2 |
+| `[3]^int` | three ints, each on the heap |
+| `^[3]int` | one array of 3 ints on the heap |
 
 No type ever needs brackets to group it.
 
@@ -315,6 +330,16 @@ f(1)(true)[0]          // call with an int, call with a bool, index → an int
 The type says *call, call, index, int*, and the use says *call, call, index*: the same
 order.
 
+The heap and borrow marks work the same way (8.2):
+
+```go
+// p: ^[3]int
+p^[0]                  // follow, index → an int
+
+// ps: [3]^int
+ps[0]^                 // index, follow → an int
+```
+
 ### 3.6 Grammar
 
 ```
@@ -323,6 +348,8 @@ Type      = BasicType
           | "[" "bool" "]" Type               (choice array: indexed by a bool)
           | "{" Type "}" Type                 (map: {key}value)
           | "{" TypeList "}"                  (struct: its field types, section 9)
+          | "^" Type                          (a value on the heap, section 8)
+          | "&" Type                          (a borrowed value, section 8)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "void"                     (void = returns nothing)
 TypeList  = Type { "," Type }
@@ -657,17 +684,18 @@ scores.length = 4;     // ERROR: a length never changes
 
 ### 5.6 Passing an array to a function
 
-There are two ways, and the code says which one is happening:
+There are two ways, and both the type and the call say which one is happening:
 
 ```go
-const sumCopy: ([]int)int = (const v: []int){ ... };       // v is a copy of the array
-const sumRef: ([]int)int = (ref v: []int){ ... };          // v is the caller's array itself
+const sumCopy: ([]int)int = (const v: []int){ ... };        // v is a copy of the array
+const sumBorrow: (&[]int)int = (const v: &[]int){ ... };    // v borrows the caller's array
 
 sumCopy(scores);       // copies all of scores, like every declaration (2.4)
-sumRef(scores);        // no copy: v is another name for scores (8.3)
+sumBorrow(&scores);    // no copy: v borrows scores (8.4)
 ```
 
-Both functions have the same type, `([]int)int`. Only the parameter says `ref`.
+Inside `sumBorrow` the array is `v^`: `v^[0]` is its first element and `v^.length` is its
+length.
 
 ### 5.7 Underneath: an array is like a struct
 
@@ -820,7 +848,8 @@ const add: (int, int)int = (const x: int, const y: int){
 add(1, 2)              // 3
 ```
 
-Each argument is copied into its parameter (2.4), unless the parameter is a `ref` (8.3).
+Each argument is copied into its parameter (2.4). To let a function use the caller's value
+itself, the parameter borrows it (8.4): `bump(&n)`.
 
 ### 7.3 A function that returns nothing
 
@@ -840,7 +869,7 @@ hello();
 
 ### 7.4 Parameters are declared like names
 
-Each parameter is `const`, `var` or `ref` with a name and a type, like a declaration:
+Each parameter is `const` or `var` with a name and a type, like a declaration:
 
 ```go
 const countDown: (int)int = (var n: int){
@@ -857,10 +886,12 @@ start                  // still 5: countDown changed its own copy
 |---|---|
 | `const x: int` | a copy it can't change |
 | `var x: int` | a copy it can change |
-| `ref x: int` | the caller's variable itself (8.3) |
+| `const x: &int` | the caller's value, borrowed to read (8.6) |
+| `var x: &int` | the caller's value, borrowed to change (8.4) |
+| `var x: ^int` | a heap value of its own: a copy, or the caller's own value moved in with `@` (8.12) |
 
-`const`, `var` and `ref` on a parameter don't appear in the function's type. The type only
-lists the parameter types.
+`const` and `var` on a parameter don't appear in the function's type. Borrowing and the heap
+do, because they are part of the parameter's type: `(&int)void`, `(^int)void`.
 
 ### 7.5 Swapping a function in a `var`
 
@@ -930,129 +961,704 @@ Copying a function value copies the address, not the code.
 
 ---
 
-## 8. `ref`: another name for a variable
+## 8. Ownership: plain, heap and borrowed values
 
-### 8.1 Declaring a ref
+Every value has exactly one **owner**: the name, field or array element that holds it. The
+owner decides how long the value lives. A value's type says which of three cases it is.
 
-`ref` is a kind of name. A ref is another name for an existing variable: reading it reads
-that variable, and assigning to it changes that variable.
+### 8.1 The three cases
 
-```go
-var b: int = 3;
-ref r: int = b;
-r                      // 3
-r = 5;                 // b is now 5
-b = 8;                 // r is now 8 too: they are the same variable
-```
-
-A ref always refers to the variable it was declared with. Assigning to a ref never makes
-it refer to something else:
+| Written | Who owns the value | Where the value is | It lives until… |
+|---|---|---|---|
+| `T`, no mark | this holder | right here, inside the holder | the holder ends |
+| `^T` | this holder | somewhere else, on the heap | the holder ends, gives it up, or is given something else (8.11) |
+| `&T` | another holder | wherever its owner put it | its owner decides: a borrower never frees it |
 
 ```go
-var c: int = 10;
-r = c;                 // copies c's value into b: b is now 10, and r still refers to b
+var count: int = 3;                 // plain: count holds the 3 itself
+var big: ^[1000]int = ^[...];       // heap: big owns an array kept on the heap
+var view: &[1000]int = &big^;       // borrowed: view uses big's array, and big still owns it
 ```
 
-### 8.2 What a ref can refer to
+A type with no mark is always the first case. Nothing is left unsaid: the other two cases
+are always marked, so no mark can only mean "mine, right here".
 
-A ref can refer to a variable, an array element or a map entry, but never to a plain value:
+A plain value never changes owner. It lives inside its holder, so it can be copied but
+never passed on. Only a value on the heap can go from one owner to another (8.9).
+
+### 8.2 The symbols
+
+| Written | Where | Meaning |
+|---|---|---|
+| `^T` | in a type | a `T` on the heap, owned by this holder |
+| `&T` | in a type | a `T` that another holder owns |
+| `^v` | in front of a value | a new value on the heap, holding a copy of `v` |
+| `&x` | in front of a variable | a borrower of `x` |
+| `p^` | behind a heap owner or a borrower | the value itself |
+| `p@` | behind a heap owner | its ownership, to move it (8.9) |
+
+What **makes** a marked value goes in front, like the mark in its type: `^5` is a `^int` and
+`&count` is an `&int`. What **uses** one goes behind, like `a[0]` and `f(1)`.
+
+What is behind a name is read first, from left to right. What is in front is applied after
+it. So nothing ever needs brackets:
+
+```go
+&big^[0]               // follow big, take element 0, then borrow it
+^p^                    // follow p, then make a new heap value from what's there
+list^.next^.value      // follow, field, follow, field
+```
+
+The marks in a type and the `^`s in its use come in the same order (3.5):
+
+| Type | It is | Used as |
+|---|---|---|
+| `[3]^int` | three ints, each on the heap | `a[0]^` |
+| `^[3]int` | one array of three ints on the heap | `a^[0]` |
+| `[2]&int` | two borrowers | `a[1]^` |
+| `&[2]int` | one borrower of a whole array | `a^[1]` |
+| `&^int` | a borrower of a heap owner | `a^^` |
+
+### 8.3 A value on the heap: `^T`
+
+`^` in front of a value puts a copy of it on the heap. `p^` is the value there:
+
+```go
+var p: ^int = ^5;          // 5 is an int, and ^5 is a ^int
+p^                         // 5
+p^ = 6;                    // changes the value on the heap
+var x: int = p^;           // x is a plain copy: 6
+
+var big: ^[1000]int = ^[...];
+big^[3] = 7;               // follow, then index
+big^.length                // 1000
+```
+
+The types are strict. An `int` and a `^int` are different types, and a value never changes
+type by itself (3.2):
+
+```go
+var bad: ^int = 5;         // ERROR: 5 is an int, not a ^int: write ^5
+var y: int = p;            // ERROR: p is a ^int, not an int: write p^
+```
+
+`^v` always makes a copy. The value it's made from stays as it is:
+
+```go
+var n: int = 3;
+var h: ^int = ^n;          // the heap gets its own 3
+h^ = 5;                    // n is still 3
+```
+
+A value written on the spot, like `^5` or `^[1, 2, 3]`, has no original, so it's simply
+built on the heap.
+
+A heap value lives as long as its owner. When the owner ends, the value is freed:
+
+```go
+const work: (int)void = (const x: int){
+    var three: ^[3]int = ^[x, x, x];
+    three^[0] = 9;
+};                         // work ends, so three ends, and its array is freed
+```
+
+A `const` owner keeps its value, like every `const`:
+
+```go
+const table: ^[3]int = ^[1, 2, 3];
+table^[0] = 9;             // ERROR: table is const, so its value can't change
+```
+
+### 8.4 A borrowed value: `&T`
+
+`&` in front of a variable makes a borrower of it. A borrower is the same memory as what it
+borrows: `b^` reads that value, and assigning to `b^` changes it.
+
+```go
+var count: int = 3;
+var b: &int = &count;      // b borrows count
+b^                         // 3
+b^ = 5;                    // count is now 5
+count = 8;                 // b^ is now 8 too: it is the same memory
+```
+
+Nothing is copied, and nothing changes owner. `count` still owns its value, and `b` never
+frees it.
+
+A borrower can borrow a variable, an array element, a map entry, a struct field or a value
+on the heap, but never a value that has no owner:
 
 ```go
 var scores: []int = [10, 20, 30];
-ref top: int = scores[0];
-top = 99;              // scores is now [99, 20, 30]
+var top: &int = &scores[0];
+top^ = 99;                 // scores is now [99, 20, 30]
 
 var seen: {int}bool = {1: true, 4: false};
-ref four: bool = seen[4];
-four = true;           // seen[4] is now true
+var four: &bool = &seen[4];
+four^ = true;              // seen[4] is now true
 
-ref bad: int = 3;      // ERROR: 3 isn't a variable
+var view: &[1000]int = &big^;      // the whole array big owns
+var first: &int = &big^[0];        // one element of it
+view^[1] = 2;                      // big's array changes
+
+var bad: &int = &3;        // ERROR: 3 has no owner to borrow from
+var worse: &int = count;   // ERROR: count is an int, not an &int: write &count
 ```
 
-### 8.3 `ref` parameters
-
-A function can take a parameter as a `ref`, so it can change the caller's variable. Only
-the parameter in the function's value says `ref`. The function's type stays plain:
+`&T` is a type, so a borrower goes wherever other values go: in an array, in a struct, or
+into a function.
 
 ```go
-const bump: (int)void = (ref x: int){
-    x = x + 1;
+var left: int = 1;
+var right: int = 2;
+var both: [2]&int = [&left, &right];
+both[0]^ = 7;              // left is now 7
+```
+
+A function borrows through its parameter, and the call shows it:
+
+```go
+const bump: (&int)void = (var x: &int){
+    x^ = x^ + 1;
 };
 
 var n: int = 3;
-bump(n);               // n is now 4
-bump(scores[1]);       // scores[1] goes up by 1
-bump(3);               // ERROR: 3 isn't a variable
+bump(&n);                  // n is now 4
+bump(&scores[1]);          // scores[1] goes up by 1
+bump(&3);                  // ERROR: 3 has no owner to borrow from
+bump(n);                   // ERROR: n is an int, not an &int: write &n
 
-const swap: (int, int)void = (ref a: int, ref c: int){
-    var t: int = a;
-    a = c;
-    c = t;
+const swap: (&int, &int)void = (var a: &int, var c: &int){
+    var t: int = a^;
+    a^ = c^;
+    c^ = t;
 };
-
-var left: int = 1;
-var right: int = 2;
-swap(left, right);     // left is now 2, right is now 1
+swap(&left, &right);       // the two values change places
 ```
 
-A `ref` parameter also passes a big value without copying it (5.6).
+`b = …` changes **what** a borrower borrows, and `b^ = …` changes **the value** it borrows:
 
-### 8.4 A ref can't outlive what it refers to
+```go
+var b: &int = &left;
+b^ = 10;                   // left is now 10
+b = &right;                // b now borrows right; left is untouched
+b^ = 20;                   // right is now 20
+```
 
-A ref can only refer to something that lives at least as long as the ref itself. If what
-it refers to would be gone while the ref is still there, the compiler raises an error.
+### 8.5 A borrower can't outlive what it borrows
+
+A borrower can only borrow something that lives at least as long as the borrower itself. If
+what it borrows would be gone while the borrower is still there, the compiler raises an
+error.
 
 ```go
 var x: int = 3;
-ref a: int = x;            // fine: a and x end together, at the same }
+var a: &int = &x;          // fine: a and x end together, at the same }
 {
-    ref y: int = x;        // fine: y ends at this block's }, before x does
-    y = 4;                 // x is now 4
+    var y: &int = &x;      // fine: y ends at this block's }, before x does
+    y^ = 4;                // x is now 4
 }
 
-bump(x);                   // fine: bump's ref parameter ends when the call ends,
+bump(&x);                  // fine: bump's parameter ends when the call ends,
                            // and x is still there
 
-ref top: int = three(7)[0];    // ERROR: the array three(7) gives back is gone at the end
-                               // of this line, but top would still be there
+{
+    var inner: int = 5;
+    a = &inner;            // ERROR: inner ends at this }, but a is still there after it
+}
+
+var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is gone at the
+                                   // end of this line, but top would still be there
 ```
 
 (`three` is the function from 7.6 that returns an array.)
 
-| The ref refers to… | Allowed? |
+| The borrower borrows… | Allowed? |
 |---|---|
 | a variable declared in the same block | yes: they end together |
-| a variable declared in an outer block | yes: the ref ends first |
-| the caller's variable, as a `ref` parameter | yes: the parameter ends when the call ends |
-| a value with no name, which is gone after its statement (2.6) | no: the ref would outlive it |
+| a variable declared in an outer block | yes: the borrower ends first |
+| the caller's variable, through a `&T` parameter | yes: the parameter ends when the call ends |
+| a variable declared in an inner block | no: it ends before the borrower does |
+| a value with no name, which is gone after its statement (2.6) | no: the borrower would outlive it |
 
-### 8.5 A ref is not a type
+The check is made every time a borrower is given something to borrow: when it's declared,
+and again each time it's pointed at something else with `b = &…`.
 
-`ref` never appears in a type, not even in a function's parameter list. A ref can't be put
-in an array, a map or a struct, and can't be returned, so these don't exist:
-
-```go
-[3]ref int             // ERROR: not a type
-(int)ref int           // ERROR: not a type
-(ref int)void          // ERROR: not a type; write (int)void
-```
-
-### 8.6 Underneath: a ref is a saved address
-
-A ref just holds the **address** of what it refers to: the place in memory of the variable,
-array element or map entry. It works like a pointer in disguise that the language looks
-after for you. Reading or assigning the ref goes to that address, so it reads and changes
-the original:
+A borrower of a heap value is measured against the variable that owns it:
 
 ```go
-var scores: []int = [10, 20, 30];
-ref top: int = scores[0];      // top holds the address of scores[0]
-top = 99;                      // writes 99 at that address
+var view: &[1000]int = &big^;      // fine: view ends no later than big
 ```
 
-You never see the address, and you can't change it: a ref can't be pointed somewhere else,
-stored or returned. That, together with rule 8.4, is what keeps the address valid for as
-long as the ref exists.
+### 8.6 `const`, `var` and borrowing
+
+Whether a borrower can change the value it borrows depends on how the borrower is declared:
+
+| The owner is | `var b: &T` | `const b: &T` |
+|---|---|---|
+| a `var` | allowed: `b` can read and change the value | allowed: `b` can only read it |
+| a `const` | **error** | allowed: `b` can only read it |
+
+```go
+const limit: int = 10;
+var a: &int = &limit;      // ERROR: limit is const, so its borrower has to be const
+const c: &int = &limit;    // fine
+c^                         // 10
+c^ = 11;                   // ERROR: c is a const borrower, so it can only read
+
+var count: int = 3;
+const look: &int = &count; // fine: look can read count but not change it
+count = 4;                 // look^ is now 4
+look^ = 5;                 // ERROR: look is a const borrower
+look = &limit;             // ERROR: look is const, so it always borrows count
+```
+
+A parameter works the same way: `(const v: &[]int)` borrows an array to read it, and
+`(var x: &int)` borrows a value to change it.
+
+### 8.7 Converting between the three
+
+Going from one case to another is always written out:
+
+| From | To | Written | Is anything copied? |
+|---|---|---|---|
+| a plain value | a heap value | `^v` | yes: the heap gets its own copy |
+| a plain value | a borrower | `&x` | no |
+| a heap value | a plain value | `p^` | yes, when it's put in a plain holder |
+| a borrowed value | a plain value | `b^` | yes, when it's put in a plain holder |
+| a heap value | a borrower | `&p^` | no |
+| a borrowed value | a heap value | `^b^` | yes: a borrower can't become an owner, so this makes a new heap copy |
+
+```go
+var p: ^int = ^5;
+var b: &int = &p^;         // borrow the value p owns
+var x: int = b^;           // a plain copy of it
+var q: ^int = ^b^;         // a new heap value holding a copy
+
+var bad1: ^int = 5;        // ERROR: write ^5
+var bad2: int = p;         // ERROR: write p^
+var bad3: &int = p;        // ERROR: write &p^
+var bad4: &int = &p;       // ERROR: &p is an &^int, a borrower of the owner itself: write &p^
+var bad5: ^int = b;        // ERROR: a borrower can't become an owner: write ^b^ for a copy
+var bad6: int = x^;        // ERROR: x is a plain int, so there is nothing to follow
+```
+
+### 8.8 `=` always makes a copy
+
+`=` means the same for every type: the left side gets its own copy, and the right side is
+never changed.
+
+| Type of both sides | What the left side gets |
+|---|---|
+| `T` | its own copy |
+| `^T` | its own copy, in a new place on the heap |
+| `&T` | a borrower of the same value: a borrower owns nothing, so there is nothing to copy |
+
+```go
+var a: int = 3;
+var b: int = a;            // b is a copy
+
+var p: ^int = ^5;
+var q: ^int = p;           // q gets its own heap int holding 5
+q^ = 9;                    // p^ is still 5
+
+var r: &int = &a;
+var s: &int = r;           // s borrows a too
+```
+
+**A copy is complete.** Copying a value that owns other heap values copies those as well,
+so the copy shares nothing with the original:
+
+```go
+var rows: [2]^int = [^1, ^2];
+var copy: [2]^int = rows;  // two new heap ints
+copy[0]^ = 9;              // rows[0]^ is still 1
+```
+
+Copying the first node of a linked list therefore copies every node behind it (8.13).
+
+**An owner that is given a new value frees the one it had:**
+
+```go
+q = p;                     // q's old heap int is freed, and q gets a new copy of p's
+```
+
+**A value that nothing else holds is taken, not copied.** That covers a value written on
+the spot, the result of a call, and a local that a function returns (8.12):
+
+```go
+var one: ^int = ^5;                    // the new heap value has no other owner, so one takes it
+var made: ^[1000]int = makeBig(1);     // the same for what a function gives back
+```
+
+To take over a value that another owner still holds, without copying it, move it (8.9).
+
+### 8.9 Moving ownership: `@`
+
+A move passes a heap value from one owner to another. Nothing is copied: the value stays
+where it is on the heap, and only its owner changes. `@` goes behind the variable on **both
+sides**, the same way `arr[1] = 3` says on the left which part is being set.
+
+```go
+var p: ^int = ^5;
+var q: ^int = ^1;
+
+q@ = p@;                   // q takes over p's heap int: nothing is copied
+                           // q's old value, the 1, is freed
+                           // p is left null (8.10)
+q^                         // 5
+```
+
+Where the left side isn't an existing variable, only the right side carries the mark:
+
+```go
+const keep: (^int)void = (var owned: ^int){ ... };
+
+var r: ^int = q@;          // a declaration: r takes q's value over, and q is left null
+keep(r@);                  // a call: the parameter takes it over, and r is left null (8.12)
+```
+
+A heap owner `p` can be used in four ways, and each is written differently:
+
+| Written | What it gives | `p` afterwards |
+|---|---|---|
+| `p^` | the value | unchanged |
+| `&p^` | a borrower of the value | unchanged |
+| `p` | a copy of the value, in a new place on the heap | unchanged |
+| `p@` | the value itself, for a new owner | `null` |
+
+The rules for a move:
+
+- **Every line that empties an owner shows `@` on that owner.** A plain `=` never changes
+  its right-hand side.
+- **Both sides of an assignment carry the mark.** One side alone is an error:
+
+  ```go
+  q@ = p;                  // ERROR: the mark goes on both sides: q@ = p@
+  q = p@;                  // ERROR: the mark goes on both sides: q@ = p@
+  ```
+
+- **The old owner is left `null`,** so the value still has exactly one owner.
+- **The new owner's old value is freed,** as with any owner that is given something new.
+- **The right side is taken before the left side's old value is freed** (8.13 uses this).
+- **A `const` owner can't be moved from,** because the move would change it to `null`:
+
+  ```go
+  const fixed: ^int = ^5;
+  var t: ^int = fixed@;    // ERROR: fixed is const, and moving would change it
+  ```
+
+- **The new owner decides how long the value lives from then on:**
+
+  ```go
+  var data: ^[1000]int = ^[...];
+  {
+      var inner: ^[1000]int = data@;
+  }                        // inner ends here, so the array is freed
+  data == null             // true
+  ```
+
+A local that a function returns needs no mark (8.12): it ends there anyway, so no owner is
+left behind to be emptied.
+
+### 8.10 `null`
+
+A heap owner that owns nothing is `null`.
+
+**How an owner becomes `null`:**
+
+| How | What happens to the value it owned |
+|---|---|
+| its value is moved away with `@` | it lives on with the new owner |
+| it is set to `null` | it is freed |
+| it is declared with `null` | there was no value |
+
+```go
+var p: ^int = ^5;
+var q: ^int = p@;          // moved away: p is null, and q owns the 5
+
+var r: ^int = ^7;
+r = null;                  // set to null: the 7 is freed
+
+var later: ^int = null;    // declared null: it owns nothing yet
+```
+
+**How it stops being `null`:** it is given a value, or takes one over.
+
+```go
+later = ^8;                // later owns a new heap int
+p@ = later@;               // p takes it over, and now later is null
+```
+
+**Testing for it:** `p == null` and `p != null` give a `bool`. Comparing doesn't copy
+anything and doesn't change `p`. A choice array (10.1) then picks what to do:
+
+```go
+const valueOr: (&^int, int)int = (const owner: &^int, const fallback: int){
+    const cases: [bool](&^int, int)int = [
+        (const o: &^int, const f: int){ return o^^; },     // false: it owns a value, so read it
+        (const o: &^int, const f: int){ return f; }        // true: it is null
+    ];
+    return cases[owner^ == null](owner, fallback);
+};
+
+valueOr(&p, 0)             // p's value, or 0 when p is null
+```
+
+`&p` borrows the owner itself, so its type is `&^int`. `owner^` is the owner, and `owner^^`
+is the value it owns.
+
+**Following a `null` fails while the program runs:**
+
+```go
+var none: ^int = null;
+none^                      // fails while running: none owns nothing
+```
+
+A copy of a `null` owner is `null` as well, because there is nothing to copy.
+
+A borrower can be `null` too, meaning it borrows nothing yet: `var b: &int = null;`.
+Following it fails in the same way.
+
+### 8.11 When a heap value is freed
+
+A heap value is freed at the moment it has no owner left:
+
+| When | Example |
+|---|---|
+| its owner ends | the `}` of the block the owner was declared in, or the end of the call for a parameter |
+| its owner is given a new value with `=` | `q = p;` frees what `q` owned before |
+| its owner takes another value over with `@` | `q@ = p@;` frees what `q` owned before |
+| its owner is set to `null` | `r = null;` |
+| it has no name and nothing receives it | `makeBig(1);` on its own: freed at the end of the statement (2.6) |
+| the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
+
+A heap value is **not** freed when it's moved (it has a new owner), and never by a
+borrower.
+
+### 8.12 Functions and ownership
+
+A parameter is declared like any name (7.4), so the rules above apply to it unchanged. The
+function's type shows `^` and `&`, and the call shows `&` and `@`:
+
+```go
+const use: (^[1000]int)void = (var a: ^[1000]int){ ... };      // a owns what it is given
+const look: (&[1000]int)void = (const a: &[1000]int){ ... };   // a borrows, to read
+
+use(big);              // use gets its own copy on the heap, and big is unchanged
+use(big@);             // use takes the array over, and big is left null
+look(&big^);           // look borrows it: nothing is copied and nothing changes owner
+```
+
+| Parameter type | The call | What the function gets |
+|---|---|---|
+| `int` | `f(n)` | its own copy |
+| `^[1000]int` | `use(big)` | its own copy, in a new place on the heap |
+| `^[1000]int` | `use(big@)` | the caller's array itself. The caller's owner is left `null`, and the array is freed when the call ends unless the function passes it on |
+| `&[1000]int` | `look(&big^)` | the caller's array, borrowed |
+
+A function gives a heap value back by returning it. Its type ends in a `^`, so the caller
+knows it will own what comes back:
+
+```go
+const makeBig: (int)^[1000]int = (const x: int){
+    var made: ^[1000]int = ^[...];
+    return made;                       // made ends here, so the caller takes the array: no copy
+};
+
+var mine: ^[1000]int = makeBig(1);     // mine owns the array
+var flat: [1000]int = makeBig(1)^;     // flat is a plain copy; the heap array is freed at the
+                                       // end of this line, because nothing owns it
+makeBig(1);                            // nothing receives it, so it is freed right away
+```
+
+This is how a value outlives the scope that made it: it goes on the heap, and its ownership
+passes to something that lives longer.
+
+Returning an owner that **lives on** after the call is a move like any other, so it's
+written with `@`:
+
+```go
+const takeNext: (&Node)^Node = (var n: &Node){
+    return n^.next@;                   // n^.next is left null: the caller owns that node now
+};
+```
+
+Without the `@`, `return n^.next;` gives the caller a copy and leaves the list as it was.
+(`Node` is the list node from 8.13.)
+
+### 8.13 A linked list, step by step
+
+A node can't hold another node directly, because it would have no fixed size. It holds a
+heap owner of the next node (struct types are in section 9):
+
+```go
+const Node: type = {int, ^Node};       // value, next
+
+const makeNode: (int)^Node = (const v: int){
+    var n: ^Node = ^{ value: int = v; next: ^Node = null; };
+    return n;
+};
+```
+
+**Building.** Each node is owned by the `next` in front of it, so the whole chain belongs
+to `list`:
+
+```go
+var list: ^Node = makeNode(1);         // list owns the node holding 1
+list^.next = makeNode(2);              // that node's next owns the node holding 2
+list^.next^.next = makeNode(3);        // and that node's next owns the node holding 3
+
+list^.next^.next^.value                // 3
+```
+
+When `list` ends, the first node is freed, and every node behind it with it.
+
+**Removing a node.** The node holding 3 moves up into the place of the node holding 2:
+
+```go
+list^.next@ = list^.next^.next@;
+```
+
+1. The right side is taken first: the node holding 3 leaves the second node's `next`,
+   which is left `null`.
+2. `list^.next` takes it over. Its old value, the node holding 2, has no owner now, so it
+   is freed. Its `next` is already `null`, so nothing else goes with it.
+3. The list is now 1, 3.
+
+The same line with no marks, `list^.next = list^.next^.next;`, ends with the same list but
+does more work: it copies the node holding 3, and then frees the node holding 2 together
+with the original node holding 3.
+
+**Replacing a node.** An owner that is given a new value frees the one it had, and
+everything behind it:
+
+```go
+list^.next = makeNode(9);              // the old second node, and all the nodes behind it, are freed
+```
+
+**Adding a node at the front.**
+
+```go
+var first: ^Node = makeNode(0);
+first^.next@ = list@;                  // first takes over the whole old list, and list is null
+list@ = first@;                        // list takes over the new first node, and first is null
+```
+
+**Copying the list.** `=` makes a complete copy (8.8):
+
+```go
+var other: ^Node = list;               // every node is copied; other shares nothing with list
+```
+
+**Walking the list.** A function borrows an owner, checks it for `null`, and calls itself
+on the next one:
+
+```go
+const length: (&^Node)int = (const owner: &^Node){
+    const cases: [bool](&^Node)int = [
+        (const o: &^Node){ return 1 + length(&o^^.next); },    // false: count this node, go on
+        (const o: &^Node){ return 0; }                          // true: no node here, so stop
+    ];
+    return cases[owner^ == null](owner);
+};
+
+length(&list)                          // the number of nodes
+```
+
+`o^` is the owner and `o^^` is the node it owns, so `&o^^.next` borrows the next owner.
+Nothing is copied and nothing changes owner on the way.
+
+### 8.14 Two links to one value
+
+Two links can lead to the same value when one **owns** it and the other **borrows** it.
+That makes a second link possible: a list that can be walked backwards, or a tree node that
+points back at its parent.
+
+```go
+const Link: type = {int, ^Link, &Link};        // value, next (owned), prev (borrowed)
+
+var a: ^Link = ^{ value: int = 1; next: ^Link = null; prev: &Link = null; };
+a^.next = ^{ value: int = 2; next: ^Link = null; prev: &Link = &a^; };
+
+a^.next^.prev^.value                           // 1: forward to the second node, back to the first
+```
+
+The second node is owned by the first node's `next`, and its `prev` borrows the first
+node. A value never has two owners: any second link is a borrower.
+
+The rule from 8.5 still applies: the borrower can't outlive the owner. It holds here,
+because the second node is freed whenever the first one is. Removing or replacing a node
+that another node's `prev` still borrows is the programmer's job to get right (8.16).
+
+### 8.15 What the compiler rejects, and what is checked while running
+
+**Rejected before the program runs:**
+
+| Line | Reason |
+|---|---|
+| `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
+| `var x: int = p;` where `p` is a `^int` | write `p^` |
+| `var b: &int = count;` and `bump(n);` | an `int` is not an `&int`: write `&count`, `&n` |
+| `var b: &int = &p;` where `p` is a `^int` | `&p` borrows the owner itself (`&^int`): write `&p^` |
+| `var q: ^int = b;` where `b` is an `&int` | a borrower can't become an owner: `^b^` makes a copy |
+| `x^` where `x` is a plain `int` | there is nothing to follow |
+| `var b: &int = &3;` and `bump(&3);` | `3` has no owner to borrow from |
+| `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
+| `a = &inner;` where `inner` is in an inner block | the borrower would outlive what it borrows |
+| `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
+| `c^ = 11;` where `c` is a `const` borrower | a `const` borrower can only read |
+| `look = &limit;` where `look` is `const` | a `const` borrower always borrows the same thing |
+| `table^[0] = 9;` where `table` is a `const` owner | a `const` owner's value can't change |
+| `q@ = p;` and `q = p@;` | a move carries `@` on both sides |
+| `var t: ^int = fixed@;` where `fixed` is `const` | moving would change `fixed` to `null` |
+
+**Checked while the program runs:**
+
+| Line | Fails when |
+|---|---|
+| `p^`, for a heap owner or a borrower | `p` is `null` |
+
+### 8.16 What the compiler doesn't catch, and what isn't settled
+
+Rule 8.5 compares the scopes of names. Two cases get past it, because a heap value can end
+before the name that owned it does:
+
+```go
+var p: ^int = ^5;
+var b: &int = &p^;         // b borrows the 5
+p = ^6;                    // p is given a new value, so the 5 is freed
+b^                         // b still leads to where the 5 was
+```
+
+- **An owner that lets go of its value while a borrower still uses it:** by being given a
+  new value, set to `null`, or moved to an owner that ends sooner.
+- **A borrower stored inside a heap value** (the `prev` in 8.14) whose target is removed
+  first.
+
+Not settled yet:
+
+- **The symbol for the move.** `@` stands in for it.
+- **`@` on a value that isn't a heap owner,** such as a struct that holds heap owners.
+- **Read-only borrowing in a function's type.** `(&int)void` doesn't say whether the
+  function changes the value, so passing a borrower of a `const` to a function held in a
+  variable can't be checked.
+- **Returning a borrower from a function:** what it may borrow from.
+- **Moving into an owner that ends sooner** (an inner block, or a parameter). It's allowed
+  above, and the value is freed when that owner ends. An earlier rule had it as an error.
+
+### 8.17 Underneath: addresses
+
+- **A `^T` holder** has a place on the stack like every name. That place holds the
+  **address** of the value on the heap, and `p^` goes to that address.
+- **A `&T` holder** holds the address of what it borrows: a variable, an array element, a
+  map entry, a field, or a value on the heap.
+- **`null`** is "no address".
+- **`=` between two heap owners** makes room on the heap and copies the value into it.
+- **A move** copies the address into the new owner and sets the old owner to `null`. The
+  value itself doesn't move.
+- **A link to an unsized array** (`^[]int`, `&[]int`) holds two things: where the elements
+  start, and how many there are. That is how `v^.length` works.
 
 ---
 
@@ -1178,12 +1784,15 @@ var q: Point = p;      // a full copy: q gets its own block
 q.x = 5;               // p.x doesn't change
 ```
 
-To share a struct instead of copying it, use a `ref` (section 8):
+To use the same struct instead of a copy, borrow it (section 8):
 
 ```go
-ref same: Point = p;
-same.x = 9;            // p.x is now 9
+var same: &Point = &p;
+same^.x = 9;           // p.x is now 9
 ```
+
+A struct can hold heap owners and borrowers as fields. A linked list is built that way
+(8.13).
 
 A struct is a value like any other, so it goes in arrays and maps and in and out of
 functions:
@@ -1303,19 +1912,19 @@ factorial(4)           // 24
 The same shape goes through an array, one index at a time:
 
 ```go
-const sumFrom: ([]int, int)int = (ref values: []int, const i: int){
-    const cases: [bool]([]int, int)int = [
-        (ref v: []int, const k: int){ return v[k] + sumFrom(v, k + 1); },   // false: add this one, go on
-        (ref v: []int, const k: int){ return 0; }                           // true: past the end, so stop
+const sumFrom: (&[]int, int)int = (const values: &[]int, const i: int){
+    const cases: [bool](&[]int, int)int = [
+        (const v: &[]int, const k: int){ return v^[k] + sumFrom(v, k + 1); },   // false: add this one, go on
+        (const v: &[]int, const k: int){ return 0; }                            // true: past the end, so stop
     ];
-    return cases[i == values.length](values, i);
+    return cases[i == values^.length](values, i);
 };
 
 var scores: []int = [10, 20, 30];
-sumFrom(scores, 0)     // 60
+sumFrom(&scores, 0)    // 60
 ```
 
-`sumFrom` takes the array as a `ref`, so no call copies it (5.6).
+`sumFrom` borrows the array, so no call copies it (5.6).
 
 ---
 
@@ -1334,15 +1943,15 @@ const mul: Op = (const x: int, const y: int){ return x * y; };
 const ops: {int}Op = {1: add, 2: mul};
 var table: [2]Row = [[1, 2], [3, 4]];
 
-// a function that takes a function and a ref
-const applyTo: (Op, int, int)void = (const f: Op, ref target: int, const by: int){
-    target = f(target, by);
+// a function that takes a function and borrows an int
+const applyTo: (Op, &int, int)void = (const f: Op, var target: &int, const by: int){
+    target^ = f(target^, by);
 };
 
-applyTo(ops[1], table[0][1], 10);   // table[0][1] is now 12
-applyTo(ops[2], table[1][0], 2);    // table[1][0] is now 6
+applyTo(ops[1], &table[0][1], 10);  // table[0][1] is now 12
+applyTo(ops[2], &table[1][0], 2);   // table[1][0] is now 6
 
-// a struct type, a function that makes one, and a ref to share it
+// a struct type, a function that makes one, and a borrower to share it
 const Point: type = {int, int};
 
 const makePoint: (int, int)Point = (const a: int, const b: int){
@@ -1351,8 +1960,13 @@ const makePoint: (int, int)Point = (const a: int, const b: int){
 };
 
 var corner: Point = makePoint(table[0][1], table[1][0]);   // x is 12, y is 6
-ref c: Point = corner;
-c.x = 0;                            // corner.x is now 0
+var c: &Point = &corner;
+c^.x = 0;                           // corner.x is now 0
+
+// a value on the heap: copied with =, moved with @
+var big: ^Row = ^[1, 2];
+var copy: ^Row = big;               // copy gets its own array on the heap
+var mine: ^Row = big@;              // mine takes big's array over, and big is left null
 ```
 
 ---
@@ -1365,7 +1979,6 @@ c.x = 0;                            // corner.x is now 0
 |---|---|---|
 | `const` | a value that never changes | no |
 | `var` | a value that can change | yes |
-| `ref` | another name for an existing variable | assigning changes that variable |
 
 ### Type forms
 
@@ -1386,6 +1999,8 @@ c.x = 0;                            // corner.x is now 0
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
 | `(P1)void` | function returning nothing |
 | `{T1, T2}` | struct with fields of types `T1` and `T2` |
+| `^T` | a `T` on the heap, owned by this holder |
+| `&T` | a `T` borrowed from another holder |
 
 ### Operators
 
@@ -1393,6 +2008,18 @@ c.x = 0;                            // corner.x is now 0
 |---|---|---|
 | `+` `-` `*` | two numbers of the same type | a number of that type |
 | `==` `!=` `<` `>` `<=` `>=` | two values of the same type | a `bool` |
+
+### Ownership
+
+| You write | What it does |
+|---|---|
+| `^v` | puts a copy of `v` on the heap: a `^T` |
+| `&x` | borrows `x`: an `&T` |
+| `p^` | the value behind a heap owner or a borrower |
+| `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
+| `n@ = p@;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
+| `p = null;` | frees what `p` owns |
+| `p == null` | `true` when `p` owns nothing |
 
 ### Choosing and repeating
 
@@ -1420,8 +2047,12 @@ passed.
 | `var b: int = a;` | `b` is a copy |
 | `b = a;` | `a`'s value is copied into `b` |
 | `f(a)` with a `const` or `var` parameter | the parameter is a copy |
-| `ref r: int = a;` | `r` is another name for `a`: no copy |
-| `f(a)` with a `ref` parameter | the parameter is the caller's `a`: no copy |
+| `var q: ^int = p;` | `q` gets its own copy, in a new place on the heap |
+| `var h: ^int = ^a;` | the heap gets a copy of `a` |
+| `var x: int = p^;` | `x` is a plain copy of the heap value |
+| `var b: &int = &a;` | `b` borrows `a`: no copy |
+| `f(&a)` with an `&int` parameter | the parameter borrows the caller's `a`: no copy |
+| `var r: ^int = p@;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 
 ### What never changes
 
@@ -1432,7 +2063,7 @@ passed.
 | the type of a value | its declaration |
 | the length of an array | the type `[n]T`, or the first value of a `[]T` |
 | the keys of a map | its first value |
-| what a ref refers to | its declaration |
+| what a `const` borrower borrows | its declaration |
 
 ### What the compiler rejects
 
@@ -1452,17 +2083,25 @@ passed.
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
-| `ref bad: int = 3;` and `bump(3);` | `3` isn't a variable |
-| `ref top: int = three(7)[0];` | the ref would outlive what it refers to |
-| `[3]ref int`, `(int)ref int`, `(ref int)void` | `ref` is not a type |
+| `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
+| `var x: int = p;` where `p` is a `^int` | write `p^` |
+| `var b: &int = count;` and `bump(n);` | an `int` is not an `&int`: write `&count`, `&n` |
+| `var b: &int = &3;` | `3` has no owner to borrow from |
+| `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
+| `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
+| `q@ = p;` and `q = p@;` | a move carries `@` on both sides |
+| `var t: ^int = fixed@;` where `fixed` is `const` | moving would change `fixed` to `null` |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
 
-Three checks happen while the program runs:
+The full list for ownership is in 8.15.
+
+Four checks happen while the program runs:
 
 | Line | Fails when |
 |---|---|
 | `convert(int, int8)(n)` and other conversions to a smaller or differently signed type | the value doesn't fit |
 | `unwrap(bool)(x)` and other unwraps of an `any` | `x` holds a different type |
 | `cases[op]` and other map lookups | the key isn't in the map |
+| `p^`, for a heap owner or a borrower | `p` is `null` |
