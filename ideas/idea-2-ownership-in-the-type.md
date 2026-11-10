@@ -548,8 +548,10 @@ What it costs:
 - **`=` is always a deep copy.** `n = p;` on linked data copies every node behind it. The
   types show that, and the line doesn't. (Jack: "this is just enforced deep copies, which is
   fine")
-- **A plain `=` can put a new value on the heap** with no `^` on the line. The type of the
-  left side says so.
+- **Copying a heap owner makes a new heap value with no `^v` on that line.** In
+  `var q: ^int = p;` both sides are `^int`, so the types match and `q` gets its own heap int.
+  This is part of the deep copy. A plain value given to a heap owner is still an error:
+  `var q: ^int = 5;` has to be written `^5`.
 
 Open: the symbol, and whether it is the same on both sides; what a plain `=` does with the
 left side's old heap value (written over in place, or freed and replaced), which decides
