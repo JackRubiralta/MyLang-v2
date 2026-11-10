@@ -509,6 +509,79 @@ Open: the symbol, and whether it is the same on both sides; whether it goes behi
 like `arr[1]`; whether a borrower's bare name is the value too; what `n = p;` does when `n`
 is `null`.
 
+### 8.11 The heap and borrowing under 8.10 (sketch)
+
+Both stay, and the types `^T` and `&T` are unchanged. A bare name is always the value, so
+only two symbols are left in the code itself.
+
+| Written | Meaning |
+|---|---|
+| `^T` in a type | a `T` on the heap, owned by this holder |
+| `&T` in a type | a `T` that another holder owns |
+| `x` | the value, whatever kind of holder `x` is |
+| `&x` | a borrower of `x` |
+| `x@` | `x`'s ownership itself, to move it or to set it to `null` |
+
+`p^` (follow), `^v` (make a heap value) and `<-p` (move) are not needed.
+
+**The heap.**
+
+```go
+var big: ^[1000]int = [...];        // the type says it goes on the heap
+big[3] = 7;                         // used like any array
+var copy: ^[1000]int = big;         // its own copy, also on the heap
+var mine: ^[1000]int = big@;        // takes big's array over, and big is left null
+```
+
+```go
+const Node: type = {int, ^Node};    // value, next
+
+const makeNode: (int)^Node = (const v: int){
+    var n: ^Node = { value: int = v; next: ^Node = null; };
+    return n;                       // n ends here, so the caller simply gets it
+};
+
+var list: ^Node = makeNode(1);
+list.next = makeNode(2);            // a call's result has no other owner, so it is taken, not copied
+list.next.next = makeNode(3);
+list.next.next.value                // 3
+
+list.next@ = list.next.next@;       // the third node moves up, and the second is freed
+```
+
+- A heap value lives until its owner ends or its ownership is given something else.
+- To outlive the scope that made it, it is returned or moved to a longer-lived owner.
+- A declaration, a call and a field in a block have no existing variable on the left, so only
+  the right side carries the mark: `var mine: ^T = big@;`, `use(big@);`.
+
+**Borrowing.**
+
+```go
+var count: int = 3;
+var b: &int = &count;               // b borrows count
+b = 5;                              // same memory: count is now 5
+
+var view: &[1000]int = &big;        // borrows a heap value, and nothing is copied
+view[0]
+
+const bump: (&int)void = (var x: &int){ x = x + 1; };
+bump(&count);                       // the call still shows the borrow
+```
+
+- The rules are the same: a borrower can't outlive what it borrows, a borrower of a `const`
+  is read-only, and a borrower never frees anything. (Jack)
+- A borrower's bare name is the value, like the README's `ref`. `b@ = &other;` would point it
+  at something else.
+
+**The first hole in 10.1 gets smaller.** `p = 6;` now writes into the same heap value, so a
+borrower of it sees 6 and nothing is freed. A borrower can still dangle where an owner's value
+is freed while it is borrowed: `p@ = null;`, a move that frees the old value, or a plain `=`
+that replaces linked data with something shorter.
+
+Open here: the spelling of `null` for a new holder (`next: ^Node = null`), what `n = p;` does
+when `n` is `null` (the sketch: `n` gets a new heap value), and how a borrower of an ownership
+is written (`&^Node`).
+
 ## 9. What is still open
 
 - **The spellings** of the conversions in section 3, and how a value becomes an `owner`.
