@@ -95,9 +95,15 @@ you convert a pointer back to its value")
 | kinds `const`, `var`, `ref`, `heap` | kinds `const`, `var` only |
 | `ref r: int = b;` | `var r: borrower int = &b;` |
 | `heap big: [3]int = …;` | `var big: owner [3]int = …;` |
+| the pointer type `*T` | `owner T` or `borrower T` |
+| a fat pointer `*[]T` | `owner []T` or `borrower []T` |
 | `bump(count)` with a `ref` parameter | `bump(&count)` with a `borrower int` parameter |
 | a function's type can't show sharing or handing | `(borrower int)void`, `(int)owner Node` |
 
+- **There is no separate pointer type.** `owner T` and `borrower T` are the two kinds of
+  pointer: underneath, each is an address. The plain `*T` would only be needed for a pointer
+  that is neither, which nothing checks. (to decide: whether such an unchecked pointer exists
+  at all)
 - **Function types show everything.** A caller holding a function value can tell from the
   type whether it shares, borrows or gives back something owned. That removes problem 14.1 in
   the README.
