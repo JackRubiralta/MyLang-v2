@@ -453,6 +453,62 @@ Open with moving:
   inward. The danger behind that rule is the first hole in 10.1, so the rule may not be
   needed once that hole is closed.
 
+### 8.10 Another way to write the move: a mark on both sides (Jack, sketch)
+
+Jack's idea: in `arr[1] = 3`, what is behind the name on the left says which part is being
+set. The move could work the same way, with a symbol on the variable on both sides, and a
+plain `=` between two heap owners would then be a copy. "We wouldn't need to do this
+heap-to-heap copy… we could just simplify it as `n = p`." (Jack)
+
+```go
+n = p;          // n gets its own copy of p's value, and p is unchanged
+n@ = p@;        // n takes over what p owns, and p is left null        (@ is a placeholder)
+```
+
+An owner has two things that can be named: its value and its ownership. Section 8.9 and this
+idea both use that split. They differ in which one the bare name stands for.
+
+| | 8.9 | this idea |
+|---|---|---|
+| the bare name `p` is | the link | the value |
+| copy the value across | `n^ = p^`, or `n = ^p^` for a new heap value | `n = p` |
+| hand the ownership over | `n = <-p` | `n@ = p@` |
+| a plain `=` between two owners | an error | a copy, like every other `=` |
+
+What follows from it (sketch):
+
+- **`=` means the same for every type:** the left side gets its own copy, and the right side
+  is never changed.
+- **The marked form works on anything.** (Jack: "it doesn't have to be in the heap") It takes
+  over what the right side owns on the heap, in place of copying it, and copies the plain
+  parts. For a value that owns nothing on the heap it is just a copy.
+- **Every line that empties an owner shows the mark on the emptied variable.**
+- **Returning a local needs no mark and no rule.** Copying a value that is about to end and
+  taking it over can't be told apart, so `return n;` is enough.
+- **The bare name of a `^T` is its value,** so following with `p^` is not written for an
+  owner: `list.next.next.value`. The README (10.4) already lets fields go straight through a
+  pointer. `^v` may not be needed either, because the type says where the value goes:
+  `var p: ^int = 5;`.
+
+```go
+list.next@ = list.next.next@;     // the third node moves up, and its old link is left null
+
+use(big);         // use gets its own copy
+use(big@);        // use takes the array over, and big is left null
+look(&big);       // look borrows it
+```
+
+What it costs:
+
+- **`n = p;` on linked data copies every node behind it.** The types show that, and the line
+  doesn't.
+- **A jump to another place in memory is not written** at the use, only in the type.
+- **`null` is set and tested on the ownership:** `p@ = null`.
+
+Open: the symbol, and whether it is the same on both sides; whether it goes behind the name
+like `arr[1]`; whether a borrower's bare name is the value too; what `n = p;` does when `n`
+is `null`.
+
 ## 9. What is still open
 
 - **The spellings** of the conversions in section 3, and how a value becomes an `owner`.
