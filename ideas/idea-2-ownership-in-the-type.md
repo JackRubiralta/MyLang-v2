@@ -257,6 +257,46 @@ What is behind a name is read before what is in front of it, so none of these ne
 - **A block written straight into an owner place** (section 5) would no longer be needed:
   `list.next = ^{ … };` keeps the same type on both sides of the `=`.
 
+### 8.7 Always explicit: a mark on every type (Jack)
+
+"I want symbols everywhere. I want it to always be explicit." (Jack)
+
+In sections 8.1 to 8.6 a plain `int` has no mark, so one kind of owner is written and the
+other is not. To make it always explicit, **every type starts with one of three marks**, and
+no type is written without one:
+
+| Mark | Who owns it | Where the value is |
+|---|---|---|
+| `#T` | this holder | right here, in the holder's own place |
+| `^T` | this holder | somewhere else, on the heap |
+| `&T` | another holder | wherever that owner put it |
+
+`^` does not mean "owner". It means "on the heap". A holder owns its value unless the mark is
+`&`.
+
+```go
+var count: #int = 3;                    // mine, right here
+var big: ^[1000]#int = ^[...];          // mine, on the heap
+var view: &[1000]#int = &big^;          // borrowed
+
+const Node: #type = {#int, ^Node, &Node};      // value here, next on the heap, prev borrowed
+
+const add: #(#int, #int)#int = (const x: #int, const y: #int){ return x + y; };
+const bump: #(&int)void = (var x: &int){ x^ = x^ + 1; };
+```
+
+The parts of a type are types too, so they carry a mark as well: `[3]#int` is three ints
+held in place, `[3]^Node` is three nodes each on the heap, and a function's type says how
+every parameter is passed.
+
+Open with this:
+
+- **The symbol for "right here".** `#` is a placeholder. It is the commonest mark, so a
+  lighter one would make long types easier to read.
+- **How far it goes.** As written, every part of a type is marked. A lighter version marks
+  only the front of a declared type and the links inside it (`#[3]int`, `{int, ^Node, &Node}`),
+  but then some parts are unmarked again.
+
 ## 9. What is still open
 
 - **The spellings** of the conversions in section 3, and how a value becomes an `owner`.
