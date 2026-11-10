@@ -6,6 +6,10 @@ functions and even types are all declared, stored, passed and returned the same 
 This file holds the rules decided so far, each with the reason behind it. Anything not
 decided yet is left out on purpose and listed at the end.
 
+**[DOCS.md](DOCS.md)** is the clean documentation of the core language: the rules and
+examples only, without the reasons or the open questions, and without the heap, pointers
+or `hand`.
+
 ## The idea behind MyLang
 
 MyLang is **declarative and explicit: reading the code tells you what happens.** Nothing
@@ -268,6 +272,14 @@ const Op: type = (int, int)int;
 var p: Pair = [1, 2];
 const add: Op = (const x: int, const y: int){ return x + y; };
 const ops: [2]Op = [add, add];       // an array of Op
+```
+
+`type` is itself a type, and a basic type can be named too. The new name is the same type
+under another name:
+
+```go
+const bitboard: type = uint;
+var board: bitboard = 0;
 ```
 
 Struct types are the one exception: they have their own kind of name, `struct` (11.1).
@@ -841,7 +853,29 @@ const swap: (int, int)null = (ref a: int, ref c: int){
 };
 ```
 
-### 8.4 A ref is not a type
+### 8.4 A ref can't outlive what it refers to
+
+A ref can only refer to something that lives at least as long as the ref itself. If what
+it refers to would be gone while the ref is still there, the compiler raises an error.
+
+```go
+var x: int = 3;
+ref a: int = x;            // fine: a and x end together, at the same }
+{
+    ref y: int = x;        // fine: y ends at this block's }, before x does
+    y = 4;                 // x is now 4
+}
+
+bump(x);                   // fine: bump's ref parameter ends when the call ends,
+                           // and x is still there
+
+ref top: int = three(7)[0];    // ERROR: the array three(7) gives back is gone at the end
+                               // of this line, but top would still be there
+```
+
+(`three` is the function from 7.6 that returns an array.)
+
+### 8.5 A ref is not a type
 
 `ref` never appears in a type, not even in a function's parameter list. A ref can't be put
 in an array or a map, and can't be returned, so these don't exist:
@@ -852,7 +886,7 @@ in an array or a map, and can't be returned, so these don't exist:
 (ref int)null          // ERROR: not a type; write (int)null
 ```
 
-### 8.5 Underneath: a ref is a location
+### 8.6 Underneath: a ref is a location
 
 A ref just holds the **location** of what it refers to: the place in memory of the
 variable, array element or map entry. Reading or assigning the ref goes to that place, so
@@ -864,12 +898,13 @@ ref top: int = scores[0];      // top holds the location of scores[0]
 top = 99;                      // writes 99 at that location
 ```
 
-### 8.6 Why
+### 8.7 Why
 
 - **Why a kind of name, not a type:** a reference type couldn't go everywhere other types
   can (an array of references or a returned reference breaks), so it would break rule 1.
   As a kind of name, every type stays first-class.
-- **Why it's safe:** a ref can't be stored or returned, so it can never outlive the place
+- **Why it's safe:** a ref can't be stored or returned, and the compiler rejects a ref that
+  would live longer than what it refers to (8.4), so it can never outlive the place
   it refers to. That place is always a spot in memory, including an array element or a
   map entry.
 - **Why `ref` stays out of types:** a ref is a kind of name, not a type, so it belongs
@@ -1430,8 +1465,9 @@ pb[2] = table[0][1];                // big is now [0, 0, 12]
 
 These are left out on purpose until they're decided:
 
-- **Basic types:** which ones there are and their sizes (`char` included), and what type a
-  plain number like `3` or `3.0` has.
+- **Basic types:** `int8`, `uint8`, `int` and `char` are decided (10 Nov). The rest of the
+  list, the sizes, and how a plain number like `3` or `3.0` gets its type are written out in
+  [DOCS.md](DOCS.md) section 3 as a proposal, waiting for a yes.
 - **Conversions:** which types can be converted to which, how `int(float)(3.7)` rounds, and
   what happens when a value doesn't fit (`int8(int)(300)`).
 - **Generic function types:** in `(type)([]T)T` the return type uses `T`, the type passed
