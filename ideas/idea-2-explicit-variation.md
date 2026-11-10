@@ -4,6 +4,11 @@
 variation of [idea 2](idea-2-ownership-in-the-type.md): the same idea, with nothing left
 unmarked.
 
+**Jack's view (10 Nov 2026): too much.** A value that is neither borrowed nor on the heap is
+already known to be owned right here, and its ownership never moves, so marking it says
+nothing new. This file is kept as a record. The version being worked on is idea 2 itself,
+where that case carries no mark (section 8.7 there).
+
 Lines marked **(Jack)** are things Jack said. Lines marked **(sketch)** are one way it could
 be written, shown only to make the idea concrete. Lines marked **(open)** still need a
 decision.
