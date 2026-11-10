@@ -1097,7 +1097,7 @@ const makeNode: (int)*Node = (const v: int){
 |---|---|---|
 | a pointer, `var p: *Node = makeNode(5);` | `p` points at the handed value, which stays on the heap | `p` |
 | a `ref`, `ref b: [1000]int = makeBig(1);` | `b` becomes the name for the handed value, which stays on the heap | `b` |
-| a plain `var`, `var c: [1000]int = makeBig(1);` | this works, but it just makes a copy (2.4); the handed value is freed straight away | nobody |
+| a plain `var`, `var c: [1000]int = makeBig(1);` | this works, but it just makes a copy (2.4); the handed value is freed straight away. Anything that value owned passes to the copy (see "What `hand` passes on" below) | nobody |
 
 ```go
 const makeBig: (int)[1000]int = (const x: int){
@@ -1134,6 +1134,41 @@ Each node is owned by the `next` that points at it, so the whole chain belongs t
 When `list`'s scope ends, every node goes with it. This works the same in a loop or a
 recursive function, because every new node is handed to something outside it.
 
+#### What `hand` passes on
+
+**`hand` passes on the value and everything that value owns.** So a pointer that owns a
+heap value can be handed too, and whatever receives it becomes the owner of that value:
+
+```go
+const makeList: ()*Node = (){
+    var head: *Node = makeNode(1);    // head owns the node holding 1
+    head.next = makeNode(2);          // that node's next owns the node holding 2
+    hand head;                        // the pointer is handed, and the nodes go with it
+};
+
+var list: *Node = makeList();         // list owns the node holding 1, and the node holding 2 through it
+```
+
+`head` ends with the function, but the nodes aren't freed: `hand` moved them to `list`.
+That's how a function can hand on something another function handed to it.
+
+The same holds when the handed heap value is itself a pointer:
+
+```go
+const f: ()*Node = (){
+    heap p: *Node = makeNode(5);      // p lives on the heap, and it's a pointer that owns a node
+    hand p;
+};
+
+ref r: *Node = f();    // r takes over the stored pointer itself, which still owns the node
+var q: *Node = f();    // q is a copy of the pointer and takes over the node;
+                       // only the heap slot that held the pointer is freed
+```
+
+Either way the node has exactly one owner and nothing is left pointing at a freed value.
+A struct works the same: handing a `Node` by value takes the nodes its `next` owns along
+with it.
+
 #### Other ways that were considered
 
 - **The value lives until you free it yourself** (like `delete` in C). Easy to forget, and
@@ -1142,6 +1177,9 @@ recursive function, because every new node is handed to something outside it.
   when anything is freed.
 - **The value is handed to an outer scope.** Chosen: `hand` shows exactly where ownership
   moves, and the owner shows exactly when it ends.
+- **`hand` passes only the pointer, not what it points at.** Turned down: in `makeList` the
+  nodes would still belong to `head`, which ends with the function, so they'd be freed and
+  `list` would point at nothing.
 
 ### 10.7 Why
 
@@ -1152,6 +1190,9 @@ recursive function, because every new node is handed to something outside it.
   handed value to a `var` therefore works, but only as a copy.
 - **Why the old value is freed:** `hand` passes ownership, so a value whose owner takes
   something new has no owner left.
+- **Why `hand` takes along everything the value owns:** ownership moves with the value, so
+  every heap value keeps exactly one owner, and a function can hand on what another function
+  handed to it. The code still shows where ownership moves: at the word `hand`.
 - **Why `*T`:** it goes in front, like every other modifier (section 3).
 - **Why a fat pointer is a struct:** it's two values kept together, the start and the
   length, which is exactly what a struct is (section 11). Nothing about it is hidden: `*`
@@ -1406,6 +1447,10 @@ These are left out on purpose until they're decided:
 - **`const` pointers:** whether `*p = …` is allowed when `p` is a `const`.
 - **`hand` in function types:** with first-class functions the caller only sees the type,
   so the type may need to show that a function hands, e.g. `(int)hand *Node`.
+- **Handing a pointer that doesn't own what it points at:** e.g. a pointer parameter, or
+  `var p: *Node = &n; hand p;`. If that were allowed, the value would have two owners.
+- **A handed value that nothing receives:** `makeBig(1);` on its own, or inside a bigger
+  expression such as `sum(makeBig(1))`.
 - **Copies of an owning pointer:** `var q: *Node = list.next;` makes a pointer that doesn't
   own the node; if the owner goes first, `q` points at nothing (see 14.2).
 - **Using a `null` pointer:** what `*p` does when `p` is `null`.
