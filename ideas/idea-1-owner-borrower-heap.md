@@ -166,16 +166,104 @@ var heap q: Point = { x: int = 1; y: int = 2; };         // every field is on th
 const borrower view: Point = p;                          // a read-only name for p
 ```
 
-## 8. Pointers under this idea (discussed, not decided)
+## 8. Pointers and linked data (discussed, not decided)
 
-These came up in the discussion and are **not** part of the idea yet:
+Lines marked **(sketch)** are one way it could be written, shown only to make the idea
+concrete.
 
-- A pointer would say its role too: `var owner p: *Node` owns the heap value it points at,
-  and `var borrower q: *Node` holds an address it doesn't own.
-- An owner pointer is only ever given a `hand` or `null`. A borrower pointer is given `&x`,
-  another pointer or `null`.
+### 8.1 What a linked list needs
+
+- **A pointer in the type.** A `Node` can't contain a `Node`, because it would have no fixed
+  size, so the shape has to be `{int, *Node}`.
+- **`null`** for the last node's link.
+- **A pointer says whether it owns or borrows.** `var owner p: *Node` owns the value it
+  points at, and `var borrower q: *Node` holds an address it doesn't own.
+- **What an owning pointer points at is always on the heap,** because a node made while the
+  program runs has to outlive the code that made it. So the word `heap` isn't written on the
+  right-hand side. (Jack: doesn't want to write `heap` to put a node on the heap)
+
+```go
+const owner Node: type = {int, owner *Node};
+
+var owner list: Node = { value: int = 1; next: *Node = null; };
+
+list.next = &{ value: int = 2; next: *Node = null; };        // (sketch) a new node, owned by list.next
+list.next.next = &{ value: int = 3; next: *Node = null; };
+
+var borrower cur: *Node = list.next;                         // a name that borrows a node
+```
+
+The word on `list` only says where the first node lives: `var owner list` puts it on the
+stack and `var heap list` puts it on the heap. Every later node is on the heap either way.
+
+### 8.2 Moving ownership (open)
+
+Building a list needs no move, because a new node never had another owner. Relinking does:
+to remove the second node, the third has to move up, and it can only have one owner.
+
+```go
+list.next = take list.next.next;     // (sketch) the tail moves up, and its old place is left null
+```
+
+- Whether `hand` stays, in what form, is **not decided**. (Jack: "I don't know about doing
+  hand again")
+- One possible rule: a move takes what an owning pointer holds and leaves `null` behind.
+  That would replace section 5's rules about the old name going empty.
+- With no move at all the language still works, but setting one owning pointer from another
+  has to copy everything it owns.
+
+### 8.3 Two pointers to one value
+
+**Two pointers can point at the same value when one owns it and the other borrows it. The
+borrower just can't outlive the owner.** (Jack)
+
+That makes a second link possible: a doubly linked list, a tree node that points back at its
+parent, or a list that also keeps a pointer to its last node.
+
+```go
+const owner Node: type = {int, owner *Node, borrower *Node};     // value, next, prev
+
+var owner a: Node = { value: int = 1; next: *Node = null; prev: *Node = null; };
+a.next = &{ value: int = 2; next: *Node = null; prev: *Node = &a; };   // (sketch)
+```
+
+The second node is owned by `a.next`, and its `prev` borrows `a`. The rule holds here with
+no checking: the second node is freed when `a` is, so its `prev` can never outlive `a`.
+
+Two things this needs:
+
+1. **The field has to say which it is, and the type has to hold it** (`owner *Node`,
+   `borrower *Node` in the shape). If the word only lived in each value's block, two values of
+   the same type could disagree about whether a field owns. (to check)
+2. **A rule for the one case that scopes can't check** (8.4).
+
+### 8.4 Removing a node that a stored borrower still points at (open)
+
+For a borrower that is a name, the compiler compares scopes. A borrower stored inside a node
+has no scope of its own, and one moment can go wrong:
+
+```go
+var owner list: *Node = ...;       // list owns a, a.next owns b, and b.prev borrows a
+
+list = take list.next;             // b moves up and a is freed,
+                                   // but b.prev still points at a
+```
+
+The compiler can't see that `b.prev` points at `a`, because that link was set somewhere else
+while the program ran. Three ways to handle it, none chosen yet:
+
+| Option | What happens | Cost |
+|---|---|---|
+| You clear it yourself | you write `b.prev = null;` before removing `a`, and the compiler trusts you | a mistake leaves a dangling pointer |
+| Checked while running | each node counts its stored borrowers, and removing one that's still borrowed fails | bookkeeping the code doesn't show |
+| Not allowed | a node with a borrower field can't be moved or removed, only freed with its whole structure | such structures can be built but not edited |
+
+Borrowers never free anything, so none of the three can leak.
+
+### 8.5 Functions
+
 - A pointer going into a function is always a borrower, and a pointer coming out is always
-  handed, so function types need no extra mark.
+  owned, so function types need no extra mark. (to check)
 
 ## 9. What it costs, and what is still open
 
@@ -184,8 +272,12 @@ These came up in the discussion and are **not** part of the idea yet:
 - **A call doesn't show sharing.** `bump(count)` changes `count`, and neither the call nor
   the function's type `(int)void` says so. This is problem 14.1 in the README, and it stays.
 - **What `owner` means on a pointer.** On a plain type an owner owns its own value. On a
-  pointer it would own the value pointed at. Section 8 is where that gets decided.
-- **Pointer fields.** Fields carry no words, so a struct can't yet say whether a pointer
-  field owns or borrows what it points at.
+  pointer it owns the value pointed at (8.1).
+- **Pointer fields.** Other fields carry no words, but a pointer field has to say `owner` or
+  `borrower`, and that has to be part of the type (8.3).
+- **Moving ownership.** Whether `hand` stays, or a smaller move replaces it (8.2).
+- **Removing a node that a stored borrower still points at** (8.4).
+- **Copying a struct that owns nodes.** `var owner b: Node = list;` can't share the nodes,
+  so it would have to copy all of them.
 - **A `heap` parameter.** Whether a parameter can be `heap`, and what that would mean.
 - **A handed value that nothing receives,** such as `makeBig(1);` on its own.
