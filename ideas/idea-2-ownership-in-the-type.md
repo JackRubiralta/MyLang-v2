@@ -297,6 +297,79 @@ Open with this:
   only the front of a declared type and the links inside it (`#[3]int`, `{int, ^Node, &Node}`),
   but then some parts are unmarked again.
 
+### 8.8 Before or after: every position, with nested cases (sketch)
+
+One rule decides every position: **what adds a mark goes in front, and what removes one goes
+behind.**
+
+| | Written | Position | Effect on the type |
+|---|---|---|---|
+| a type's mark | `^T`, `&T`, `#T` | front | |
+| make a heap value | `^v` | front | `T` becomes `^T` |
+| make a borrower | `&x` | front | `T` becomes `&T` |
+| move ownership | `hand p` | front | stays `^T`, and `p` is left `null` |
+| follow a link | `p^` | behind | `^T` or `&T` becomes `T` |
+
+What is behind a name is read first, left to right. What is in front is applied after it.
+No brackets are ever needed.
+
+```go
+const Node: #type = {#int, ^Node, &Node};        // value, next (heap), prev (borrowed)
+
+var list: ^Node = ^{ value: #int = 1; next: ^Node = null; prev: &Node = null; };
+
+list^.next^.next^.value          // follow, field, follow, field, follow, field: a path, left to right
+var cur: &Node = &list^.next^;   // follow the path to the second node, then borrow it
+cur^.value = 5;                  // write through a borrower
+
+var kids: #[2]^Node = [^{ ... }, ^{ ... }];
+kids[0]^.value                   // index, follow, field
+
+var big: ^[1000]#int = ^[...];
+big^[3] = 7;                     // follow, index
+var picks: #[2]&int = [&big^[0], &big^[1]];     // follow, index, then borrow
+picks[1]^ = 9;
+
+var slot: &^Node = &list^.next;  // a borrower of the link itself, not of the node
+slot^^.value                     // follow to the link, follow to the node, field
+```
+
+Why each position:
+
+- **Types in front.** MyLang's own test (README 3.6) found that only all-in-front types are
+  never ambiguous. A mark behind, `[3]int^`, could mean an array of links or a link to an
+  array.
+- **Follow behind.** It is a use, like `a[0]`, `f(1)` and `p.x`, so a path reads left to
+  right in the same order as the type. In front it would need brackets: `(*(*list).next).value`.
+- **Make in front.** The expression then looks like its type: `^5` is a `^int` and `&x` is a
+  `&int`. You also see "heap" or "borrowed" before a long value, not after its last line.
+  And the same `^` can mean "make" in front and "follow" behind without clashing.
+
+### 8.9 Moving ownership (sketch)
+
+A borrower can't outlive what it borrows. To make a value outlive the scope that made it,
+the value has to be on the heap and its ownership has to move, and the move is always written
+out. (Jack)
+
+```go
+list^.next = hand list^.next^.next;      // the third node moves up; its old link is left null
+```
+
+- **A move goes in front,** like the other things that produce a link. It changes who frees
+  the memory, so it should be the first thing read on the line.
+- **Only a `^` link can be moved.** A `#` value lives in its holder, and a `&` link owns
+  nothing.
+- **The old owner is left `null`,** so there is still exactly one owner.
+- **A plain `=` between two heap owners is an error.** You say which you mean:
+  `hand p` moves it, and `^p^` makes a new heap copy of what `p` points at.
+
+| You want | You write | The rule |
+|---|---|---|
+| to use a value for a while | `&x` | the borrower has to end first |
+| a value that outlives this scope | `^v` to make it, `hand p` to pass it on | one owner at a time; the old one is left `null` |
+
+Open: whether the move is the word `hand`, another word, or a symbol.
+
 ## 9. What is still open
 
 - **The spellings** of the conversions in section 3, and how a value becomes an `owner`.
