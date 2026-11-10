@@ -456,131 +456,100 @@ Open with moving:
 ### 8.10 Another way to write the move: a mark on both sides (Jack, sketch)
 
 Jack's idea: in `arr[1] = 3`, what is behind the name on the left says which part is being
-set. The move could work the same way, with a symbol on the variable on both sides, and a
-plain `=` between two heap owners would then be a copy. "We wouldn't need to do this
-heap-to-heap copy… we could just simplify it as `n = p`." (Jack)
+set. The move could work the same way, with a symbol on the variable on both sides. A plain
+`=` between two heap owners is then a copy. "We wouldn't need to do this heap-to-heap copy…
+we could just simplify it as `n = p`." (Jack)
 
 ```go
-n = p;          // n gets its own copy of p's value, and p is unchanged
+n = p;          // n gets its own copy of p's value, on the heap, and p is unchanged
 n@ = p@;        // n takes over what p owns, and p is left null        (@ is a placeholder)
 ```
 
-An owner has two things that can be named: its value and its ownership. Section 8.9 and this
-idea both use that split. They differ in which one the bare name stands for.
+**The types stay strict.** "`5` would just be like a regular int, and `^5` is `^int`." (Jack)
+So `^v`, `p^` and `&x` are all still written (8.2, 8.3), and a heap or borrowed value is
+still converted back to a plain one with `p^`.
+
+Compared with 8.9, only two things change:
 
 | | 8.9 | this idea |
 |---|---|---|
-| the bare name `p` is | the link | the value |
-| copy the value across | `n^ = p^`, or `n = ^p^` for a new heap value | `n = p` |
+| a plain `=` between two heap owners | an error | a copy: the left side gets its own heap value |
 | hand the ownership over | `n = <-p` | `n@ = p@` |
-| a plain `=` between two owners | an error | a copy, like every other `=` |
 
-What follows from it (sketch):
+Everything in one place:
 
-- **`=` means the same for every type:** the left side gets its own copy, and the right side
-  is never changed.
-- **The marked form works on anything.** (Jack: "it doesn't have to be in the heap") It takes
-  over what the right side owns on the heap, in place of copying it, and copies the plain
-  parts. For a value that owns nothing on the heap it is just a copy.
-- **Every line that empties an owner shows the mark on the emptied variable.**
-- **Returning a local needs no mark and no rule.** Copying a value that is about to end and
-  taking it over can't be told apart, so `return n;` is enough.
-- **The bare name of a `^T` is its value,** so following with `p^` is not written for an
-  owner: `list.next.next.value`. The README (10.4) already lets fields go straight through a
-  pointer. `^v` may not be needed either, because the type says where the value goes:
-  `var p: ^int = 5;`.
-
-```go
-list.next@ = list.next.next@;     // the third node moves up, and its old link is left null
-
-use(big);         // use gets its own copy
-use(big@);        // use takes the array over, and big is left null
-look(&big);       // look borrows it
-```
-
-What it costs:
-
-- **`n = p;` on linked data copies every node behind it.** The types show that, and the line
-  doesn't.
-- **A jump to another place in memory is not written** at the use, only in the type.
-- **`null` is set and tested on the ownership:** `p@ = null`.
-
-Open: the symbol, and whether it is the same on both sides; whether it goes behind the name
-like `arr[1]`; whether a borrower's bare name is the value too; what `n = p;` does when `n`
-is `null`.
-
-### 8.11 The heap and borrowing under 8.10 (sketch)
-
-Both stay, and the types `^T` and `&T` are unchanged. A bare name is always the value, so
-only two symbols are left in the code itself.
-
-| Written | Meaning |
+| You want | You write |
 |---|---|
-| `^T` in a type | a `T` on the heap, owned by this holder |
-| `&T` in a type | a `T` that another holder owns |
-| `x` | the value, whatever kind of holder `x` is |
-| `&x` | a borrower of `x` |
-| `x@` | `x`'s ownership itself, to move it or to set it to `null` |
-
-`p^` (follow), `^v` (make a heap value) and `<-p` (move) are not needed.
-
-**The heap.**
+| a plain value on the heap | `^v` |
+| a borrower of a value | `&x` |
+| the plain value behind a heap owner or a borrower | `p^` |
+| your own copy of anything | `=` |
+| to take over what a heap owner owns | `n@ = p@` |
 
 ```go
-var big: ^[1000]int = [...];        // the type says it goes on the heap
-big[3] = 7;                         // used like any array
-var copy: ^[1000]int = big;         // its own copy, also on the heap
-var mine: ^[1000]int = big@;        // takes big's array over, and big is left null
+var p: ^int = ^5;                   // 5 is an int, and ^5 is a ^int
+var x: int = p^;                    // back to a plain int (a copy)
+p^ = 6;                             // write to the value on the heap
+var q: ^int = p;                    // q gets its own heap int holding 6
+var r: ^int = p@;                   // r takes p's over, and p is left null
+
+var count: int = 3;
+var b: &int = &count;               // b borrows count
+b^ = 5;                             // count is now 5
+var y: int = b^;                    // back to a plain int (a copy)
+var view: &int = &q^;               // borrow what q owns
+
+const bump: (&int)void = (var n: &int){ n^ = n^ + 1; };
+bump(&count);
 ```
 
 ```go
 const Node: type = {int, ^Node};    // value, next
 
 const makeNode: (int)^Node = (const v: int){
-    var n: ^Node = { value: int = v; next: ^Node = null; };
+    var n: ^Node = ^{ value: int = v; next: ^Node = null; };
     return n;                       // n ends here, so the caller simply gets it
 };
 
 var list: ^Node = makeNode(1);
-list.next = makeNode(2);            // a call's result has no other owner, so it is taken, not copied
-list.next.next = makeNode(3);
-list.next.next.value                // 3
+list^.next = makeNode(2);           // a call's result has no other owner, so it is taken, not copied
+list^.next^.next = makeNode(3);
 
-list.next@ = list.next.next@;       // the third node moves up, and the second is freed
+list^.next@ = list^.next^.next@;    // the third node moves up, and the second is freed
+
+use(big);         // use gets its own copy
+use(big@);        // use takes the array over, and big is left null
+look(&big^);      // look borrows it
 ```
 
-- A heap value lives until its owner ends or its ownership is given something else.
-- To outlive the scope that made it, it is returned or moved to a longer-lived owner.
-- A declaration, a call and a field in a block have no existing variable on the left, so only
-  the right side carries the mark: `var mine: ^T = big@;`, `use(big@);`.
+What follows from it (sketch):
 
-**Borrowing.**
+- **`=` means the same for every type:** the left side gets its own copy, and the right side
+  is never changed. A copy of a `^T` is another `T` on the heap. A copy of a `&T` is another
+  borrower of the same value, because a borrower owns nothing.
+- **Every line that empties an owner shows the mark on the emptied variable.**
+- **Returning a local needs no mark and no rule.** Copying a value that is about to end and
+  taking it over can't be told apart, so `return n;` is enough. The same goes for a call's
+  result and a value written on the spot.
+- **The marked form works on anything.** (Jack: "it doesn't have to be in the heap") On a
+  struct that holds heap links it takes the links over, where a plain `=` would copy them.
+  For a value that owns nothing on the heap it is just a copy.
+- **Where there is no existing variable on the left, only the right side carries the mark:**
+  `var r: ^int = p@;`, `use(big@);`.
+- **`null` needs no mark:** `p = null;` and `p == null`.
+- **Borrowing is unchanged:** a borrower can't outlive what it borrows, a borrower of a
+  `const` is read-only, and a borrower never frees anything. (Jack)
 
-```go
-var count: int = 3;
-var b: &int = &count;               // b borrows count
-b = 5;                              // same memory: count is now 5
+What it costs:
 
-var view: &[1000]int = &big;        // borrows a heap value, and nothing is copied
-view[0]
+- **`n = p;` on linked data copies every node behind it.** The types show that, and the line
+  doesn't.
+- **A plain `=` can put a new value on the heap** with no `^` on the line. The type of the
+  left side says so.
 
-const bump: (&int)void = (var x: &int){ x = x + 1; };
-bump(&count);                       // the call still shows the borrow
-```
-
-- The rules are the same: a borrower can't outlive what it borrows, a borrower of a `const`
-  is read-only, and a borrower never frees anything. (Jack)
-- A borrower's bare name is the value, like the README's `ref`. `b@ = &other;` would point it
-  at something else.
-
-**The first hole in 10.1 gets smaller.** `p = 6;` now writes into the same heap value, so a
-borrower of it sees 6 and nothing is freed. A borrower can still dangle where an owner's value
-is freed while it is borrowed: `p@ = null;`, a move that frees the old value, or a plain `=`
-that replaces linked data with something shorter.
-
-Open here: the spelling of `null` for a new holder (`next: ^Node = null`), what `n = p;` does
-when `n` is `null` (the sketch: `n` gets a new heap value), and how a borrower of an ownership
-is written (`&^Node`).
+Open: the symbol, and whether it is the same on both sides; what a plain `=` does with the
+left side's old heap value (written over in place, or freed and replaced), which decides
+whether a borrower of it survives (the first hole in 10.1).
 
 ## 9. What is still open
 
