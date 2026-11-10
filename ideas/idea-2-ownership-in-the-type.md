@@ -415,9 +415,18 @@ Other ways the move could be spelled (open):
 
 Open with moving:
 
-- **Copying a plain value that holds a heap link.** `var b: Node = a;` would give the node
-  behind `a.next` two owners. Either it is an error and you move or copy the link yourself,
-  or it copies every node behind it, which is work the line doesn't show.
+- **Copying a plain value that holds a heap link.** Setting a struct sets every field
+  (README 11.4), and for `var b: Node = a;` one of those fields is a heap owner set from
+  another heap owner with a plain `=`. Under the rule above that is already an error, so two
+  owners can never happen. The same goes for everything else that copies such a value: `^a`,
+  `p^` put into a plain variable, `^p^`, and passing it to a function by value. The other
+  choice would be to copy every node behind it, which is work the line doesn't show.
+- **Moving a whole plain value that holds heap links.** A function that builds a `Node` in
+  place can't give it back by copying it. One way: `<-a` on such a value copies its plain
+  fields and moves every heap link inside it, so `return <-n;` and `var b: Node = <-a;` work.
+  That is what the README (10.6) already says a move passes on: the value and everything it
+  owns. "Only a `^` link can be moved" would then read "only heap links move, and the plain
+  part around them is copied".
 - **Moving out of a `const` owner.** The move changes the old owner to `null`, so it would
   have to be an error.
 - **A `^T` parameter:** whether a heap value can be moved into a function at all.
