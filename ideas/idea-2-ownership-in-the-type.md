@@ -363,6 +363,9 @@ or borrowed.
 
 ### 8.9 Moving ownership
 
+Section 8.10 is the version being worked on now. It changes how the move is written and what
+a plain `=` between two heap owners does. The rest of this section still applies.
+
 A borrower can't outlive what it borrows. To make a value outlive the scope that made it,
 the value has to be on the heap and its ownership has to move. (Jack)
 
@@ -542,8 +545,9 @@ What follows from it (sketch):
 
 What it costs:
 
-- **`n = p;` on linked data copies every node behind it.** The types show that, and the line
-  doesn't.
+- **`=` is always a deep copy.** `n = p;` on linked data copies every node behind it. The
+  types show that, and the line doesn't. (Jack: "this is just enforced deep copies, which is
+  fine")
 - **A plain `=` can put a new value on the heap** with no `^` on the line. The type of the
   left side says so.
 
@@ -599,7 +603,7 @@ Ways to close it, none chosen:
 **Copying a struct that holds a heap link.** If a link were handed over with nothing
 written, `var first: Node = list^;` would read like a copy of the first node but take
 `list^.next` with it and leave it `null`. With the mark in 8.9 it is an error, and every move
-is a `<-` written in the code.
+is a `<-` written in the code. Under 8.10 it is a deep copy, so nothing is emptied.
 
 ### 10.2 Limits that come with the design
 
@@ -607,7 +611,7 @@ is a `<-` written in the code.
 |---|---|
 | one owner, so ownership is tree-shaped | a graph, a cycle, or two lists sharing a tail can't be owned twice; the second link has to be a borrower |
 | `null` is only found while running | following a link that is `null`, including one that was handed over, fails while running |
-| a deep copy is written by hand | `^p^` copies one value; copying a whole list needs a function that walks it |
+| `=` is always a deep copy (8.10) | copying a list copies every node behind it; to avoid the copy you borrow with `&` or take over with `@` |
 | freeing cascades | when an owner ends, everything behind it is freed, one node after another, and the line doesn't show that work |
 | no copy can share a tail | copying a node can't keep the same `next`, because that node would have two owners (8.9) |
 | a function that takes a heap link frees it | a `^T` parameter owns what it is given, so the value is gone after the call unless the function passes it on; to only look, the parameter is `&T` |
