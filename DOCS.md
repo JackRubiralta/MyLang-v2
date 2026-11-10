@@ -1718,6 +1718,31 @@ The rule from 8.5 still applies: the borrower can't outlive the owner. It holds 
 because the second node is freed whenever the first one is. Removing or replacing a node
 that another node's `prev` still borrows is the programmer's job to get right (8.16).
 
+**Copying a list like this takes a function of its own.** A plain `=` copies field by field
+(8.8), so each copied node's `prev` would still borrow a node of the original. The copy
+function makes the plain copy, then sets every `prev` inside it:
+
+```go
+const linkBack: (&^Link, &Link)void = (var owner: &^Link, var before: &Link){
+    const cases: [bool](&^Link, &Link)void = [
+        (var o: &^Link, var back: &Link){
+            o^^.prev = back;                  // this node's prev borrows the node before it
+            linkBack(&o^^.next, &o^^);        // go on: the next owner, with this node before it
+        },
+        (var o: &^Link, var back: &Link){ }   // no node here, so stop
+    ];
+    cases[owner^ == null](owner, before);
+};
+
+const copyLinks: (&^Link)^Link = (const from: &^Link){
+    var made: ^Link = from^;                  // field by field: every node is copied
+    linkBack(&made, null);                    // set every prev inside the copy
+    return made;
+};
+
+var b: ^Link = copyLinks(&a);                 // b is a separate list, with its own prev links
+```
+
 ### 8.15 What the compiler rejects, and what is checked while running
 
 **Rejected before the program runs:**
