@@ -257,7 +257,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | unsized array | `[]T` | `[]int` | array of ints |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
-| function that returns nothing | `(P1, P2)null` | `(int)null` | takes an int, returns nothing |
+| function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
 | struct | `{T1, T2}` | `{bool, int}` | a struct with a bool field and an int field |
 
 ### 3.4 Modifiers stack in any combination
@@ -304,12 +304,12 @@ Type      = BasicType
           | "{" Type "}" Type                 (map: {key}value)
           | "{" TypeList "}"                  (struct: its field types, section 9)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
-Return    = Type | "null"                     (null = returns nothing)
+Return    = Type | "void"                     (void = returns nothing)
 TypeList  = Type { "," Type }
 ```
 
 A function type always ends with its return type. A function that returns nothing ends
-with `null`: `(int)null` takes an int and returns nothing, and `()null` takes nothing and
+with `void`: `(int)void` takes an int and returns nothing, and `()void` takes nothing and
 returns nothing.
 
 ---
@@ -487,7 +487,7 @@ var z: any = wrapInt(7);           // holds the type int and the value 7
 A function can take an `any`, so it can be called with a value of any type:
 
 ```go
-const describe: (any)null = (const x: any){
+const describe: (any)void = (const x: any){
     x.T                    // the type it was given
     ...
 };
@@ -774,15 +774,15 @@ Each argument is copied into its parameter (2.4), unless the parameter is a `ref
 
 ### 7.3 A function that returns nothing
 
-Its return type is `null`:
+Its return type is `void`:
 
 ```go
-const show: (int)null = (const value: int){
+const show: (int)void = (const value: int){
     ...
 };
 show(5);
 
-const hello: ()null = (){      // takes nothing, returns nothing
+const hello: ()void = (){      // takes nothing, returns nothing
     ...
 };
 hello();
@@ -925,7 +925,7 @@ A function can take a parameter as a `ref`, so it can change the caller's variab
 the parameter in the function's value says `ref`. The function's type stays plain:
 
 ```go
-const bump: (int)null = (ref x: int){
+const bump: (int)void = (ref x: int){
     x = x + 1;
 };
 
@@ -934,7 +934,7 @@ bump(n);               // n is now 4
 bump(scores[1]);       // scores[1] goes up by 1
 bump(3);               // ERROR: 3 isn't a variable
 
-const swap: (int, int)null = (ref a: int, ref c: int){
+const swap: (int, int)void = (ref a: int, ref c: int){
     var t: int = a;
     a = c;
     c = t;
@@ -984,7 +984,7 @@ in an array, a map or a struct, and can't be returned, so these don't exist:
 ```go
 [3]ref int             // ERROR: not a type
 (int)ref int           // ERROR: not a type
-(ref int)null          // ERROR: not a type; write (int)null
+(ref int)void          // ERROR: not a type; write (int)void
 ```
 
 ### 8.6 Underneath: a ref is a saved address
@@ -1122,9 +1122,9 @@ A function declared inside a struct is in the struct's scope, so it uses the str
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)null} = {
+var counter: {int, (int)void} = {
     var count: int = 0;
-    const add: (int)null = (const n: int){
+    const add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
     };
 };
@@ -1202,7 +1202,7 @@ const ops: {int}Op = {1: add, 2: mul};
 var table: [2]Row = [[1, 2], [3, 4]];
 
 // a function that takes a function and a ref
-const applyTo: (Op, int, int)null = (const f: Op, ref target: int, const by: int){
+const applyTo: (Op, int, int)void = (const f: Op, ref target: int, const by: int){
     target = f(target, by);
 };
 
@@ -1256,7 +1256,7 @@ c.x = 0;                            // corner.x is now 0
 | `[]T` | unsized array of `T`s: the length comes from the first value |
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
-| `(P1)null` | function returning nothing |
+| `(P1)void` | function returning nothing |
 | `{T1, T2}` | struct with fields of types `T1` and `T2` |
 
 ### Built-in functions
@@ -1310,7 +1310,7 @@ passed.
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
 | `ref bad: int = 3;` and `bump(3);` | `3` isn't a variable |
 | `ref top: int = three(7)[0];` | the ref would outlive what it refers to |
-| `[3]ref int`, `(int)ref int`, `(ref int)null` | `ref` is not a type |
+| `[3]ref int`, `(int)ref int`, `(ref int)void` | `ref` is not a type |
 | `Point(1, 2)` | a type is never called |
 | `settings.debug = true;` | `debug` is a `const` field |
 

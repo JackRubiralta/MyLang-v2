@@ -149,7 +149,7 @@ A type is a basic type, or a modifier followed by a type:
 | unsized array | `[]T` | `[]int` | array of ints |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
-| function that returns nothing | `(P1, P2)null` | `(int)null` | takes an int, returns nothing |
+| function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
 | pointer | `*T` | `*int` | pointer to an int |
 
 ### 3.2 Modifiers stack in any combination
@@ -197,12 +197,12 @@ Type      = BasicType
           | "{" TypeList "}"                  (struct: its field types, section 11)
           | "*" Type                          (pointer)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
-Return    = Type | "null"                     (null = returns nothing)
+Return    = Type | "void"                     (void = returns nothing)
 TypeList  = Type { "," Type }
 ```
 
 A function type always ends with its return type. A function that returns nothing ends
-with `null`: `(int)null`, and `()null` takes nothing and returns nothing.
+with `void`: `(int)void`, and `()void` takes nothing and returns nothing.
 
 `{…}` starts both a map type (`{int}bool`) and a struct type (`{int, *Node}`); how a
 one-field struct `{int}` is told apart from a map isn't decided yet (section 13).
@@ -387,7 +387,7 @@ idea: `{T: type, T}` (section 13).
 A function can take an `any`, so it can be called with a value of any type:
 
 ```go
-const describe: (any)null = (const x: any){
+const describe: (any)void = (const x: any){
     x.T                    // the type it was given
     ...
 };
@@ -676,15 +676,15 @@ add(1, 2)              // 3
 
 ### 7.3 A function that returns nothing
 
-Its return type is `null`:
+Its return type is `void`:
 
 ```go
-const show: (int)null = (const value: int){
+const show: (int)void = (const value: int){
     ...
 };
 show(5);
 
-const hello: ()null = (){      // takes nothing, returns nothing
+const hello: ()void = (){      // takes nothing, returns nothing
     ...
 };
 hello();
@@ -825,7 +825,7 @@ A function can take a parameter as a `ref`, so it can change the caller's variab
 the parameter in the function's value says `ref`; the function's type stays plain:
 
 ```go
-const bump: (int)null = (ref x: int){
+const bump: (int)void = (ref x: int){
     x = x + 1;
 };
 
@@ -834,7 +834,7 @@ bump(n);               // n is now 4
 bump(scores[1]);       // scores[1] goes up by 1
 bump(3);               // ERROR: 3 isn't a variable
 
-const swap: (int, int)null = (ref a: int, ref c: int){
+const swap: (int, int)void = (ref a: int, ref c: int){
     var t: int = a;
     a = c;
     c = t;
@@ -871,7 +871,7 @@ in an array or a map, and can't be returned, so these don't exist:
 ```go
 [3]ref int             // ERROR: not a type
 (int)ref int           // ERROR: not a type
-(ref int)null          // ERROR: not a type; write (int)null
+(ref int)void          // ERROR: not a type; write (int)void
 ```
 
 ### 8.6 Underneath: a ref is a location
@@ -927,7 +927,7 @@ A heap variable dies when its scope ends (the `{ }` it was declared in), exactly
 stack variable:
 
 ```go
-const work: (int)null = (const x: int){
+const work: (int)void = (const x: int){
     heap big: [3]int = [x, x, x];
     big[0] = 9;
 };                     // work ends, so big and its value are gone
@@ -1028,7 +1028,8 @@ p = &n;                // now it points at n
 p = null;              // and at nothing again
 ```
 
-`null` is also how a function type says it returns nothing: `(int)null` (3.4).
+`null` is only a pointer value. A function that returns nothing uses `void` in its type:
+`(int)void` (3.4).
 
 ### 10.4 Going through a pointer
 
@@ -1329,9 +1330,9 @@ A function declared inside a struct is in the struct's scope, so it uses the str
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)null} = {
+var counter: {int, (int)void} = {
     var count: int = 0;
-    const add: (int)null = (const n: int){
+    const add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
     };
 };
@@ -1434,7 +1435,7 @@ const ops: {int}Op = {1: add, 2: mul};
 var table: [2]Row = [[1, 2], [3, 4]];
 
 // a function that takes a function and a ref
-const applyTo: (Op, int, int)null = (const f: Op, ref target: int, const by: int){
+const applyTo: (Op, int, int)void = (const f: Op, ref target: int, const by: int){
     target = f(target, by);
 };
 
@@ -1471,7 +1472,7 @@ These are left out on purpose until they're decided:
   - *Advantage of names:* a later part of a type can refer to an earlier one by name. That
     is exactly what generics and `any` need, so they come with no extra rule:
     ```go
-    const show: (T: type, v: T)null = (const T: type, const v: T){ ... };
+    const show: (T: type, v: T)void = (const T: type, const v: T){ ... };
     ```
     Here the type of `v` is "whatever was passed as `T`", which a type without names can't
     say. The same works for a struct holding a type and a value: `{T: type, value: T}`.
@@ -1480,7 +1481,7 @@ These are left out on purpose until they're decided:
     differently.
   - *Cost:* every type gets longer, e.g. `(x: int, y: int)int` instead of `(int, int)int`.
   - *Middle option:* names only where a later part of the type needs them, e.g.
-    `(T: type, T)null` and `{T: type, T}`, with every other type left without names.
+    `(T: type, T)void` and `{T: type, T}`, with every other type left without names.
 - **`{…}` as a map or a struct:** `{int}bool` is a map and `{int}` would be a struct with one
   field. A possible rule: a `{…}` followed by a type is a map, otherwise a struct.
 - **Control flow:** `if`, loops and the like.
@@ -1513,9 +1514,9 @@ some possible fixes. None of the fixes is decided.
 ### 14.1 Refs don't show in types, so first-class functions can't be checked
 
 ```go
-const bump: (int)null = (ref x: int){ x = x + 1; };
-const show: (int)null = (const x: int){ ... };
-const fs: [2](int)null = [bump, show];     // same type, so allowed
+const bump: (int)void = (ref x: int){ x = x + 1; };
+const show: (int)void = (const x: int){ ... };
+const fs: [2](int)void = [bump, show];     // same type, so allowed
 fs[i](n);       // does n change? it depends on i, which is only known when the program runs
 fs[i](3);       // fine for show, an ERROR for bump, and nothing can tell which before running
 ```
@@ -1558,7 +1559,7 @@ const T: type = (Op);        // a function that takes an Op, or just Op in brack
 ```
 
 Named types are ordinary names, so brackets around one are ambiguous. Since every function
-type now ends with its return type (`(Op)null`, `(Op)int`), `(Op)` on its own can't be a
+type now ends with its return type (`(Op)void`, `(Op)int`), `(Op)` on its own can't be a
 function type, which mostly settles this. Possible fix for the rest: in a type, `( … )`
 always starts a function and is never used for grouping.
 
