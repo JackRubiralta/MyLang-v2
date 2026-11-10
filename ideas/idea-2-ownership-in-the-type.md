@@ -223,7 +223,7 @@ bump(&count);
 | either link | the value | `p^` |
 | a value | an owner | `^v` |
 | a borrower | an owner | not allowed; `^b^` makes a new owner holding a copy |
-| an owner | another owner | `<-p` moves it (8.9); `^p^` makes a copy |
+| an owner | another owner | nothing is written: giving the link hands it over (8.9); `^p^` makes a copy |
 
 What is behind a name is read before what is in front of it, so none of these needs brackets:
 `&p^` is "follow `p`, then borrow".
@@ -243,8 +243,8 @@ one owner to another needs something new, and that is the move (8.9).
 
 **`^v` makes a copy.** (Jack) `v` stays as it is, and the heap gets a value of its own. A
 value written on the spot, like `^5` or `^{ … }`, has no original, so it is simply built on
-the heap. `p^` put into a plain variable copies as well. Only `&x` and `<-p` give a link
-without copying anything.
+the heap. `p^` put into a plain variable copies as well. Only `&x` and handing a heap link
+over (8.9) give a link without copying anything.
 
 ### 8.4 Why these symbols
 
@@ -307,7 +307,7 @@ behind.**
 | a type's mark | `^T`, `&T` | front | |
 | make a heap value | `^v` | front | `T` becomes `^T` |
 | make a borrower | `&x` | front | `T` becomes `&T` |
-| move ownership | `<-p` | front | stays `^T`, and `p` is left `null` |
+| move ownership | nothing: the link is given as it is | | stays `^T`, and the old owner is left `null` (8.9) |
 | follow a link | `p^` | behind | `^T` or `&T` becomes `T` |
 
 What is behind a name is read first, left to right. What is in front is applied after it.
@@ -361,75 +361,76 @@ Open: a type is a value in MyLang, so `^Node` can be written where a value is ex
 it builds a link. The two can't be confused as long as a type itself can't be put on the heap
 or borrowed.
 
-### 8.9 Moving ownership (sketch)
+### 8.9 Moving ownership
 
 A borrower can't outlive what it borrows. To make a value outlive the scope that made it,
-the value has to be on the heap and its ownership has to move, and the move is always written
-out. (Jack)
+the value has to be on the heap and its ownership has to move. (Jack)
 
-**The word `hand` is not used.** (Jack) The move is a symbol in front of the old owner. `<-`
-is a placeholder for it. (sketch)
+**No symbol is written for the move, and the word `hand` is not used.** (Jack) "When we
+return n, we are returning basically a pointer. So I don't think we would need to show
+transitioning ownership. It would just be done automatically."
+
+Why nothing needs writing:
+
+- **The other symbols change the type.** `^v` and `&x` add a mark and `p^` removes one. A
+  move gives a `^T` to a `^T`, so there is no change to write.
+- **A heap link has exactly one owner,** so putting it in another owner can only mean handing
+  it over. A mark would say something already known, like the `#` in the explicit variation.
+- **An owner is written three ways, and each means one thing:** `p^` is the value, `&p^`
+  borrows it, and a bare `p` given to another owner hands the link over.
+
+**The rule (sketch):** giving a heap link to another owner hands it over, and the old owner
+is left `null`. It applies wherever a link is given: `return`, `=`, a field in a block, an
+element in an array's brackets.
 
 ```go
 const Node: type = {int, ^Node};         // value, next
 
-list^.next = <-list^.next^.next;         // the third node moves up, and its old link is left null
-                                         // the second node has no owner now, so it is freed
-
-list = ^{ value: int = 0; next: ^Node = <-list; };    // a new first node takes over the old list
-```
-
-A function gives back a heap value the same way, and its type shows it: the type ends in a
-`^`, so the caller knows it will own what comes back.
-
-```go
-const makeBig: (int)^[1000]int = (const x: int){
-    var big: ^[1000]int = ^[...];
-    return <-big;                        // the array moves out to the caller instead of being freed
+const makeNode: (int)^Node = (const v: int){
+    var n: ^Node = ^{ value: int = v; next: ^Node = null; };
+    return n;                            // n is a heap link, so the caller becomes its owner
 };
 
-var b: ^[1000]int = makeBig(1);          // b owns the array now, and nothing was copied
+var list: ^Node = makeNode(1);           // list owns the node, and nothing was copied
+list^.next = makeNode(2);
+list^.next^.next = makeNode(3);
+
+list^.next = list^.next^.next;           // the third node moves up, and its old link is left null
+                                         // the second node has no owner now, so it is freed
+list = ^{ value: int = 0; next: ^Node = list; };      // a new first node takes over the old list
 ```
 
-- **A move goes in front,** like the other two things that produce a link (`^v` and `&x`). It
-  changes who frees the memory, so it should be the first thing read.
-- **Only a `^` link can be moved.** A plain value lives in its holder, and a `&` link owns
-  nothing.
+The function's type shows the move: `(int)^Node` ends in a `^`, so the caller knows it will
+own what comes back.
+
+- **Only a heap link is handed over.** A plain value is copied, and a `&` link is copied too,
+  because it owns nothing.
 - **The old owner is left `null`,** so there is still exactly one owner.
-- **A plain `=` between two heap owners is an error.** You say which you mean: `<-p` moves
-  it, and `^p^` makes a new heap copy of what `p` points at.
+- **To keep the old owner, say so:** `^p^` makes a new heap copy, and `&p^` borrows.
+- **The right-hand side is read before the left-hand side's old value is freed.** The
+  relinking line above depends on it.
+- **A struct that holds a heap link.** Setting a struct sets every field (README 11.4), so
+  its plain fields are copied and its links are handed over. `var b: Node = a;` leaves
+  `a.next` `null`.
 - **Ownership can't be moved into an inner scope.** (Jack)
+
+What it costs: `a = b;` leaves `b` alone when the two are plain values, and leaves it `null`
+when they are heap links. The line looks the same, and the type tells them apart. On a
+`return` nothing is lost, because the local ends anyway.
 
 | You want | You write | The rule |
 |---|---|---|
 | to use a value for a while | `&x` | the borrower has to end first |
-| a value that outlives this scope | `^v` to make it, `<-p` to pass it on | one owner at a time; the old one is left `null` |
-
-Other ways the move could be spelled (open):
-
-| Spelling | Example | Note |
-|---|---|---|
-| an arrow in front | `a = <-b;` | shows the value leaving the old owner; used above |
-| one character in front, such as `~p` or `@p` | `a = ~b;` | shorter, but the character says nothing about moving |
-| an arrow in place of the `=` | `a <- b;` | reads well, but a move inside an array's brackets or after `return` has no `=` to replace |
+| a value that outlives this scope | `^v` to make it, then give the link on | one owner at a time; the old one is left `null` |
 
 Open with moving:
 
-- **Copying a plain value that holds a heap link.** Setting a struct sets every field
-  (README 11.4), and for `var b: Node = a;` one of those fields is a heap owner set from
-  another heap owner with a plain `=`. Under the rule above that is already an error, so two
-  owners can never happen. The same goes for everything else that copies such a value: `^a`,
-  `p^` put into a plain variable, `^p^`, and passing it to a function by value. The other
-  choice would be to copy every node behind it, which is work the line doesn't show.
-- **Moving a whole plain value that holds heap links.** A function that builds a `Node` in
-  place can't give it back by copying it. One way: `<-a` on such a value copies its plain
-  fields and moves every heap link inside it, so `return <-n;` and `var b: Node = <-a;` work.
-  That is what the README (10.6) already says a move passes on: the value and everything it
-  owns. "Only a `^` link can be moved" would then read "only heap links move, and the plain
-  part around them is copied".
+- **Whether to mark the move when the old owner lives on.** After a `return` the old owner is
+  gone anyway. After `a = b;` it stays, emptied. An earlier sketch wrote a symbol there
+  (`a = <-b;`).
 - **Moving out of a `const` owner.** The move changes the old owner to `null`, so it would
   have to be an error.
-- **A `^T` parameter:** whether a heap value can be moved into a function at all.
+- **A `^T` parameter:** whether a heap link can be given to a function at all.
 
 ## 9. What is still open
 
@@ -437,8 +438,8 @@ Open with moving:
 - **Read-only borrowers:** where it's written that a borrower can't change what it borrows.
 - **`null`:** whether an `owner` or `borrower` link can be empty, which a list's last node
   needs.
-- **The symbol for the move,** and the three open points under 8.9. The word `hand` is not
-  used. (Jack)
+- **The three open points under 8.9.** No symbol is written for the move, and the word
+  `hand` is not used. (Jack)
 - **Whether `^` in front of a type and in front of a value can share one symbol** (8.8).
 - **Removing a node that a stored borrower still points at** (idea 1, section 8.4).
 - **Returning a borrower from a function:** what it is allowed to borrow from.
