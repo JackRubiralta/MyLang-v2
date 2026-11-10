@@ -1292,17 +1292,24 @@ copy[0]^ = 9;              // rows[0]^ is still 1
 
 Copying the first node of a linked list therefore copies every node behind it (8.13).
 
-**A borrower inside the value is copied with it.** If it borrows another part of the same
-value, the copy's borrower borrows the same part of the copy, so the copy keeps the whole
-shape and stays separate from the original. If it borrows something outside the value, the
-copy borrows that same outside thing. An ownership kept inside a value is copied the same
-way.
+**What is done to a struct is done to each of its fields.** Copying a struct is copying
+every field, each by the rule for its own type. The same holds for an array and its
+elements. With `foo` and `boo` two structs that have the fields `a` and `b`:
 
-```go
-var b: ^Link = a;          // every node is copied, and each copy's prev borrows a node of b, not of a
-```
+| You write | Which is, field by field |
+|---|---|
+| `foo = boo;` | `foo.a = boo.a; foo.b = boo.b;` |
+| `@foo = @boo;` | `@foo.a = @boo.a; @foo.b = @boo.b;` (8.9) |
+| `var h: ^Boo = ^boo;` | one new heap value, then `h^.a = boo.a; h^.b = boo.b;` |
+| `var r: &Boo = &boo;` | `r^.a` is `boo.a`, and `r^.b` is `boo.b`: the same memory |
 
-(`Link` is the node with a `prev` from 8.14.)
+This is why a copy is complete. A field that is a heap owner gets its own heap value, and
+the fields of that value are copied the same way, all the way down.
+
+A field that is a borrower is copied as a borrower, so the copy borrows the same thing the
+original borrows. For the list with a `prev` in 8.14, each copied node's `prev` therefore
+still borrows a node of the original list, and those links have to be set again after the
+copy.
 
 **An owner that is given a new value frees the one it had:**
 
@@ -1755,6 +1762,9 @@ b^                         // b still leads to where the 5 was
   new value, set to `null`, or moved to an owner that ends sooner.
 - **A borrower stored inside a heap value** (the `prev` in 8.14) whose target is removed
   first.
+- **A copy of a value whose borrowers point back into itself,** like the `prev` list in
+  8.14. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
+  original until they are set again.
 - **An ownership kept in a variable that points inside a heap value.** It holds the address
   of a field in a node, and rule 8.5 can't see when that node is freed:
 
