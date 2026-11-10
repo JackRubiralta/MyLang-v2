@@ -241,6 +241,11 @@ value into a heap value or a borrower. Three symbols do all four:
 The other rows of the first table are two of these in a row. Only passing a heap value from
 one owner to another needs something new, and that is the move (8.9).
 
+**`^v` makes a copy.** (Jack) `v` stays as it is, and the heap gets a value of its own. A
+value written on the spot, like `^5` or `^{ … }`, has no original, so it is simply built on
+the heap. `p^` put into a plain variable copies as well. Only `&x` and `<-p` give a link
+without copying anything.
+
 ### 8.4 Why these symbols
 
 - **Types read in the order they're used, with no brackets.** For `ps: [2]&int` the use is
