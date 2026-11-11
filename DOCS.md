@@ -14,6 +14,8 @@ MyLang is a **declarative, explicit, first-class** language.
 This file documents the language: values, names, types, arrays, maps, functions, ownership
 (the heap, borrowing and moving), structs, and choosing and repeating.
 
+Why each rule is the way it is, and what was tried and dropped, is in `DECISIONS.md`.
+
 **Reading the examples**
 
 - Code blocks are marked `go` only for colouring. The code is MyLang.
