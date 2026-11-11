@@ -1083,6 +1083,22 @@ A function that uses variables from around it (7.8) also keeps their addresses, 
 given back by a call keeps the parameters it uses from that call. These are kept with the
 function out of sight, and its type is the same either way.
 
+So every function value has the same size: the address of its code, and the address of what
+it keeps. A function with nothing kept leaves the second empty. That is why functions given
+back go in arrays and maps like any other function of their type:
+
+```go
+var one: int = 1;
+var two: int = 2;
+const steps: [3](int)int = [makeAdder(one), makeAdder(two), double];   // makeAdder: 7.8
+
+steps[0](5)            // 6
+steps[1](5)            // 7
+steps[2](5)            // 10
+```
+
+`steps` can't outlive `one` or `two`, because the functions in it can't (7.8).
+
 ### 7.8 Using a variable from outside the function
 
 A function's body is a block (2.6), and a block sees the names of the blocks around it. So
@@ -1201,7 +1217,9 @@ tally()                        // 1
 tally()                        // 2
 ```
 
-Nothing is copied: the heap int made in `newCounter` is the one `tally` counts with.
+Nothing is copied: the heap int made in `newCounter` is the one `tally` counts with. Every
+piece is a rule from section 8: `^0` makes the heap value (8.3), and `@total` hands it to a
+parameter that asks for an ownership (8.13). No new syntax is needed.
 
 A kept parameter is kept the way it was declared (7.4). A copy stays the function's own. A
 borrowed parameter (`&T`) is still a borrow, so the function can't outlive what the caller lent
