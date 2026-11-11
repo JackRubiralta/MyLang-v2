@@ -1127,15 +1127,16 @@ change made through a parameter does show at the call, with `&` or `@` (8.9).
 The compiler works out which outside variables a function changes or takes, and counts a
 call to it as changing them (8.12).
 
-**A function can't outlive a variable it borrows** (8.5). A top-level variable lasts as long
-as the program, so a function can always use one. A function made inside another function
-can use that function's locals and parameters only while they last. Returning it, or storing
-it in something that lasts longer, is an error:
+**A variable that a function uses can't die before the function.** It is the same rule as
+for a borrower (8.5). A top-level variable lasts as long as the program, so a function can
+always use one. A function made inside another function can use that function's locals and
+parameters only while they last. Returning it, or storing it in something that lasts longer,
+is an error, because the variable would die first:
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
-    return (const n: int){ return n + step; };   // ERROR: the function borrows step, which ends with the call
-};
+    return (const n: int){ return n + step; };   // ERROR: step dies when this call ends, before the
+};                                               // function that uses it
 ```
 
 Section 7.9 shows how to give back a function that keeps a value.
@@ -1209,8 +1210,8 @@ var read: (int)int = reader(@values);                // values is left null at t
 read(1)                        // 20: read owns the array now
 ```
 
-A function can take some names and borrow others. It still can't outlive the ones it
-borrows.
+A function can take some names and borrow others. The ones it borrows still can't die before
+it.
 
 ---
 
@@ -1450,7 +1451,7 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a variable declared in an inner block | no: it ends before the borrower does |
 | a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
 | a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
-| a variable a function uses from around it (7.8) | yes, while the function doesn't outlive it; to outlive it, the function takes a heap value over (7.9) |
+| a variable a function uses from around it (7.8) | yes, while the variable can't die before the function; to keep a value longer, the function takes a heap value over (7.9) |
 
 The check is made every time a borrower is given something to borrow: when it's declared,
 and again each time it's pointed at something else with `b = &…`.
@@ -2250,7 +2251,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var @inner: ^T = @data;` where a borrower of `data^` is used below | it would move what the borrower points at (8.12) |
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
-| `return (const n: int){ return n + step; };` where `step` is a local or parameter | the function borrows `step` and would outlive it (7.8) |
+| `return (const n: int){ return n + step; };` where `step` is a local or parameter | `step` would die before the function that uses it (7.8) |
 | `@step` in a function body, where `step` is an `int` from outside | only a heap value can be taken: put a copy on the heap first (7.9) |
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
@@ -2819,7 +2820,7 @@ passed.
 | `look(&makeBig(1)^)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
-| a function uses `x` from around it | the function borrows `x`: no copy, and it can't outlive `x` (7.8) |
+| a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function uses `@x` from around it, where `x` is a `^T` | the function takes `x`'s heap value over: no copy, and `x` is left `null` (7.9) |
 
 ### What never changes
@@ -2865,7 +2866,7 @@ passed.
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
-| returning a function that uses a local or parameter of the function around it | the function would outlive what it borrows: take a heap value with `@` instead (7.9) |
+| returning a function that uses a local or parameter of the function around it | that variable would die before the function: take a heap value with `@` instead (7.9) |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
