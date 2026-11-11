@@ -534,6 +534,10 @@ first(bool)([true, false])                    // true: the same, in one line
 The last line is two calls in a row: `first(bool)` makes the function for bool arrays, and
 `([true, false])` calls that function straight away.
 
+The function `first` gives back uses `T`, a parameter of `first`. A type is fixed before the
+program runs (4.2), so the compiler builds `T` into that function, and it can outlive
+`first`'s call (7.8).
+
 `first(int)` gives back a function made for `int`, so what each call works with is written
 right there in the code.
 
@@ -1077,6 +1081,11 @@ ops[1](5, 3)                                // jumps to sub's code
 
 Copying a function value copies the address, not the code.
 
+A function that uses variables from around it (7.8) also keeps their addresses, and one that
+takes a heap value over (7.9) keeps the owner of that value. Those addresses are kept with the
+function out of sight, and its type is the same either way. The values themselves stay where
+the code put them: a borrowed variable in its own block, and a taken value on the heap.
+
 ### 7.8 Using a variable from outside the function
 
 A function's body is a block (2.6), and a block sees the names of the blocks around it. So
@@ -1094,11 +1103,114 @@ countUp();
 count                          // 2
 ```
 
+**A function borrows the variables it uses from around it.** It uses the variable itself, not a
+copy, so its changes reach the variable. That holds for a function made inside another
+function too:
+
+```go
+const addTwo: (int, int)int = (const a: int, const b: int){
+    var sum: int = 0;
+    const add: (int)void = (const x: int){
+        sum = sum + x;         // add borrows sum, so this changes addTwo's sum
+    };
+    add(a);
+    add(b);
+    return sum;
+};
+
+addTwo(4, 5)                   // 9
+```
+
 The call doesn't show it: nothing on the line `countUp();` says that `count` changes. A
 change made through a parameter does show at the call, with `&` or `@` (8.9).
 
 The compiler works out which outside variables a function changes or takes, and counts a
 call to it as changing them (8.12).
+
+**A function can't outlive a variable it borrows** (8.5). A top-level variable lasts as long
+as the program, so a function can always use one. A function made inside another function
+can use that function's locals and parameters only while they last. Returning it, or storing
+it in something that lasts longer, is an error:
+
+```go
+const makeAdder: (int)(int)int = (const step: int){
+    return (const n: int){ return n + step; };   // ERROR: the function borrows step, which ends with the call
+};
+```
+
+Section 7.9 shows how to give back a function that keeps a value.
+
+Two things are not borrowed. A type is fixed before the program runs (4.2), so a function
+that uses one from around it has it built in, as `first` does (4.3). And inside its own body a
+function's name is the function itself, so a function made inside another can call itself
+(10.4).
+
+### 7.9 Keeping a value in a function that outlives it
+
+A function that has to outlive the variables it uses keeps a value on the heap. It takes the
+value over with `@` in front of the name, the same mark as every other move (8.9):
+
+```go
+const makeCounter: ()()int = (){
+    var count: ^int = ^0;
+    return (){
+        @count^ = @count^ + 1;
+        return @count^;
+    };                         // the function takes count's heap int over, and count is left null
+};
+
+var next: ()int = makeCounter();
+next()                         // 1
+next()                         // 2: the function keeps its value from one call to the next
+```
+
+- **The function takes the value when it's made,** which is when the program reaches its
+  `(…){…}`, not at each call. The value doesn't move: the function becomes its owner, and the
+  old variable is left `null`, as in every move.
+- **Only a value on the heap can be taken,** so the value always stays where the code put
+  it. The function keeps its owner, an address (7.7). `@` on a plain value from outside is an
+  error: put a copy on the heap first (below).
+- **Every use of that name in the body carries the `@`,** so each one shows it's the
+  function's own. `@` marks the name here, as in `var @q: ^int = @p;` (2.1), so it's read
+  before what is behind it: `@count^` is the function's own `count`, followed.
+- **The function owns the value from then on.** It is freed when the function value ends or
+  is given another function (8.11). Copying the function value copies it too (8.8), so two
+  copies of a counter count separately. A value has one owner, so two functions can't take
+  the same variable.
+
+There are three ways to get the value onto the heap, depending on where it starts.
+
+**A plain local or parameter: put a copy on the heap.**
+
+```go
+const makeAdder: (int)(int)int = (const step: int){
+    var kept: ^int = ^step;                          // a copy of step, on the heap
+    return (const n: int){ return n + @kept^; };     // the function takes kept over
+};
+
+makeAdder(5)(2)                // 7
+```
+
+**A local that is already on the heap: take it as it is,** as `makeCounter` does with
+`count`.
+
+**A parameter on the heap: take it the same way.** A parameter declared `var data: ^[3]int`
+is the function's own copy, and one declared `var @data: ^[3]int` is the caller's own value,
+taken over at the call (8.13). Either way it is a heap value of the outer function, so the
+function it gives back can take it:
+
+```go
+const reader: (@^[3]int)(int)int = (var @data: ^[3]int){
+    return (const i: int){ return @data^[i]; };      // the function takes data over
+};
+
+var values: ^[3]int = ^[10, 20, 30];
+var read: (int)int = reader(@values);                // values is left null at the call
+read(1)                        // 20: read owns the array now
+```
+
+A function can take some names and borrow others. It still can't outlive the ones it
+borrows.
 
 ---
 
@@ -1338,6 +1450,7 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a variable declared in an inner block | no: it ends before the borrower does |
 | a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
 | a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
+| a variable a function uses from around it (7.8) | yes, while the function doesn't outlive it; to outlive it, the function takes a heap value over (7.9) |
 
 The check is made every time a borrower is given something to borrow: when it's declared,
 and again each time it's pointed at something else with `b = &…`.
@@ -1707,6 +1820,7 @@ A heap value is freed at the moment it has no owner left:
 | its owner is set to `null` | `r = null;` |
 | it has no name and nothing receives it | `makeBig(1);` on its own, or only lent as in `look(&makeBig(1)^);`: freed at the end of the statement (2.6) |
 | the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
+| the function that took it over ends, or is given another function | a heap value a function took with `@` (7.9) |
 
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
@@ -2136,6 +2250,8 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var @inner: ^T = @data;` where a borrower of `data^` is used below | it would move what the borrower points at (8.12) |
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
+| `return (const n: int){ return n + step; };` where `step` is a local or parameter | the function borrows `step` and would outlive it (7.8) |
+| `@step` in a function body, where `step` is an `int` from outside | only a heap value can be taken: put a copy on the heap first (7.9) |
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
@@ -2166,8 +2282,12 @@ same list when one of them is used to change the list. That code has to be reord
 
 Not settled yet:
 
-- **A function that uses a variable from outside and outlives it** (7.8), such as a function
-  returned from the function whose local it uses.
+- **A returned function that uses a borrowed parameter.** It borrows the parameter itself,
+  which ends with the call, so it is an error (7.8), even though what the parameter borrows
+  lives on in the caller.
+- **A function inside a struct, after the struct is copied** (9.6). The function borrows the
+  fields of the struct it was made in, so the copy's function still changes the original's
+  fields.
 
 ### 8.18 Underneath: addresses
 
@@ -2653,6 +2773,7 @@ brackets go first (3.2).
 | `^v` | puts a copy of `v` on the heap: a `^T` |
 | `&x` | borrows `x`: an `&T` |
 | `@x` | the ownership of `x`: an `@T` |
+| `@x` in a function body, where `x` is a heap value from outside | the function takes `x` over when it's made, and `x` is left `null` (7.9) |
 | `p^` | what a heap owner, a borrower or an ownership leads to |
 | `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
 | `@n = @p;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
@@ -2698,6 +2819,8 @@ passed.
 | `look(&makeBig(1)^)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
+| a function uses `x` from around it | the function borrows `x`: no copy, and it can't outlive `x` (7.8) |
+| a function uses `@x` from around it, where `x` is a `^T` | the function takes `x`'s heap value over: no copy, and `x` is left `null` (7.9) |
 
 ### What never changes
 
@@ -2742,6 +2865,7 @@ passed.
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
+| returning a function that uses a local or parameter of the function around it | the function would outlive what it borrows: take a heap value with `@` instead (7.9) |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
