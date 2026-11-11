@@ -1,7 +1,9 @@
 # Idea 4: nothing is freed while something still points at it
 
-**Status:** a sketch for three points `DOCS.md` (8.16) still lists as open, worked out together
-because they are one problem. Nothing here is in `DOCS.md`.
+**Status:** taken into `DOCS.md` on 11 Nov 2026 (Jack: "Do the idea 4 rule"). The rule is
+section 8.12 there, returning a borrower is in 8.13, and what it leaves uncovered is in 8.17.
+This file keeps how the three open points were worked out together. Section numbers below
+that point into `DOCS.md` are the ones from before that change.
 
 Lines marked **(Jack)** are things Jack said. Everything else is a sketch.
 

@@ -859,7 +859,7 @@ itself, the parameter borrows it (8.4): `bump(&n)`.
 
 A call works out all of its arguments first, from left to right. Then it sets the
 parameters, from left to right. So one argument can't change what another argument reads
-(8.12).
+(8.13).
 
 ### 7.3 A function that returns nothing
 
@@ -898,12 +898,12 @@ start                  // still 5: countDown changed its own copy
 | `var x: int` | a copy it can change |
 | `const x: &int` | the caller's value, borrowed to read (8.6) |
 | `var x: &int` | the caller's value, borrowed to change (8.4) |
-| `var x: ^int` | a heap value of its own: a copy of the caller's (8.12) |
-| `var @x: ^int` | the caller's own heap value: the parameter takes it over at the call (8.12) |
+| `var x: ^int` | a heap value of its own: a copy of the caller's (8.13) |
+| `var @x: ^int` | the caller's own heap value: the parameter takes it over at the call (8.13) |
 
 `const` and `var` on a parameter don't appear in the function's type. Borrowing, the heap and
 ownership do: `(&int)void`, `(^int)void`, `(@^int)void`. A parameter written `@x: ^int`
-shows as `@^int`, because that is what the call has to give (8.12).
+shows as `@^int`, because that is what the call has to give (8.13).
 
 ### 7.5 Swapping a function in a `var`
 
@@ -990,6 +990,9 @@ count                          // 2
 
 The call doesn't show it: nothing on the line `countUp();` says that `count` changes. A
 change made through a parameter does show at the call, with `&` or `@` (8.9).
+
+The compiler works out which outside variables a function changes or takes, and counts a
+call to it as changing them (8.12).
 
 ---
 
@@ -1231,6 +1234,8 @@ var view: &[1000]int = &big^;      // fine: view ends no later than big
 
 An ownership (8.9) holds a variable's address too, so the same rule applies to it.
 
+A value on the heap can also be made to end before its owner's `}`. Rule 8.12 covers that.
+
 ### 8.6 `const`, `var` and borrowing
 
 Whether a borrower can change the value it borrows depends on how the borrower is declared:
@@ -1317,7 +1322,7 @@ var copy: [2]^int = rows;  // two new heap ints
 copy[0]^ = 9;              // rows[0]^ is still 1
 ```
 
-Copying the first node of a linked list therefore copies every node behind it (8.13).
+Copying the first node of a linked list therefore copies every node behind it (8.14).
 
 **What is done to a struct is done to each of its fields.** A struct is used like any other
 variable: it can be copied, moved, put on the heap, borrowed, and have its ownership taken.
@@ -1337,7 +1342,7 @@ This is why a copy is complete. A field that is a heap owner gets its own heap v
 the fields of that value are copied the same way, all the way down.
 
 A field that is a borrower is copied as a borrower, so the copy borrows the same thing the
-original borrows. For the list with a `prev` in 8.14, each copied node's `prev` therefore
+original borrows. For the list with a `prev` in 8.15, each copied node's `prev` therefore
 still borrows a node of the original list, and those links have to be set again after the
 copy.
 
@@ -1348,7 +1353,7 @@ q = p;                     // q's old heap int is freed, and q gets a new copy o
 ```
 
 **A value that nothing else holds is taken, not copied.** That covers a value written on
-the spot, the result of a call, and a local that a function returns (8.12):
+the spot, the result of a call, and a local that a function returns (8.13):
 
 ```go
 var one: ^int = ^5;                    // the new heap value has no other owner, so one takes it
@@ -1395,14 +1400,14 @@ var x: int = 3;
 var o: @int = @x;          // @x is an @int
 o^                         // x itself: 3
 
-@list^.next                // the ownership of a field: an @^Node (8.13)
+@list^.next                // the ownership of a field: an @^Node (8.14)
 ```
 
 `@` in front of a value made on the spot hands that value straight over. Nothing is left
 `null`, because nothing else held it:
 
 ```go
-take(@makeBig(1));                 // the new array goes straight to take's parameter (8.12)
+take(@makeBig(1));                 // the new array goes straight to take's parameter (8.13)
 var h: @^Node = @makeNode(1);      // ERROR: the node has no variable, so h would outlive it (8.5)
 ```
 
@@ -1442,7 +1447,7 @@ holder may do to someone else's variable:
 
 So the mark at a call shows what a function may do to a variable you pass it: `f(x)`
 nothing, because it gets a copy, `f(&x)` read or change it, and `f(@x)` takes its value
-(8.12). A function can also change a variable from outside itself without being passed it
+(8.13). A function can also change a variable from outside itself without being passed it
 (7.8), and then the call shows nothing.
 
 The rules for an ownership and a move:
@@ -1452,7 +1457,7 @@ The rules for an ownership and a move:
 - **Both sides of a move are ownerships.** A plain `=` never changes its right-hand side.
 - **The old variable is left `null`,** so the value still has exactly one owner.
 - **The new owner's old value is freed,** as with any owner that is given something new. The
-  value is taken out of the old variable before that happens (8.13 uses this).
+  value is taken out of the old variable before that happens (8.14 uses this).
 - **An ownership can't outlive its variable.** It holds the variable's address, so the rule
   for borrowers applies (8.5):
 
@@ -1482,6 +1487,7 @@ The rules for an ownership and a move:
   is a second ownership of the same variable. The value still has one owner: the variable.
 - **After a move, an ownership still points at the old variable,** which is now `null`.
   `h^ == null` is `true` after `var @q: ^int = h;`.
+- **A value can be moved only when nothing still in use points at it** (8.12).
 - **The new owner decides how long the value lives from then on:**
 
   ```go
@@ -1501,7 +1507,7 @@ A heap owner `p` can be used in four ways, and each is written differently:
 | `p` | a copy of the value, in a new place on the heap | unchanged |
 | `@p` | `p`'s ownership | unchanged, until that ownership is set into another variable: then `null` |
 
-A local that a function returns needs no ownership (8.12): it ends there anyway, so nothing
+A local that a function returns needs no ownership (8.13): it ends there anyway, so nothing
 is left behind to be emptied.
 
 ### 8.10 `null`
@@ -1589,7 +1595,127 @@ A heap value is freed at the moment it has no owner left:
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
 
-### 8.12 Functions and ownership
+### 8.12 Nothing is freed while something still points at it
+
+Rule 8.5 stops a borrower from outliving the variable it borrows from. A value on the heap
+can also be made to end sooner than that: its owner can be given something new, set to
+`null`, or have its value moved away. This rule covers those.
+
+A **pointer** here is a borrower (`&T`) or an ownership (`@T`). To reach a value on the heap,
+a pointer has to follow that value's owner.
+
+**While a pointer that was made by following an owner is still used below, that owner can't
+be changed.** The compiler raises the error at the line that would change it.
+
+"Changed" is everything that frees or moves what the owner holds:
+
+| The line | What it does to what `p` owns |
+|---|---|
+| `p = …;` and `p = null;` | frees it (8.8) |
+| `@p = …;` | frees it |
+| `@q = @p;` and `var @q: T = @p;` | moves it away (8.9) |
+| `take(@p)` | moves it into the function (8.13) |
+| a call to a function that can change `p` | may do any of these |
+
+"Still used below" means written anywhere further down the function. There are no loops, so
+later in the text is later in time.
+
+**Which owners a pointer followed** is read off the line that made it:
+
+| The pointer | Owners it followed | So these can't be changed while it is used below |
+|---|---|---|
+| `&p` | none: it points at `p` itself | none |
+| `&p^` | `p` | `p` |
+| `@list^.next` | `list` | `list` |
+| `&list^.next^` | `list`, then `list^.next` | `list` and `list^.next` |
+| `&b^.value`, where `b` is a borrower | the ones `b` followed | the same as for `b` |
+
+```go
+var p: ^int = ^5;
+var b: &int = &p^;               // b followed p
+p = ^6;                          // ERROR: b is used below, and this frees what p owns
+b^
+```
+
+To change the value where it is, so that `b` sees it, write `p^ = 6;`.
+
+```go
+var h: @^Node = @list^.next;     // h followed list
+list = makeNode(9);              // ERROR: h is used below, and this frees the first node
+var @n: ^Node = h;
+```
+
+Taking the node out first makes both lines fine, because `h` isn't used after that:
+
+```go
+var h: @^Node = @list^.next;
+var @n: ^Node = h;
+list = makeNode(9);              // fine
+```
+
+(`Node`, `makeNode` and `list` are from 8.14.)
+
+**An owner beyond where a pointer points was not followed,** so it can still be changed. A
+pointer into a list can change what comes after it:
+
+```go
+var cur: &Node = &list^.next^;   // cur followed list and list^.next
+cur^.next = makeNode(9);         // fine: cur^.next is beyond cur
+cur^.value
+```
+
+**A value may be moved anywhere.** A move changes the owner it empties, so it is allowed
+whenever nothing still in use followed that owner. Where the value goes makes no difference,
+including into an owner that ends sooner:
+
+```go
+var data: ^[1000]int = ^[...];
+var b: &[1000]int = &data^;          // b followed data
+{
+    var @inner: ^[1000]int = @data;  // ERROR: b is used below, and this moves what data owns
+}
+b^[0]
+```
+
+Without the last line it is fine: the array is freed at the `}`, and nothing leads to it any
+more.
+
+**Calls.** While a call runs, its pointer arguments are in use, and the function may do what
+each argument lets it (8.9):
+
+| The argument | The function may | So the call is an error when another pointer in use followed… |
+|---|---|---|
+| `f(x)`, a copy | nothing to the caller's value | never |
+| `f(&x)` to a `const` parameter | read | never |
+| `f(&x)` to a `var` parameter | change `x`, and every owner inside it | `x`, or an owner inside it |
+| `f(@x)` | take `x`'s value | `x` |
+
+"Another pointer in use" is one that is used below in the caller, or another argument of the
+same call: `f(&list^.next^, @list)` hands the list over while the first argument points into
+it.
+
+A function's type doesn't say whether a `&T` parameter is read or changed (7.4). For a
+function called by its own name, the compiler looks at the function. For one called through
+a variable, an array or a map, every `&` argument counts as one that may change.
+
+**A function that changes a variable from outside itself** (7.8) counts too. For a function
+called by its own name, the compiler reads which outside variables it changes or takes, and
+the call line counts as changing them:
+
+```go
+const reset: ()void = (){
+    list = makeNode(9);
+};
+
+var b: &Node = &list^;           // b followed list
+reset();                         // ERROR: b is used below, and reset changes list
+b^.value
+```
+
+A call through a variable, an array or a map counts as changing every outside variable,
+because the compiler can't tell which function runs.
+
+### 8.13 Functions and ownership
 
 A parameter is declared like any name (7.4), so the rules above apply to it unchanged. The
 function's type shows `^`, `&` and `@`, and the call shows `&` and `@`:
@@ -1681,9 +1807,53 @@ const dropFirst: (@^Node)^Node = (var @first: ^Node){
 list = dropFirst(@list);               // list is left null at the call, then gets the rest back
 ```
 
-(`Node` is the list node from 8.13.)
+(`Node` is the list node from 8.14.)
 
-### 8.13 A linked list, step by step
+**A function can return a borrower.** The borrower lives on after the call, so by rule 8.5
+it can't come from anything that ends with the call: a local, a copied parameter, or a value
+the function took over. It can come from a borrowed parameter, because what that points
+into lives in the caller:
+
+```go
+const firstValue: (&Node)&int = (var n: &Node){
+    return &n^.value;                // fine: it comes from n
+};
+
+const second: (&Node)&Node = (var n: &Node){
+    return &n^.next^;                // fine: the node after the one n borrows
+};
+
+const bad: (&Node)&int = (var n: &Node){
+    var local: int = n^.value;
+    return &local;                   // ERROR: local ends with the call, and the result lives on
+};
+```
+
+At the call, the result counts as coming from everything that was lent to the function,
+because the caller only sees the type:
+
+- it can't outlive any of the borrowed arguments (8.5);
+- if any of them is a `const`, the result has to be a `const` borrower (8.6);
+- it counts as having followed the owners on the way to what was lent, and every owner
+  inside it, because the compiler doesn't know how deep the function went (8.12).
+
+```go
+var v: &int = firstValue(&list^);    // v comes from list's data
+list = makeNode(9);                  // ERROR: v is used below
+v^
+```
+
+A returned borrower can still change what lies beyond itself:
+
+```go
+var cur: &Node = second(&list^);
+cur^.next = makeNode(9);             // fine: reached through cur itself
+```
+
+With two borrowed arguments the type can't say which one the result came from, so it counts
+as coming from both.
+
+### 8.14 A linked list, step by step
 
 A node can't hold another node directly, because it would have no fixed size. It holds a
 heap owner of the next node (struct types are in section 9):
@@ -1767,7 +1937,7 @@ length(&list)                          // the number of nodes
 `owner^` is the owner and `owner^^` is the node it owns, so `&owner^^.next` borrows the next
 owner. Nothing is copied and nothing changes owner on the way.
 
-### 8.14 Two links to one value
+### 8.15 Two links to one value
 
 Two links can lead to the same value when one **owns** it and the other **borrows** it.
 That makes a second link possible: a list that can be walked backwards, or a tree node that
@@ -1787,7 +1957,7 @@ node. A value never has two owners: any second link is a borrower.
 
 The rule from 8.5 still applies: the borrower can't outlive the owner. It holds here,
 because the second node is freed whenever the first one is. Removing or replacing a node
-that another node's `prev` still borrows is the programmer's job to get right (8.16).
+that another node's `prev` still borrows is the programmer's job to get right (8.17).
 
 **Copying a list like this takes a function of its own.** A plain `=` copies field by field
 (8.8), so each copied node's `prev` would still borrow a node of the original. The copy
@@ -1810,7 +1980,7 @@ const copyLinks: (&^Link)^Link = (const from: &^Link){
 var b: ^Link = copyLinks(&a);                 // b is a separate list, with its own prev links
 ```
 
-### 8.15 What the compiler rejects, and what is checked while running
+### 8.16 What the compiler rejects, and what is checked while running
 
 **Rejected before the program runs:**
 
@@ -1834,6 +2004,10 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var @t: ^int = @b^;` where `b` is a borrower | a borrower can read and change, but not take |
 | `return @local;` | the ownership would outlive its variable |
 | `var h: @^Node = @makeNode(1);` | the value has no variable, so the ownership would outlive it |
+| `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
+| `var @inner: ^T = @data;` where a borrower of `data^` is used below | it would move what the borrower points at (8.12) |
+| `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
+| `return &local;` | the borrower would outlive the local (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
 **Checked while the program runs:**
@@ -1842,49 +2016,31 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 |---|---|
 | `p^`, for a heap owner or a borrower | `p` is `null` |
 
-### 8.16 What the compiler doesn't catch, and what isn't settled
+### 8.17 What the compiler doesn't catch, and what isn't settled
 
-Rule 8.5 compares the scopes of names. Two cases get past it, because a heap value can end
-before the name that owned it does:
+Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 
-```go
-var p: ^int = ^5;
-var b: &int = &p^;         // b borrows the 5
-p = ^6;                    // p is given a new value, so the 5 is freed
-b^                         // b still leads to where the 5 was
-```
-
-- **An owner that lets go of its value while a borrower still uses it:** by being given a
-  new value, set to `null`, or moved to an owner that ends sooner.
-- **A borrower stored inside a heap value** (the `prev` in 8.14) whose target is removed
-  first.
+- **A borrower kept inside a heap value** (the `prev` in 8.15) whose target is removed
+  first. It isn't a variable, so the compiler can't see when it will be used. Removing or
+  replacing a node that another node's `prev` still borrows is the programmer's job.
 - **A copy of a value whose borrowers point back into itself,** like the `prev` list in
-  8.14. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
+  8.15. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
   original until they are set again.
 - **A borrower of a `const` given to a function that is held in a variable.** A function's
   type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
   (7.4). When a function is called by its own name the compiler looks at the function. When
   it is called through a variable, an array or a map, as in `fs[i](&limit)`, only the type is
   known.
-- **An ownership kept in a variable that points inside a heap value.** It holds the address
-  of a field in a node, and rule 8.5 can't see when that node is freed:
 
-  ```go
-  var h: @^Node = @list^.next;     // the address of a field inside the first node
-  list = makeNode(9);              // the first node is freed
-  var @n: ^Node = h;               // h points into freed memory
-  ```
-
+Rule 8.12 also turns away some code that is safe, such as two borrowers returned from the
+same list when one of them is used to change the list. That code has to be reordered.
 
 Not settled yet:
 
-- **Returning a borrower from a function:** what it may borrow from.
 - **A function that uses a variable from outside and outlives it** (7.8), such as a function
   returned from the function whose local it uses.
-- **Moving into an owner that ends sooner** (an inner block, or a parameter). It's allowed
-  above, and the value is freed when that owner ends. An earlier rule had it as an error.
 
-### 8.17 Underneath: addresses
+### 8.18 Underneath: addresses
 
 `^T`, `&T` and `@T` are all pointers. They differ in what they may do with what they point
 at:
@@ -2045,7 +2201,7 @@ same^.x = 9;           // p.x is now 9
 ```
 
 A struct can hold heap owners and borrowers as fields. A linked list is built that way
-(8.13).
+(8.14).
 
 Everything in section 8 works on a struct the way it works on any variable, field by field
 (8.8).
@@ -2405,11 +2561,12 @@ passed.
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
+| `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
 
-The full list for ownership is in 8.15.
+The full list for ownership is in 8.16.
 
 Four checks happen while the program runs:
 
