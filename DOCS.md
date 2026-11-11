@@ -970,7 +970,8 @@ Copying a function value copies the address, not the code.
 
 ### 7.8 Using a variable from outside the function
 
-A function's body can use names declared outside it, and it can change a `var` from outside:
+A function's body is a block (2.6), and a block sees the names of the blocks around it. So
+a function can use names declared outside it, and it can change a `var` from outside:
 
 ```go
 var count: int = 0;
