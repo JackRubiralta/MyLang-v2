@@ -273,6 +273,61 @@ const isFive: bool = small == 5;       // 5 is an int8 here
 const wrong: bool = count == small;    // ERROR: an int and an int8
 ```
 
+**`&&`, `||` and `!` work on `bool`s and give a `bool`:**
+
+| You write | Read it as | It is `true` when |
+|---|---|---|
+| `a && b` | `a` and `b` | both are `true` |
+| `a \|\| b` | `a` or `b` | at least one of them is `true` |
+| `!a` | not `a` | `a` is `false` |
+
+```go
+const inRange: bool = count > 0 && count < 10;
+const stop: bool = !ready || count > 10;
+const mixed: bool = count && ready;    // ERROR: count is an int, not a bool: write count != 0
+const empty: bool = !count;            // ERROR: count is an int, not a bool: write count == 0
+```
+
+**`&&` and `||` work out the left side first, and the right side only when it's needed.** A
+`false` on the left of `&&` already makes the answer `false`, and a `true` on the left of
+`||` already makes it `true`, so in those two cases the right side is skipped:
+
+```go
+if (p != null && p^ > 10) { ... }      // p^ is followed only when p isn't null (8.10)
+```
+
+`!` goes in front, so like a mark it is applied after everything behind the name (8.2):
+`!seen[4]` is the opposite of `seen[4]`.
+
+`&&` is never two borrow marks. A mark stands in front of a value or a type (8.2), and `&&`
+stands between two values.
+
+**The order of operations.** As `*` goes before `+` in maths, each operator in this table
+goes before the ones below it:
+
+| Step | Operators |
+|---|---|
+| 1 | `!` |
+| 2 | `*` |
+| 3 | `+` `-` |
+| 4 | `==` `!=` `<` `>` `<=` `>=` |
+| 5 | `&&` |
+| 6 | `\|\|` |
+
+Operators in the same step go from left to right.
+
+```go
+count + 1 > limit * 2 && !ready
+// && joins two tests: count + 1 > limit * 2, and !ready
+// >  compares two numbers: count + 1, and limit * 2
+
+a || b && c            // a, or both of b and c
+10 - 4 - 3             // 3: 10 - 4 goes first
+```
+
+The order says how a line is read, not when each part runs: the right side of `&&` and `||`
+is still skipped when it isn't needed.
+
 ### 3.3 Every modifier goes in front
 
 A type is a basic type, or a modifier followed by a type. A basic type is a built-in type
@@ -848,6 +903,11 @@ const add: (int, int)int = (const x: int, const y: int){
 
 `return value;` ends the function and gives back the value.
 
+**A function that returns a value has to reach a `return` on every path.** The compiler
+rejects a function that can get to the end of its body without one, such as a function
+whose only `return` is inside an `if` with no `else` (10.1). A function that returns nothing
+has no value to give back, so it ends at the end of its body (7.3).
+
 ### 7.2 Calling a function
 
 ```go
@@ -1128,7 +1188,8 @@ Nothing is copied, and nothing changes owner. `count` still owns its value, and 
 frees it.
 
 A borrower can borrow a variable, an array element, a map entry, a struct field or a value
-on the heap, but never a value that has no owner:
+on the heap. A variable can't keep a borrower of a value made on the spot, because that
+value has no owner and is gone at the end of its statement (2.6):
 
 ```go
 var scores: []int = [10, 20, 30];
@@ -1143,7 +1204,7 @@ var view: &[1000]int = &big^;      // the whole array big owns
 var first: &int = &big^[0];        // one element of it
 view^[1] = 2;                      // big's array changes
 
-var bad: &int = &3;        // ERROR: 3 has no owner to borrow from
+var bad: &int = &3;        // ERROR: the 3 is gone after this line, and bad would still be there
 var worse: &int = count;   // ERROR: count is an int, not an &int: write &count
 ```
 
@@ -1167,7 +1228,6 @@ const bump: (&int)void = (var x: &int){
 var n: int = 3;
 bump(&n);                  // n is now 4
 bump(&scores[1]);          // scores[1] goes up by 1
-bump(&3);                  // ERROR: 3 has no owner to borrow from
 bump(n);                   // ERROR: n is an int, not an &int: write &n
 
 const swap: (&int, &int)void = (var a: &int, var c: &int){
@@ -1176,6 +1236,15 @@ const swap: (&int, &int)void = (var a: &int, var c: &int){
     c^ = t;
 };
 swap(&left, &right);       // the two values change places
+```
+
+**A value made on the spot can be borrowed as an argument.** It lives until the end of its
+statement (2.6), and the call is over by then, so the parameter never outlives it (8.5):
+
+```go
+look(&makeBig(1)^);        // fine: look borrows the new array, which is freed at the end
+                           // of this line (8.13)
+bump(&3);                  // fine: bump changes a 3 that nothing else can read
 ```
 
 `b = …` changes **what** a borrower borrows, and `b^ = …` changes **the value** it borrows:
@@ -1221,7 +1290,8 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a variable declared in an outer block | yes: the borrower ends first |
 | the caller's variable, through a `&T` parameter | yes: the parameter ends when the call ends |
 | a variable declared in an inner block | no: it ends before the borrower does |
-| a value with no name, which is gone after its statement (2.6) | no: the borrower would outlive it |
+| a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
+| a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
 
 The check is made every time a borrower is given something to borrow: when it's declared,
 and again each time it's pointed at something else with `b = &…`.
@@ -1589,7 +1659,7 @@ A heap value is freed at the moment it has no owner left:
 | its owner is given a new value with `=` | `q = p;` frees what `q` owned before |
 | its owner takes another value over in a move | `@q = @p;` frees what `q` owned before |
 | its owner is set to `null` | `r = null;` |
-| it has no name and nothing receives it | `makeBig(1);` on its own: freed at the end of the statement (2.6) |
+| it has no name and nothing receives it | `makeBig(1);` on its own, or only lent as in `look(&makeBig(1)^);`: freed at the end of the statement (2.6) |
 | the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
 
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
@@ -1753,6 +1823,10 @@ An ownership held in a variable is given the same way: `take(h)`, where `h` is a
 `take(@makeBig(1));` (8.9). A parameter is never declared with the type `@T` itself, so a
 function that is given an ownership can't leave the value where it was.
 
+A value made on the spot can be lent as well, with `&` in front: `look(&makeBig(1)^);`. The
+parameter borrows the new array for the call, nothing takes it over, and it is freed at the
+end of the statement (8.4).
+
 **Every argument is worked out before any parameter takes.** A call works out all of its
 arguments first, from left to right, and only then sets the parameters, from left to right
 (7.2). So an argument that reads a variable and an argument that hands the same variable
@@ -1852,6 +1926,14 @@ cur^.next = makeNode(9);             // fine: reached through cur itself
 
 With two borrowed arguments the type can't say which one the result came from, so it counts
 as coming from both.
+
+The same holds when an argument borrows a value made on the spot (8.4). That value is freed
+at the end of the statement, so the result can't be kept past it:
+
+```go
+var gone: &int = firstValue(&makeNode(1)^);   // ERROR: the new node is freed at the end of
+                                              // this line, but gone would still be there
+```
 
 ### 8.14 A linked list, step by step
 
@@ -1992,7 +2074,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var b: &int = &p;` where `p` is a `^int` | `&p` borrows the owner itself (`&^int`): write `&p^` |
 | `var q: ^int = b;` where `b` is an `&int` | a borrower can't become an owner: `^b^` makes a copy |
 | `x^` where `x` is a plain `int` | there is nothing to follow |
-| `var b: &int = &3;` and `bump(&3);` | `3` has no owner to borrow from |
+| `var b: &int = &3;` | the `3` is gone after its statement, so it can be borrowed only as an argument (8.4) |
 | `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
 | `a = &inner;` where `inner` is in an inner block | the borrower would outlive what it borrows |
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
@@ -2008,6 +2090,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var @inner: ^T = @data;` where a borrower of `data^` is used below | it would move what the borrower points at (8.12) |
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
+| `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
 **Checked while the program runs:**
@@ -2273,6 +2356,34 @@ abs(0 - 7)             // 7
 
 `return` inside an `if` ends the whole function.
 
+A function that returns a value has to reach a `return` on every path (7.1). An `if` with no
+`else` leaves a path without one:
+
+```go
+const cap: (int)int = (const n: int){
+    if (n > 10) {
+        return 10;
+    }
+};                     // ERROR: when n isn't over 10, the function ends without a return
+```
+
+Give the `if` an `else` that returns, as `abs` does, or put a `return` after it:
+
+```go
+const cap: (int)int = (const n: int){
+    if (n > 10) {
+        return 10;
+    }
+    return n;          // fine: every path reaches a return
+};
+
+cap(12)                // 10
+cap(7)                 // 7
+```
+
+The compiler doesn't work out the conditions. It counts both sides of every `if` as
+possible, so two `if`s that cover every case between them still need a `return` after them.
+
 With `else if`, the tests are tried from the top, and the first one that is `true` runs:
 
 ```go
@@ -2293,6 +2404,14 @@ The condition is never anything but a `bool`, because a value never changes type
 
 ```go
 if (count) { ... }         // ERROR: count is an int, not a bool: write count != 0
+```
+
+Several tests go in one condition with `&&`, `||` and `!` (3.2):
+
+```go
+if (count > 0 && count < 10) { ... }       // both tests have to be true
+if (p == null || p^ == 0) { ... }          // p^ is followed only when p isn't null
+if (!ready) { ... }                        // runs when ready is false
 ```
 
 ### 10.2 Choosing by lookup: `[bool]T`
@@ -2472,6 +2591,11 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 |---|---|---|
 | `+` `-` `*` | two numbers of the same type | a number of that type |
 | `==` `!=` `<` `>` `<=` `>=` | two values of the same type | a `bool` |
+| `&&` `\|\|` | two `bool`s | a `bool`: and, or. The right side is worked out only when it's needed |
+| `!` | one `bool` | a `bool`: not |
+
+The order of operations is `!`, then `*`, then `+` and `-`, then the comparisons, then `&&`,
+then `||`. Operators in the same step go from left to right (3.2).
 
 ### Ownership
 
@@ -2493,6 +2617,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | You want | You write |
 |---|---|
 | to choose | `if (n < 0) { … } else if (n == 0) { … } else { … }` (10.1) |
+| to test several things at once | `if (count > 0 && count < 10) { … }` (3.2) |
 | to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.2) |
 | to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.3) |
 | to repeat, like a loop | a function that calls itself (10.4) |
@@ -2520,6 +2645,7 @@ passed.
 | `var x: int = p^;` | `x` is a plain copy of the heap value |
 | `var b: &int = &a;` | `b` borrows `a`: no copy |
 | `f(&a)` with an `&int` parameter | the parameter borrows the caller's `a`: no copy |
+| `look(&makeBig(1)^)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 
@@ -2550,13 +2676,15 @@ passed.
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
 | `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
+| `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
+| a function of type `(int)int` whose only `return` is inside an `if` with no `else` | a function that returns a value has to reach a `return` on every path (7.1) |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
 | `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
 | `var x: int = p;` where `p` is a `^int` | write `p^` |
 | `var b: &int = count;` and `bump(n);` | an `int` is not an `&int`: write `&count`, `&n` |
-| `var b: &int = &3;` | `3` has no owner to borrow from |
+| `var b: &int = &3;` | the `3` is gone after its statement: it can be borrowed only as an argument (8.4) |
 | `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
