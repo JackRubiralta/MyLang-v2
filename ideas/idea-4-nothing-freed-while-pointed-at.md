@@ -183,12 +183,43 @@ through a variable, an array or a map, every `&` argument counts as "may change"
 - **Code that is safe but has to be reordered or split,** such as two borrowers returned
   from the same list, when one is used to change the list.
 
-## 9. One rule this leans on
+## 9. A function can change a variable from outside itself (Jack)
 
-**A function can only change or take what it is given.** The table in section 7 is only
-complete if a function can't change a variable from outside itself that it wasn't handed.
-Whether a function may use outside variables at all is still open (it is the question about
-functions that use values from where they were made).
+"It can change [a] variable defined outside of its scope." (Jack) It is in DOCS 7.8. So the
+table in section 7 is not the whole story: a call can change an owner without being handed
+it, and the call line doesn't show it.
+
+```go
+var list: ^Node = makeNode(1);
+
+const reset: ()void = (){
+    list = makeNode(9);              // changes a variable from outside: the old first node is freed
+};
+
+var b: &Node = &list^;               // b followed list
+reset();                             // nothing on this line shows that list changes
+b^.value                             // b points into freed memory
+```
+
+For the rule in section 2 to hold, the compiler has to know which outside variables a call
+changes (sketch):
+
+| The call | What the compiler knows |
+|---|---|
+| a function called by its own name | it reads the function, and the functions that one calls by name: the outside variables they change or take |
+| a function called through a variable, an array or a map | not which function runs, so the call counts as changing every outside variable |
+
+With that, `reset();` above is an error: `b` is used below, and the call changes `list`.
+
+Two more things come with a function being able to use outside variables:
+
+- **A function that outlives the variables it uses.** A function made inside another
+  function can use that function's locals. If it is returned or stored, it is still there
+  after they are gone. Using an outside variable is like borrowing it, so rule 8.5 would say
+  such a function can't outlive the variables it uses. Top-level functions that use
+  top-level variables are always fine. (open)
+- **The call shows nothing.** "The mark at a call shows what a function may do" holds for a
+  variable that is passed (DOCS 8.9).
 
 ## 10. Why not a check while running
 
@@ -202,4 +233,5 @@ doesn't show.
 - Whether to take this.
 - "Still used below", or "still in scope". The second is closer to how 8.5 is worded and
   rejects more: in section 4 the fixed example would need `h` in a block of its own.
-- The rule in section 9.
+- How the compiler learns what a call changes (section 9), and a function that outlives the
+  variables it uses.

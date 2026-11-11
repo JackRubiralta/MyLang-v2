@@ -968,6 +968,25 @@ ops[1](5, 3)                                // jumps to sub's code
 
 Copying a function value copies the address, not the code.
 
+### 7.8 Using a variable from outside the function
+
+A function's body can use names declared outside it, and it can change a `var` from outside:
+
+```go
+var count: int = 0;
+
+const countUp: ()void = (){
+    count = count + 1;         // changes a variable declared outside the function
+};
+
+countUp();
+countUp();
+count                          // 2
+```
+
+The call doesn't show it: nothing on the line `countUp();` says that `count` changes. A
+change made through a parameter does show at the call, with `&` or `@` (8.9).
+
 ---
 
 ## 8. Ownership: plain, heap and borrowed values
@@ -1417,8 +1436,10 @@ holder may do to someone else's variable:
 | `var b: &T` | yes | yes | no |
 | `h: @T` | yes | yes | yes |
 
-So the mark at a call shows what a function may do to your variable: `f(x)` nothing, because
-it gets a copy, `f(&x)` read or change it, and `f(@x)` takes its value (8.12).
+So the mark at a call shows what a function may do to a variable you pass it: `f(x)`
+nothing, because it gets a copy, `f(&x)` read or change it, and `f(@x)` takes its value
+(8.12). A function can also change a variable from outside itself without being passed it
+(7.8), and then the call shows nothing.
 
 The rules for an ownership and a move:
 
@@ -1854,6 +1875,8 @@ b^                         // b still leads to where the 5 was
 Not settled yet:
 
 - **Returning a borrower from a function:** what it may borrow from.
+- **A function that uses a variable from outside and outlives it** (7.8), such as a function
+  returned from the function whose local it uses.
 - **Moving into an owner that ends sooner** (an inner block, or a parameter). It's allowed
   above, and the value is freed when that owner ends. An earlier rule had it as an error.
 
