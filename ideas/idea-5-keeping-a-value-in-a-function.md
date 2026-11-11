@@ -9,7 +9,9 @@ a variable can't die before a function that uses it. A function given back keeps
 parameters it uses (Jack: `makeAdder` should work, because `step` is a parameter), and it
 can't outlive the arguments the call was given (Jack: if the argument dies first, the
 compiler raises an error). A local
-declared inside the function is never kept: returning a function that uses one is an error.
+declared inside the function is never kept: returning a function that uses one is an error. To keep
+a local within those rules (Jack, 11 Nov 2026): declare it on the heap and hand it with `@`
+to a parameter of a function that gives back the function using it (DOCS 7.8, `countFrom`).
 
 ## Why it was taken out
 
