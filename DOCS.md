@@ -296,23 +296,21 @@ const empty: bool = !count;            // ERROR: count is an int, not a bool: wr
 if (p != null && p^ > 10) { ... }      // p^ is followed only when p isn't null (8.10)
 ```
 
-`!` goes in front, so like a mark it is applied after everything behind the name (8.2):
-`!seen[4]` is the opposite of `seen[4]`.
+`&&` between two values is *and*. In front of a value or inside a type it is two borrow
+marks: `&&int` is a borrower of a borrower (3.4). Where it stands tells the two apart.
 
-`&&` is never two borrow marks. A mark stands in front of a value or a type (8.2), and `&&`
-stands between two values.
+**The order of operations** is the usual one, as in maths and most programming languages.
+Each row of this table goes before the rows below it:
 
-**The order of operations.** As `*` goes before `+` in maths, each operator in this table
-goes before the ones below it:
-
-| Step | Operators |
-|---|---|
-| 1 | `!` |
-| 2 | `*` |
-| 3 | `+` `-` |
-| 4 | `==` `!=` `<` `>` `<=` `>=` |
-| 5 | `&&` |
-| 6 | `\|\|` |
+| Step | What | Examples |
+|---|---|---|
+| 1 | what is behind a value: following, indexing, calling, a field (8.2) | `p^` `a[0]` `f(1)` `pt.x` |
+| 2 | what is in front of a value: `!` and the marks (8.2) | `!ready` `^v` `&x` `@x` |
+| 3 | `*` | `limit * 2` |
+| 4 | `+` `-` | `count + 1` |
+| 5 | the comparisons | `==` `!=` `<` `>` `<=` `>=` |
+| 6 | `&&` | `a && b` |
+| 7 | `\|\|` | `a \|\| b` |
 
 Operators in the same step go from left to right.
 
@@ -323,10 +321,33 @@ count + 1 > limit * 2 && !ready
 
 a || b && c            // a, or both of b and c
 10 - 4 - 3             // 3: 10 - 4 goes first
+!seen[4]               // the opposite of seen[4]: the index goes first
+```
+
+**Brackets change the order.** What is inside a pair of brackets is worked out first:
+
+```go
+(count + 1) * 2        // the sum first, then * 2
+(a || b) && c          // a or b, and c as well
+!(ready && count > 0)  // true unless both tests are true
 ```
 
 The order says how a line is read, not when each part runs: the right side of `&&` and `||`
 is still skipped when it isn't needed.
+
+**What a `(` starts.** Brackets also write function types (3.3), function values (7.1) and
+calls (7.2). Where a `(` stands tells them apart:
+
+| A `(` … | Starts | Example |
+|---|---|---|
+| right after a value | a call | `f(1)`, `first(bool)([true, false])` |
+| holding parameters, each with `const` or `var`, or empty and followed by `{` | a function value | `(const x: int){ … }` |
+| holding types, or nothing, then a return type | a function type | `(int, int)int`, `()void` |
+| holding one value that isn't a type | a group | `(count + 1) * 2` |
+
+The compiler knows which values are types, because their type is `type` (4.1). So `(a)`
+starts a function type when `a` is a type, and a group when it isn't. A type is never put in
+a group: in a type, `(` always starts a function type, and no type needs grouping (3.4).
 
 ### 3.3 Every modifier goes in front
 
@@ -378,7 +399,8 @@ Swapping two modifiers swaps the meaning, and the order shows it:
 | `[3]^int` | three ints, each on the heap |
 | `^[3]int` | one array of 3 ints on the heap |
 
-No type ever needs brackets to group it.
+No type ever needs brackets to group it, and none is grouped: in a type, `(` always starts a
+function type (3.2).
 
 ### 3.5 Types read in the order you use the value
 
@@ -906,7 +928,7 @@ const add: (int, int)int = (const x: int, const y: int){
 **A function that returns a value has to reach a `return` on every path.** The compiler
 rejects a function that can get to the end of its body without one, such as a function
 whose only `return` is inside an `if` with no `else` (10.1). A function that returns nothing
-has no value to give back, so it ends at the end of its body (7.3).
+ends at the end of its body, or earlier at a `return;` (7.3).
 
 ### 7.2 Calling a function
 
@@ -935,6 +957,30 @@ const hello: ()void = (){      // takes nothing, returns nothing
     ...
 };
 hello();
+```
+
+`return;` on its own ends it early:
+
+```go
+const showPositive: (int)void = (const value: int){
+    if (value < 0) {
+        return;                // nothing to show, so stop here
+    }
+    show(value);
+};
+```
+
+A function that returns nothing never gives a value back, and a function that returns a
+value always does:
+
+```go
+const nothing: ()void = (){
+    return 5;                  // ERROR: nothing returns nothing
+};
+
+const half: (int)int = (const n: int){
+    return;                    // ERROR: half returns an int: write the value
+};
 ```
 
 ### 7.4 Parameters are declared like names
@@ -1101,7 +1147,7 @@ What **makes** a marked value goes in front, like the mark in its type: `^5` is 
 `f(1)`.
 
 What is behind a name is read first, from left to right. What is in front is applied after
-it. So nothing ever needs brackets:
+it. So a chain of marks never needs brackets:
 
 ```go
 &big^[0]               // follow big, take element 0, then borrow it
@@ -2593,9 +2639,12 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `==` `!=` `<` `>` `<=` `>=` | two values of the same type | a `bool` |
 | `&&` `\|\|` | two `bool`s | a `bool`: and, or. The right side is worked out only when it's needed |
 | `!` | one `bool` | a `bool`: not |
+| `( )` around a value | any value that isn't a type | the same value, worked out first |
 
-The order of operations is `!`, then `*`, then `+` and `-`, then the comparisons, then `&&`,
-then `||`. Operators in the same step go from left to right (3.2).
+The order of operations is the usual one: what is behind a value (`p^`, `a[0]`, `f(1)`,
+`pt.x`), then what is in front of it (`!`, `^`, `&`, `@`), then `*`, then `+` and `-`, then the
+comparisons, then `&&`, then `||`. Operators in the same step go from left to right, and
+brackets go first (3.2).
 
 ### Ownership
 
@@ -2618,6 +2667,7 @@ then `||`. Operators in the same step go from left to right (3.2).
 |---|---|
 | to choose | `if (n < 0) { … } else if (n == 0) { … } else { … }` (10.1) |
 | to test several things at once | `if (count > 0 && count < 10) { … }` (3.2) |
+| to stop a function that returns nothing early | `return;` (7.3) |
 | to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.2) |
 | to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.3) |
 | to repeat, like a loop | a function that calls itself (10.4) |
@@ -2678,6 +2728,8 @@ passed.
 | `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
 | a function of type `(int)int` whose only `return` is inside an `if` with no `else` | a function that returns a value has to reach a `return` on every path (7.1) |
+| `return 5;` in a function of type `()void` | a function that returns nothing gives no value back (7.3) |
+| `return;` in a function of type `(int)int` | a function that returns a value has to give one (7.3) |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
