@@ -81,6 +81,9 @@ const scores: [3]int = [10, 20, 30];
 
 A number, a function and an array are all declared the same way.
 
+One mark can go in front of the name: `@`, when the declaration takes a value over from
+another variable, as in `var @q: ^int = @p;` (8.9).
+
 ### 2.2 The two kinds of name
 
 | Kind | Can it be given a new value? |
