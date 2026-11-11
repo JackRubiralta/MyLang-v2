@@ -1,8 +1,7 @@
 # Idea 5: keeping a value in a function with `@`
 
-**Status:** taken out of `DOCS.md` (Jack, 11 Nov 2026: "undo these changes to docs about the
-ways around it, because they kind of break some of the rules already I said"). Kept here for
-later.
+**Status: rejected** (Jack, 11 Nov 2026: "we won't do what the ideas says"). Taken out of
+`DOCS.md` earlier the same day because it broke rules already set. Kept only as a record.
 
 What stayed in `DOCS.md` 7.8: a function borrows the variables it uses from around it, and
 a variable can't die before a function that uses it. A function given back keeps the
