@@ -1137,16 +1137,28 @@ const makeBroken: ()()int = (){
 ```
 
 **A function given back keeps the parameters it uses.** The parameters are what the caller
-handed in, and the function given back is made from them, so they live as long as it does:
+handed in, and the function given back is made from them, so they live as long as it does.
+
+**It can't outlive what was passed in.** At the call, the function given back counts as coming
+from every argument, the same as a borrower that comes back (8.13). If an argument dies
+before the function, the compiler raises an error:
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
     return (const n: int){ return n + step; };   // fine: the function keeps step
 };
 
-var addFive: (int)int = makeAdder(5);
+var five: int = 5;
+var addFive: (int)int = makeAdder(five);         // fine: addFive can't outlive five
 addFive(2)                     // 7
-makeAdder(1)(2)                // 3
+makeAdder(1)(2)                // 3: the 1 lasts until the end of the line (2.6)
+
+{
+    var six: int = 6;
+    addFive = makeAdder(six);  // ERROR: six dies at this block's }, before addFive
+}
+
+var addTen: (int)int = makeAdder(10);   // ERROR: the 10 is gone at the end of this line, before addTen
 ```
 
 A `var` parameter it keeps can still change, and the change stays for the next call:
@@ -1159,7 +1171,8 @@ const makeCounter: (int)()int = (var count: int){
     };
 };
 
-var next: ()int = makeCounter(0);
+var start: int = 0;
+var next: ()int = makeCounter(start);
 next()                         // 1
 next()                         // 2
 ```
@@ -1414,7 +1427,7 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a variable declared in an inner block | no: it ends before the borrower does |
 | a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
 | a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
-| a variable a function uses from around it (7.8) | yes, while the variable lasts at least as long as the function. A function given back keeps the parameters it uses |
+| a variable a function uses from around it (7.8) | yes, while the variable lasts at least as long as the function. A function given back keeps the parameters it uses, and can't outlive the arguments of the call |
 
 The check is made every time a borrower is given something to borrow: when it's declared,
 and again each time it's pointed at something else with `b = &…`.
@@ -2215,6 +2228,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
 | `return (){ return x; };` where `x` is declared inside the function | `x` would die before the function that uses it (7.8) |
+| `var addTen: (int)int = makeAdder(10);` | the 10 dies at the end of the line, before the function made from it (7.8) |
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 
@@ -2781,7 +2795,7 @@ passed.
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
-| a function given back uses a parameter `p` of the call | the function keeps `p` (7.8) |
+| a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments (7.8) |
 
 ### What never changes
 
