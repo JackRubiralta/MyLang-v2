@@ -3725,8 +3725,8 @@ const fixed: {int, (int)void} = {
 };
 ```
 
-A struct value that comes into a `const` from somewhere else brings its functions with it,
-and the compiler can't see what they do. A call through that `const` struct can then change
+**(filled in)** A struct value that comes into a `const` from somewhere else brings its
+functions with it, and the compiler can't see what they do. A call through that `const` struct can then change
 its fields. It is one of the cases the compiler doesn't catch (8.17):
 
 ```go
@@ -3786,31 +3786,46 @@ other.add(1);                  // other.count is now 8, and counter.count is sti
 
 Files work the same way (11.3).
 
-**(filled in) A function field is used by calling it through its struct.** A function written
-in a struct value works on whichever struct it is called through, so on its own it has no
-fields to work on. A function field can be called and it can be given a new value, but it
-can't be read out as a value:
+**(filled in) A function that uses the fields keeps its own struct.** It keeps the address of
+the struct value it sits in (7.7), the way a function in a file keeps its package (11.5).
+When a struct value is copied, moved or given back, each function in the new struct that kept
+the address of the old one, or of a place inside it, keeps the same place in the new one
+instead. That is how each copy's functions come to use its own fields. The functions that are
+re-aimed are the ones held in the struct itself, not the ones behind a pointer.
+
+**(filled in) What such a function can use.**
+
+- It is written as the value of a field, or inside an array, a pair or a map that is the
+  value of a field.
+- Its body can use every field of its block, above it or below it, because the body runs only
+  when the struct is complete. It can call another function field by its name.
+- It has one address for what it keeps (7.7), and that address is the struct. So it can't
+  also use a name that needs another place: a parameter or a name of a function around the
+  struct value, or anything that needs the package (7.7). What it needs from outside goes
+  into a field, or comes in as a parameter.
+- A function in a struct value that uses none of the fields is an ordinary function. It can
+  use the names around the struct value, as `up` and `get` do in 7.8.
 
 ```go
-counter.add(3);                                                 // fine: called through counter
-const addIt: (int)void = counter.add;                           // ERROR: a function field is called, not read out
-const addTo: (int)void = (const n: int){ counter.add(n); };     // fine: a function that calls it through counter
-addTo(3);                                                       // counter.count goes up by 3
+var total: int = 0;
+
+var tally: {int, (int)void} = {
+    count: int = 0;
+    add: (int)void = (const n: int){
+        count = count + n;     // fine: a field
+        total = total + n;     // ERROR: add uses the fields, so it can't also use the top-level var total
+    };
+};
 ```
 
-`addTo` uses `counter` from around it. So it borrows `counter`, like every function that uses
-a variable (7.8), and the code shows it.
+**(filled in) A function read out of a struct uses the struct it was read from.** `counter.add`
+on its own is a function value that keeps `counter`. It borrows `counter` (7.8), so it can't
+outlive it, and a call to it counts as changing `counter` (8.12):
 
-**(filled in) A function in a struct value uses the fields of its own block.** Only a
-function that is itself the value of a field uses them this way: a function inside an array,
-a pair or a map in the block is not called through the struct. Like any function, it can
-also use the names around the struct value (7.8). It can't use the fields of another struct
-value that its own is written inside, because a call hands over one struct only.
-
-**(filled in) Underneath,** a call through a struct hands the function the address of that
-struct, beside its arguments, and the function finds the fields from there (9.8). Nothing
-about the struct is kept in the function value. So copying or moving a struct needs nothing
-special: the copy's functions are handed the copy's address when they are called through it.
+```go
+const addToCounter: (int)void = counter.add;
+addToCounter(3);               // counter.count goes up by 3
+```
 
 ### 9.7 A struct is copied, like every value
 
@@ -3861,32 +3876,53 @@ and its position in the shape (`{int, int}`: `x` first, `y` second).
 
 ### 9.9 Field names **(filled in)**
 
-A struct type lists only types (9.1), and the struct value gives the names
-(9.2). So the names are not part of the type: `{ x: int = 1; y: int = 2; }` and
+A struct type lists only types (9.1), and the struct value gives the names (9.2). So the
+names are not part of the type: `{ x: int = 1; y: int = 2; }` and
 `{ w: int = 3; h: int = 4; }` both have the type `{int, int}`, and either one goes wherever
 that type is asked for (3.6).
 
-**A field name is a label for a position in a struct type.** Every struct value labels the
-positions of its type. `p.x` is the field at the position labelled `x`. A file knows the
-labels that struct values give in the file itself and in the files it imports, directly or
-through other files. So a field name, like every other name, comes from this file or from a
-file it imports (11.1).
+**A field name is a label for a position, and it belongs to the type as it is written.** For
+every value, the compiler knows how its type was written where the value was declared: as a
+type name such as `Point`, or as a struct type written out, such as `{bool, int}`. `p.x` is
+looked up by that:
+
+| The type of `p` was written as | `x` is a label given by |
+|---|---|
+| a type name declared in this file, such as `Point` | the struct values written for `Point` in this file |
+| a type name of another file, such as `geom.Box` | the struct values written for `Box` in the file of `geom`, and those written for `geom.Box` in this file |
+| a struct type written out, such as `{bool, int}` | the struct values written for that same written-out type in this file |
+
+A struct value is *written for* the type that its place asks for (3.8): the block in
+`var p: Point = { … };` is written for `Point`. The written form goes with a type through
+every step: an element of a `[3]Point` is a `Point`, what a `^Node` leads to is a `Node`, a
+call of an `(int)Point` gives a `Point`, and `first(Point)` works on `Point`s (4.3).
 
 ```go
-const sumOf: (Point)int = (const pt: Point){
-    return pt.x + pt.y;        // x and y: the labels that struct values of {int, int} give
-};
+const Point: type = {int, int};
+const Size: type = {int, int};
+
+var p: Point = { x: int = 1; y: int = 2; };
+var s: Size = { w: int = 3; h: int = 4; };
+
+p.x                    // 1
+s.w                    // 3
+s = p;                 // fine: a Point and a Size are the same type (3.6)
+s.w                    // 1: the first field, under the name that Size gives it
+s.x                    // ERROR: no struct value written for Size has a field x
 ```
 
 | Rule | Example |
 |---|---|
-| a name that no struct value the file knows gives to the type is an error | `p.z`, when no `{int, int}` value has a field `z` |
-| a name that the file knows for two positions of one type can't be used in that file | with `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` both known, `p.x` is an error: it could mean either field |
-| one position can have several names | with the two values at the top, `p.x` and `p.w` are the same field of any `{int, int}` |
+| a name that no struct value written for the type gives is an error | `s.x` above |
+| a name that is given to two positions of one written type can't be used | with `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` both written for `Point`, `p.x` could mean either field |
+| one position can have several names | a second value `{ a: int = 0; b: int = 0; }` written for `Point` makes `p.a` the same field as `p.x` |
+| a type name declared as another type name has that name's labels as well | `const Box: type = geom.Box;` |
+| a `T` and an `any` have no field names | a generic function can't read a field of a `T` (4.3) |
 
-A `Point` and a size made of two `int`s are the same type, so a function that takes one takes
-the other, and reads its fields by either set of names. It is the picture from 5.7 again: the
-fields of a struct are reached by position, and their names are labels for the positions.
+It is the picture from 5.7 again: the fields of a struct are reached by position, and their
+names are labels for the positions. The labels come from struct values in the file itself, or
+from a file that is reached through a package. So a field name comes from where every other
+name comes from (11.1).
 
 Inside its own block, a field is also a plain name: for the fields below it (9.2) and for the
 functions written in the block (9.6). Like every name, it can't be spelled like a name that
@@ -4007,10 +4043,11 @@ A call is the last thing a function does when both of these hold:
 | Condition | In detail |
 |---|---|
 | nothing comes after it | it is the whole value of a `return`, as in `return f(a, b);`. Or the function returns nothing, and the call is the last statement of its body |
-| nothing it uses is on this function's stack | no argument is, or holds, a pointer to one of this function's parameters or names. No argument is, or holds, a function that uses them, or one whose kept parameters are held by this call (7.8). The same goes for the function that is called. And no argument borrows a value made on the spot, because such a value lives to the end of the statement (2.6) |
+| nothing it uses lives in this call | What lives in this call is: the function's parameters and names, the heap values they own, the kept parameters this call holds (7.8), and the values made on the spot in the statement. An argument uses one of these when it is, or holds, a pointer to it or a function that uses it. The function that is called uses one when it keeps it. An ownership that a parameter of the called function takes over doesn't count, because its value has moved before the call starts (8.13) |
 
-The arguments, and the function to call, are worked out before the names end (2.9). In every
-other case the call is an ordinary one, and the names end after it, as in 2.6.
+The arguments, and the function to call, are worked out before the names end (2.9). The other
+values made on the spot in the statement are gone by then as well. In every other case the
+call is an ordinary one, and the names end after it, as in 2.6.
 
 ```go
 const sumTo: (&[]int, int, int)int = (const values: &[]int, const i: int, const total: int){
@@ -4039,6 +4076,9 @@ only its own names until it imports another file. So you can always tell where a
 from: it is declared in this file, or it is reached through a package this file imported.
 
 Inside a file, `{ }` blocks still make smaller scopes (2.6).
+
+**(filled in)** The file you run is a package like every other file. Its package value is
+made when the program starts, and it lasts until the program ends.
 
 ### 11.2 Using another file: `import`
 
@@ -4151,7 +4191,8 @@ the whole program:
 |---|---|
 | a name declared with a package: a `const`, a `var` or a parameter | the files of everything it is given: by its declaration, by each assignment to it, and for a parameter by the argument of each call the compiler sees (7.2) |
 | a borrower or an ownership of such a name, and a parameter that is handed one | the same files as the name: the two count as one place |
-| everything else: an element, a map entry, a field, a heap value, the inside of an `any`, the result of a call | one shared place for the whole program. It holds every file that is ever put into any of them |
+| an `import("geom")` | exactly that file |
+| everything else: an element, a map entry, a field, a heap value, the inside of an `any`, the result of any other call | one shared place for the whole program. It holds every file that is ever put into any of them |
 
 A function that is used in any way but a call the compiler sees could be handed anything. So
 its package parameters also hold everything in the shared place, and a package that is handed
@@ -4206,8 +4247,8 @@ A function's body can use top-level names declared below it, so a call could rea
 that isn't set up yet. The compiler rejects that call: **a call at the top level can run only
 when every top-level name its function uses is ready, or is declared above the call.** The
 compiler reads the function for this, and the functions it calls, as in 8.12. A call through
-a variable, an array or a map could run any function of its type, so it counts as using what
-every function of that type in the file uses.
+a variable (7.2) could run any function of its type, so it counts as using what every
+function of that type uses in the file whose top level is being set up.
 
 ```go
 const readLate: ()int = (){ return late; };
@@ -4284,6 +4325,10 @@ a struct whose fields are the file's variables, field by field (8.8):
 | `var @mine: package = @geom;` | `mine` takes `geom`'s value over, field by field (8.9) |
 | `take(@geom)` | a parameter that asks for an ownership takes it at the call (8.13) |
 
+**(filled in)** A function that is read out of a package, or given back by a call through it,
+keeps the address of the package (11.5). So it borrows the package: it can't outlive it, and
+while it is used below, the package can't be given another file (8.12).
+
 **(filled in)** The rules for `const` hold here too. A `var` borrower borrows only a `var`
 package (8.6), and only a `var` package has an ownership to give (8.9). So the second, fourth
 and fifth lines need `geom` to be a `var`.
@@ -4327,8 +4372,8 @@ every such check. All of them fail in the same way:
 2. **One line goes to the error output,** saying what failed and where. Its form is
    `error: FILE:LINE: REASON`. `FILE` is the name of the source file with its `.my`, as its
    path from the folder of the file you run. `LINE` is the line, counted from 1, of the
-   operator, bracket or call that failed. For the status of `main` it is the line of the
-   `return` that gave the number:
+   operator, bracket or call that failed. For a failed assignment it is the line of the `=`,
+   and for the status of `main` it is the line of the `return` that gave the number:
 
    ```
    error: geom.my:12: division by zero
@@ -4362,8 +4407,8 @@ each one is an ordinary function value (4.4):
 | `exit` | `(int)void` | ends the program with a status |
 
 **`print` writes exactly the `char`s it is given,** in order, to the program's standard
-output. It adds nothing, so a line break is written `\n`. Any other value is turned into text
-first (5.10):
+output. It adds nothing, so a line break is written `\n`. What it writes is on the output
+before the next line of the program runs. Any other value is turned into text first (5.10):
 
 ```go
 print("Hello\n");                                          // Hello, and a line break
@@ -4560,7 +4605,7 @@ themselves: `convert` is a `(type, type)(A)B`, `wrap` a `(type)(T)any`, `unwrap`
 | `"Jack"` | a text: the array value `['J', 'a', 'c', 'k']` (5.10) |
 | `true`, `false` | a `bool` |
 | `null` | a pointer that points at nothing (8.10) |
-| `[1, 2, 3]` | an array value, or a pair value when a `?T` is asked for (5.1, 5.8) |
+| `[1, 2, 3]`, `[3, 10]` | an array value. Two values make a pair value when a `?T` is asked for (5.1, 5.8) |
 | `{1: true, 4: false}` | a map value (6.1) |
 | `{ x: int = 1; y: int = 2; }` | a struct value (9.2) |
 | `(const x: int){ return x; }` | a function value (7.1) |
@@ -4660,15 +4705,15 @@ the place they are written for (3.8).
 | `const Bad: type = {int, Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
-| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | a function given back can't be stored where it outlasts the call it is in (7.8) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` **(adjusted)** | a function given back can't be stored where it outlasts the call it is in (7.8) |
 | `var y: &int = x;` where `x` is a `const` borrower | a copy of a `const` borrower can only read (8.6) |
-| `kept = b;` where `b` is a `&int` parameter and `kept` outlasts the call | what a parameter borrows is only known to last as long as the call (8.5) |
-| `const addIt: (int)void = counter.add;` | a function field is called through its struct, not read out (9.6) |
-| `p.z` where no struct value of `p`'s type has a field `z` | a field name comes from the struct values of the type (9.9) |
+| `kept = b;` where `b` is a parameter and `kept` outlasts the call | what comes in through a parameter is only known to last as long as the call (8.5) |
+| `total = total + n;` in a function of a struct value that also uses the struct's fields | such a function keeps its struct, and can use nothing else that needs a place (9.6) |
+| `s.x` where no struct value written for the type of `s` has a field `x` | a field name comes from the struct values written for the type (9.9) |
 | `import(fileName)` | the file is written out in the code (11.2) |
 | `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
 
-The full list for ownership is in 8.16, and every check is in Appendix B.
+**(filled in)** The full list for ownership is in 8.16, and every check is in Appendix B.
 
 **(adjusted)** These checks happen while the program runs. A check that fails stops the
 program (11.7), and Appendix B lists all of them with what each one prints:
@@ -4789,7 +4834,7 @@ always decide:
 | `{` followed by `NAME : Type =` | a struct value |
 | `{` followed by a value and then a `:`, when it isn't the row above | a map value |
 | `{` holding types, as in `{int, int}` or `{int}bool` | a struct type or a map type (3.6) |
-| `{ }` with nothing inside, where a value is expected | a map value with no entries |
+| `{ }` with nothing inside, where a value is expected | a map value with no entries. Where a statement starts, it is an empty block |
 | `{` where a statement starts, when it isn't one of the four above | a block. The `{` after a function value's parameters always starts its body |
 | a statement that starts with a value followed by `=` | an assignment. Without the `=` it is a value on its own |
 
@@ -4847,7 +4892,7 @@ program runs. The rules themselves are in the sections named.
 | `&&`, `\|\|` or `!` on anything but `bool`s | `count && ready`, `!count` | 3.2 |
 | `==` or `!=` on two different types | `count == small` | 3.2, 3.7 |
 | `<`, `>`, `<=`, `>=` on anything but two numbers of one type or two `char`s | `0 < count < 10`, `ready < true` | 3.2 |
-| written numbers whose answer doesn't fit, and a whole number divided by a written `0` | `var over: int8 = 100 + 100;`, `count / 0` | 3.2 |
+| written numbers whose answer doesn't fit, and a whole number divided by a written `0` | `var over: int8 = 100 + 100;`, `count / 0`, `count % 0` | 3.2 |
 | a value written on the spot with nothing to take its type from | `[]`, `{}` or `null` with no place | 3.8 |
 | a type that is called | `int(3.0)`, `Point(1, 2)` | 4.1 |
 | a type that isn't written out where it decides a type | `var n: wholeTypes[1] = 5;`, `first(x.T)` | 4.2, 4.3 |
@@ -4869,12 +4914,12 @@ program runs. The rules themselves are in the sections named.
 | an array value of the wrong length for a fixed array | `const wrong: [3]char = "Jack";` | 5.1, 5.10 |
 | changing an element, an entry or a field of a `const` | `primes[0] = 7;`, `pairs[1] = [0, 0];`, `origin.x = 1;` | 5.2, 6.2, 9.3 |
 | an index that isn't an `int` | `scores[small]`, `primes[true]` | 5.2 |
-| a written index out of range for a length that is in the type | `primes[3]` for a `[3]int` | 5.2 |
+| a written index out of range for a length the compiler knows | `primes[3]` for a `[3]int`, `scores[5]` for a name declared with 3 elements | 5.2 |
 | a name declared with an array value written out, given an array value written out of another length | `a = [1, 2, 4, 5];` for a length of 3 | 5.3 |
 | a fixed array where an unsized one is asked for, or the other way round | `firstOf(primes)`: write `primes[:]` | 5.3 |
 | a pair looked up with anything but a `bool` | `sizes[1]` | 5.8 |
 | a pair value that doesn't have two values | `const three: ?int = [1, 2, 3];` | 5.8 |
-| written slice bounds out of order, or past a length that is in the type | `&primes[2:1]`, `&primes[0:5]` | 5.9 |
+| written slice bounds out of order, or past a length the compiler knows | `&primes[2:1]`, `&primes[0:5]` | 5.9 |
 | a key written twice in a map value | `{1: true, 1: false}` | 6.1 |
 | a lookup with a key of the wrong type | `seen['a']` for an `{int}bool` | 3.8 |
 | a written value used as a key that isn't in a map declared with written keys | `seen[7]`, `seen[7] = true;` | 6.2, 6.3 |
@@ -4889,7 +4934,7 @@ program runs. The rules themselves are in the sections named.
 | a function value whose parameters don't match its type | `const f: (int)int = (const a: int, const b: int){ … };` | 7.1 |
 | a `return` whose value isn't the function's return type | `return true;` in an `(int)int` | 7.1 |
 | a function that uses a name declared inside the function around it, given back or stored where it lasts longer | `return (){ return x; };` | 7.8 |
-| a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);`, `return makeAdder(by);` | 7.8 |
+| a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);`, `return makeAdder(more);` for a local `more` | 7.8 |
 | a function given back that is stored where it outlasts the call it is in | `keep = makeAdder(five);` inside a function | 7.8 |
 
 ### B.6 Ownership
@@ -4903,7 +4948,10 @@ check these rules:
 | a borrower, an ownership, or a value that holds one, doesn't outlive what it points at | 8.5 |
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
 | a `var` borrower is made only from a `var` name or another `var` borrower, wherever the compiler sees both | 8.6 |
-| what a parameter borrows isn't put in a variable that outlasts the call | 8.5 |
+| what comes in through a parameter (a borrower, an ownership, a function, or a value that holds one) isn't put in a variable that outlasts the call | 8.5 |
+| a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
+| a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
+| a `var` package isn't given another file while a borrower of it, or a function read out of it, is used below | 8.12, 11.6 |
 | both sides of a move are ownerships, and the one on the right comes from a `var` owner, not from a borrower | 8.9 |
 | `null` is given only to a `^T`, an `&T` or an `@T` | 8.10 |
 | an owner isn't changed while a pointer made by following it is still used below, and a call to a function that uses the pointer is such a use | 8.12 |
@@ -4918,10 +4966,10 @@ check these rules:
 | a field whose written type isn't the type at its position | `{ x: int = 1; y: bool = true; }` for a `Point` | 9.2 |
 | a field named like a name that can be seen where the struct value is written | a field `count` beside a `var count` | 2.8, 9.9 |
 | a function in a `const` struct that changes a field | `count = count + n;` in the block of a `const` struct | 9.3 |
-| a function field read out as a value | `const addIt: (int)void = counter.add;` | 9.6 |
-| a function in a struct value that uses the fields of a struct value around its own | a function in an inner block that names a field of the outer block | 9.6 |
-| a field name that no struct value the file knows gives to the type | `p.z` | 9.9 |
-| a name that the file knows for two positions of one struct type, used on that type | `p.x`, when `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` are both known | 9.9 |
+| a function in a struct value that uses the struct's fields and also a name that needs another place | `total = total + n;` beside `count = count + n;` | 9.6 |
+| a field name that no struct value written for the type gives | `s.x` for a `Size` whose values name `w` and `h` | 9.9 |
+| a name that is given to two positions of one written type, used on that type | `p.x`, when `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` are both written for `Point` | 9.9 |
+| a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 9.9 |
 
 ### B.8 Files and packages
 
@@ -4943,7 +4991,7 @@ error line.
 
 | Line | Fails when | Reason printed | Rule |
 |---|---|---|---|
-| `a + b`, `a - b`, `a * b`, `-a`, and `a / b`, `a % b` on whole numbers | the answer is outside the range of the type | `number out of range` | 3.2 |
+| `a + b`, `a - b`, `a * b`, `-a`, and `a / b` on whole numbers | the answer is outside the range of the type | `number out of range` | 3.2 |
 | `a + b`, `a - b`, `a * b`, `a / b` on floats | the answer is too big for the type | `number out of range` | 3.2 |
 | `a / b`, `a % b` | `b` is zero | `division by zero` | 3.2 |
 | `convert(int, int8)(n)` and every conversion between numbers, `bool` and `char` | the value doesn't fit the type it is converted to | `conversion out of range` | 4.4 |
@@ -4959,7 +5007,8 @@ error line.
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
 | `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
-| `^v` | there is no room left on the heap | `out of heap` | 8.3 |
+| `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
+| `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
 | any call, and a declaration that needs more stack than is left | there is no room left on the stack | `out of stack` | 10.4 |
 | `print(t)` | the output can't be written | `output failed` | 11.8 |
 | `read()` | the input can't be read | `input failed` | 11.8 |
