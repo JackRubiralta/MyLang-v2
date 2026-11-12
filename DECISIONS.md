@@ -229,3 +229,16 @@ What follows from it:
 | The usual order of operations, and brackets that group | "Do whatever the conventions are for most programming languages." What is behind a value goes first, then what is in front, then `*`, then `+ -`, then comparisons, then `&&`, then `\|\|` |
 | A type is never grouped: in a type, `(` always starts a function type | It keeps the rule from section 4.1. `(a)` is a function type when `a` is a type, and a group when it isn't |
 | `&&` in front of a value or inside a type is two borrow marks | Where it stands tells the two apart: `&&int` is a borrower of a borrower |
+
+---
+
+## 9. Files and packages
+
+| Choice | Why |
+|---|---|
+| A package is a file | Jack: "I think a package should be a file." One file is one scope, so every name comes from this file or from a package it imported, and you can see which |
+| `const geom: package = import("geom");` | The import is an ordinary declaration in the one shape every name uses. `import` is a built-in like `convert`, and `package` is a built-in type like `type` and `any`. Zig works the same way |
+| Everything at a file's top level can be used from outside, for now | The simplest start |
+| Statements that run go only in the file you run; an imported file holds only declarations | Nothing runs because a file was imported, so the run order never depends on imports |
+| A package is always a `const`; importing the same file twice gives the same package; two files can't import each other | A package never changes, its variables exist once, and every file's names are ready before a file that imports it **(filled in)** |
+| A function's body can use any top-level name of its own file, wherever it is declared | Two functions in one file can call each other **(filled in)** |

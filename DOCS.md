@@ -12,7 +12,7 @@ MyLang is a **declarative, explicit, first-class** language.
   repeating is a function calling itself. A choice is an `if`, or a lookup.
 
 This file documents the language: values, names, types, arrays, maps, functions, ownership
-(the heap, borrowing and moving), structs, and choosing and repeating.
+(the heap, borrowing and moving), structs, choosing and repeating, and files.
 
 Why each rule is the way it is is in `DECISIONS.md`.
 
@@ -36,8 +36,9 @@ Why each rule is the way it is is in `DECISIONS.md`.
 8. [Ownership: plain, heap and borrowed values](#8-ownership-plain-heap-and-borrowed-values)
 9. [Structs](#9-structs)
 10. [Choosing and repeating](#10-choosing-and-repeating)
-11. [Putting it together](#11-putting-it-together)
-12. [Quick reference](#12-quick-reference)
+11. [Files and packages](#11-files-and-packages)
+12. [Putting it together](#12-putting-it-together)
+13. [Quick reference](#13-quick-reference)
 
 ---
 
@@ -208,8 +209,8 @@ Three everyday names stand for the 64-bit types:
 These are ordinary names for those types, the same as naming a type yourself (4.1), so an
 `int` and an `int64` are the same type.
 
-Two more built-in types have their own sections: `type`, the type of a type (4.1), and
-`any`, a value of any type (4.5).
+Three more built-in types have their own sections: `type`, the type of a type (4.1),
+`any`, a value of any type (4.5), and `package`, a file used from another file (11.2).
 
 ### 3.2 Writing basic values
 
@@ -2731,7 +2732,76 @@ sumFrom(&scores, 0)    // 60
 
 ---
 
-## 11. Putting it together
+## 11. Files and packages
+
+### 11.1 A file is a package
+
+Every file is a package. Its top-level declarations are the package's names, and a file sees
+only its own names until it imports another file. So you can always tell where a name comes
+from: it is declared in this file, or it is reached through a package this file imported.
+
+Inside a file, `{ }` blocks still make smaller scopes (2.6).
+
+### 11.2 Using another file: `import`
+
+A file brings in another file with an ordinary declaration:
+
+```go
+// the file geom
+const Box: type = {int, int};
+const area: (int, int)int = (const w: int, const h: int){
+    return w * h;
+};
+var made: int = 0;
+```
+
+```go
+// the file main
+const geom: package = import("geom");
+
+geom.area(3, 4)                        // 12
+const Box: type = geom.Box;            // a type from geom, named here too
+geom.made = geom.made + 1;             // geom's variable changes
+```
+
+| Piece | What it is |
+|---|---|
+| `import("geom")` | a built-in that gives the file `geom` as a value |
+| `package` | the type of that value, built in like `type` and `any` |
+| `geom.area` | one of the package's names, reached with `.` like a struct field |
+
+- **`import` is a built-in, like `convert` and `wrap` (4.4, 4.5),** so the line is an ordinary
+  declaration in the one shape every name uses (2.1).
+- **A package is always a `const`,** like a type (4.2): it never changes.
+- **The name in `import` is the file's path from the importing file's folder:**
+  `import("shapes/geom")`. A folder only organises files.
+- **Importing the same file twice gives the same package.** Its variables exist once, not once
+  for each import.
+- **Two files can't import each other,** directly or through other files.
+
+### 11.3 What a file can use from another
+
+Everything at the top level of an imported file can be used: its types, functions and
+variables. A top-level variable of any file lasts as long as the program (2.6), so a function in
+any file can use it (7.8), and a call that changes it counts as changing it (8.12).
+
+### 11.4 Order, and where statements go
+
+- **A function's body can use any top-level name of its own file,** wherever in the file it is
+  declared. A body runs only when the function is called, so two functions can call each
+  other. The value in a top-level declaration still uses only names declared above it.
+- **Statements that run, such as `countUp();`, go only in the file you run.** An imported file
+  holds only declarations. Nothing runs because a file was imported, so the order the program
+  runs in never depends on imports.
+
+```go
+// the file geom
+area(1, 1);            // ERROR: main imports geom, so geom holds only declarations
+```
+
+---
+
+## 12. Putting it together
 
 ```go
 // name long types once
@@ -2774,7 +2844,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 
 ---
 
-## 12. Quick reference
+## 13. Quick reference
 
 ### Kinds of name
 
@@ -2795,6 +2865,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `char` | one character |
 | `type` | the type of a type |
 | `any` | a value of any type, with its type inside |
+| `package` | a file used from another file (11.2) |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
 | `[bool]T` | choice array: one `T` for `false`, one for `true` |
@@ -2854,6 +2925,7 @@ brackets go first (3.2).
 | `convert(float, int)` | `(float)int` | converts a value from the first type to the second (4.4) |
 | `wrap(int)` | `(int)any` | wraps a value in an `any` (4.5) |
 | `unwrap(int)` | `(any)int` | takes the value back out of an `any`, checked while running (4.5) |
+| `import("geom")` | `package` | gives the file `geom` as a package (11.2) |
 
 Built-ins are first-class values like everything else: they can be named, stored and
 passed.
@@ -2904,6 +2976,9 @@ passed.
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
 | `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
+| `var geom: package = import("geom");` | a package is always a `const` (11.2) |
+| two files that import each other | imports can't go round in a circle (11.2) |
+| a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
 | a function of type `(int)int` whose only `return` is inside an `if` with no `else` | a function that returns a value has to reach a `return` on every path (7.1) |
 | `return 5;` in a function of type `()void` | a function that returns nothing gives no value back (7.3) |
