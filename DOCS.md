@@ -25,7 +25,9 @@ Why each rule is the way it is is in `DECISIONS.md`.
 - `...` stands for code that's left out.
 - **(filled in)** Each example is its own piece of code. An example can use names from the
   examples before it, and it can also declare a name again that an earlier example declared.
-  In one real file that second declaration would be an error (2.8).
+  In one real file that second declaration would be an error (2.8). A line marked `// ERROR`
+  declares nothing, and neither does code that is introduced as a picture of what a value is
+  underneath.
 - **(filled in)** marks a rule that Claude added, and **(adjusted)** marks one that Claude
   changed. `FILLED_IN.md` lists them all.
 
@@ -183,9 +185,12 @@ var a: int = 1;
 When a name ends, its value is removed from the stack. If the name owns a value on the
 heap, that value is freed too.
 
-### 2.7 Writing the source
+**(filled in)** A parameter that a function given back uses is a kept parameter. It lives
+until the function call that holds it ends (7.8).
 
-**(filled in)** A source file is plain text in UTF-8, and its file name ends in `.my`.
+### 2.7 Writing the source **(filled in)**
+
+A source file is plain text in UTF-8, and its file name ends in `.my`.
 
 **Characters.** Outside comments and text, a file uses only the letters, digits and symbols
 of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.10)
@@ -193,7 +198,7 @@ can hold any character.
 
 **Spaces, tabs and line breaks only separate things.** They can go between any two words,
 numbers or symbols, and a statement can run over several lines. A statement ends at its `;`
-(2.5), never at a line break.
+(2.5), never at a line break. A line break is the character `\n`, alone or after a `\r`.
 
 **Comments.** `//` starts a comment, and the comment runs to the end of the line. There is
 no other kind of comment.
@@ -241,9 +246,9 @@ whether it means *and* or two borrow marks (3.2).
 
 How numbers, `char`s and text are written is in 3.2 and 5.10.
 
-### 2.8 A name is declared once
+### 2.8 A name is declared once **(filled in)**
 
-**(filled in)** A name can be seen from its declaration to the end of its block (2.6): in
+A name can be seen from its declaration to the end of its block (2.6): in
 that block, and in every block and function body inside it (7.8).
 
 **A name can't be declared where the same name can already be seen.** So a name means one
@@ -269,13 +274,14 @@ Two names can be spelled the same when neither can be seen from the other, like 
 front of the `.`, so it never clashes with a name declared somewhere else.
 
 **A name is used only below its declaration.** The value of a declaration uses names declared
-above it. There are three exceptions, and each is safe because nothing runs too early:
+above it. There are four exceptions, and each is safe because nothing runs too early:
 
 | Exception | Why it is safe |
 |---|---|
 | a function's body can use any top-level name of its own file (11.4) | the body runs only when the function is called |
 | a function's body can use the function's own name (7.8) | the same reason |
-| a type can use any top-level type of its own file, itself included (4.6) | a type is known before the program runs, so nothing runs at all |
+| a type name declared at the top level can be used anywhere in its file, also in its own declaration (4.2, 4.6) | a type is known before the program runs, so nothing runs at all |
+| a type name declared inside a function can be used in its own declaration (4.6) | the same reason |
 
 A top-level name can be seen in every function body of its file. So no parameter and no name
 inside a function can be spelled like a top-level name of the same file.
@@ -285,9 +291,9 @@ in each block around it, out to the top level of the file, and last among the bu
 The first rule above means it finds at most one. It never looks in another file: a name from
 another file is always reached through a package, as in `geom.area` (11.2).
 
-### 2.9 Statements
+### 2.9 Statements **(filled in)**
 
-**(filled in)** A block holds statements, and so does the top level of the file you run
+A block holds statements, and so does the top level of the file you run
 (11.4). There are five kinds:
 
 | Statement | Form | Example |
@@ -309,7 +315,7 @@ written only inside a function body.
 | Place | Example | It can be assigned when |
 |---|---|---|
 | a name | `count = 4;` | the name is a `var` (2.3) |
-| an element | `scores[0] = 15;` | the array can be assigned (5.2) |
+| an element | `scores[0] = 15;`, `sizes[true] = 5;` | the array or the pair can be assigned (5.2, 5.8) |
 | a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
 | a field | `p.x = 5;` | the struct can be assigned (9.3) |
 | a name of a package | `geom.made = 1;` | the name is a `var` in its file (11.3) |
@@ -318,14 +324,14 @@ written only inside a function body.
 
 The forms combine, read from left to right: `list^.next^.value = 3;`, `table[0][1] = 12;`,
 `both[0]^ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
-changed through that name.** So the left side of an assignment starts at a `var` name, or at
-a value with no name that is then followed with `^`. Only one thing carries a word of its own
-past the name it is reached through: a top-level name of a file, reached through a package
-(11.3).
+changed through that name.** So the left side of an assignment starts at a `var` name, or it
+goes through a pointer that may be changed through (8.6). A top-level name of a file has a
+`const` or `var` of its own, and a place reached through a package follows that word (11.3).
 
 ```go
 second(&list^)^.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
-makePoint(1, 2).x = 5;         // ERROR: the struct has no name, so nothing could ever read the 5
+makePoint(1, 2).x = 5;         // ERROR: a place starts at a name, or goes through a pointer
+scores[1:3] = [0, 0];          // ERROR: scores[1:3] is a copy, not a place (5.9)
 scores.length = 4;             // ERROR: a length never changes (5.5)
 ```
 
@@ -338,7 +344,9 @@ a = b = 3;                     // ERROR: b = 3 is a statement, not a value
 **An assignment works out its right side first.** Then it finds the place on the left, frees
 what the place owned (8.8), and puts the new value in. A call uses the same order: every
 argument is worked out before any parameter is set (7.2). Values come first, and places
-after.
+after. A move, `@q = @p;`, keeps to the same order: the ownership on the right is worked out,
+the place on the left is found, the value is taken out of the old variable, which is left
+`null`, then what the place owned is freed, and the value is put in (8.9).
 
 ```go
 var scores: []int = [10, 20, 30];
@@ -434,11 +442,16 @@ const letter: char = 'a';
   never `.5` or `3.`.
 - `e` multiplies by a power of ten: `1.5e3` is `1500.0`. The `e` can be written `E`, and the
   power can carry a `+` or a `-`.
-- A number can't run straight into a name: `2total` is an error (2.7).
+- A number can't run straight into a name, or into a digit its base doesn't have: `2total`
+  and `0b12` are errors (2.7).
 - `true` and `false` are the two `bool` values, and `null` is the pointer that points at
   nothing (8.10). All three are reserved words (2.7).
+- A **written value** is a number, a `char`, a text, `true` or `false` written in the code in
+  one of these forms. A name is not a written value, and neither is anything that has to be
+  worked out. Several rules let the compiler check a line when the values in it are written
+  values, and otherwise leave the check to the running program (5.2, 5.3, 5.9, 6.1 to 6.3).
 
-An escape writes a character that can't be typed between the quotes:
+**(filled in)** An escape writes a character that can't be typed between the quotes:
 
 | Escape | The character |
 |---|---|
@@ -451,7 +464,7 @@ An escape writes a character that can't be typed between the quotes:
 | `\"` | `"` |
 | `\x41` | the character whose number is written with two base-sixteen digits: here 65, `'A'` |
 
-A `\` followed by anything else is an error. A `char` is 8 bits (3.1): one byte, holding a
+**(filled in)** A `\` followed by anything else is an error. A `char` is 8 bits (3.1): one byte, holding a
 number from 0 to 255. The characters of ASCII have the numbers 0 to 127. A character outside
 ASCII takes more than one byte in UTF-8, so it doesn't fit in a `char`:
 
@@ -478,13 +491,15 @@ var rate: float = 3;           // ERROR: write 3.0
 
 **(filled in)** The place a written number takes its type from is the nearest thing around it
 that has a type: the declaration or assignment it's the value of, the parameter it's passed
-to, the `return` it's given back by, the array, pair, map or struct value it's written in, or
-the other side of an operator. The type passes inwards through brackets, through a `-` in
-front and through `+`, `-`, `*`, `/` and `%`:
+to, the `return` it's given back by, the array, pair, map or struct value it's written in, the
+index or key it is used as, or the other side of an operator. The type passes inwards through
+brackets, through a `-` in front, through `+`, `-`, `*`, `/` and `%`, and through the marks
+`^` and `&` (8.2):
 
 ```go
 var tiny: int8 = (2 + 3) * 4;      // 2, 3 and 4 are all int8s here
 const low: bool = tiny < 100;      // 100 takes the type of the other side: an int8
+var boxed: ^int8 = ^5;             // a ^int8 is asked for, so the 5 under the ^ is an int8
 ```
 
 **(filled in)** A written number with no place to take a type from is an `int`, or a `float`
@@ -516,12 +531,12 @@ of the same type and gives a number of that type:
 | `a % b` on whole numbers | what is left over, `a - (a / b) * b`. It has the sign of `a` | `7 % 2` is `1`, and `-7 % 2` is `-1` |
 | `a / b` on floats | `a` divided by `b` | `7.0 / 2.0` is `3.5` |
 
-`%` works on whole numbers only.
+`%` works on whole numbers only. It fails only when `b` is 0: `a % -1` is 0 for every `a`.
 
 **(filled in) `-` in front of a number gives its negative.** It works on a signed whole
-number or a float, and never on an unsigned number. A `-` in front of a written number is
-part of that number when its type is checked, so `-128` fits in an `int8` although `128`
-doesn't:
+number or a float, and never on an unsigned number. A `-` directly in front of a written
+number is part of that number when its type is checked, so `-128` fits in an `int8` although
+`128` doesn't. With brackets in between, as in `-(128)`, the `128` has to fit by itself:
 
 ```go
 var low: int8 = -128;          // fine: -128 is in range for an int8
@@ -538,17 +553,19 @@ never wraps around, and it never turns into another type.
 | Line | Fails while running when |
 |---|---|
 | `a + b`, `a - b`, `a * b`, `-a` | the answer is outside the range of the type |
-| `a / b`, `a % b` on whole numbers | `b` is 0, or the answer is outside the range: `-128 / -1` in `int8`s |
+| `a / b` on whole numbers | `b` is 0, or the answer is outside the range: `-128 / -1` in `int8`s |
+| `a % b` | `b` is 0 |
 | any of them on floats | the answer is too big for the type, or isn't a number at all: `1.0 / 0.0`, `0.0 / 0.0` |
 
-So a float is always an ordinary number: there is no infinity and no "not a number" value,
-and dividing by `0.0` fails like dividing by `0`. Floats follow the IEEE 754 standard that
-processors use: a `float32` is its 32-bit format and a `float64` its 64-bit format. An answer
-that can't be held exactly is rounded to the nearest value that can, and one too small to
-tell from zero becomes zero.
+**(filled in)** So a float is always an ordinary number: there is no infinity and no "not a
+number" value, and dividing by `0.0` fails like dividing by `0`. Floats follow the IEEE 754
+standard that processors use: a `float32` is its 32-bit format and a `float64` its 64-bit
+format. An answer that can't be held exactly is rounded to the nearest value that can, and
+one too small to tell from zero becomes zero. `0.0` and `-0.0` are the same number, so they
+are equal (3.7).
 
-The compiler makes the check itself where it already knows the answer: when every number is
-written in the code, and when a whole number is divided by a written `0`:
+**(filled in)** The compiler makes the check itself where it already knows the answer: when
+every number is a written value, and when a whole number is divided by a written `0`:
 
 ```go
 var over: int8 = 100 + 100;    // ERROR: 200 doesn't fit in an int8
@@ -619,8 +636,8 @@ Each row of this table goes before the rows below it:
 | Step | What | Examples |
 |---|---|---|
 | 1 | what is behind a value: following, indexing, calling, a field (8.2) | `p^` `a[0]` `f(1)` `pt.x` |
-| 2 | what is in front of a value: `!`, `-` and the marks (8.2) **(filled in: `-`)** | `!ready` `-count` `^v` `&x` `@x` |
-| 3 | `*` `/` `%` **(filled in: `/` and `%`)** | `limit * 2` `total / 2` |
+| 2 | what is in front of a value: `!`, `-` and the marks (8.2) **(adjusted: `-` added)** | `!ready` `-count` `^v` `&x` `@x` |
+| 3 | `*` `/` `%` **(adjusted: `/` and `%` added)** | `limit * 2` `total / 2` |
 | 4 | `+` `-` | `count + 1` |
 | 5 | the comparisons | `==` `!=` `<` `>` `<=` `>=` |
 | 6 | `&&` | `a && b` |
@@ -671,6 +688,16 @@ calls (7.2). Where a `(` stands tells them apart:
 The compiler knows which values are types, because their type is `type` (4.1). So `(a)`
 starts a function type when `a` is a type, and a group when it isn't. A type is never put in
 a group: in a type, `(` always starts a function type, and no type needs grouping (3.4).
+
+**(filled in)** In these rules, "a type" means a type that is written out: a type name
+(4.2), or one of the forms of 3.6 made from type names. A value of type `type` that has to be
+worked out, such as `x.T` (4.5), is an ordinary value, so `(x.T)` is a group.
+
+**(filled in)** After an empty `()`, a `{` could start the body of a function value or a
+struct type that a function type returns. The compiler looks inside the braces. Types
+separated by commas, or a single type, make a function type: `(){int, int}` takes nothing and
+returns a struct, and `(){int}bool` returns a map. Anything else is the body of a function
+value: `(){ return 1; }`, and `(){ }` with nothing inside.
 
 ### 3.3 Every modifier goes in front
 
@@ -773,16 +800,22 @@ NUMBER    = a whole number written in the code (3.2)
 ```
 
 A type is written with these forms wherever a type is expected: after the `:` of a
-declaration, a parameter or a field, and inside another type. The full grammar of the
-language is in Appendix A.
+declaration, a parameter or a field, and inside another type. A `NAME` here is a type name
+(4.2). A type reached through a package, `geom.Box`, needs a package that can hold only one
+file (11.3), so that the compiler knows which type it is. The full grammar of the language is
+in Appendix A.
 
 **(filled in)** Two types are the same type when they are the same once every type name is
 replaced by what it names (4.1). Only the shape counts: the names of parameters and fields,
-and `const` and `var`, are not part of a type (7.4, 9.9).
+and `const` and `var`, are not part of a type (7.4, 9.9). For a type that names itself (4.6)
+the replacing never ends, so the rule there is: two types are the same when no difference
+shows up however far the names are followed. `const A: type = {int, ^A};` and
+`const B: type = {int, ^B};` are the same type. To check it, the compiler follows both types
+side by side, and counts a pair of names it has already met as the same.
 
-### 3.7 What "equal" means
+### 3.7 What "equal" means **(filled in)**
 
-**(filled in) `==` compares exactly what `=` copies (8.8).** So a copy is always equal to the
+**`==` compares exactly what `=` copies (8.8).** So a copy is always equal to the
 value it was copied from, and that one rule says what "equal" means for every type:
 
 | Type | `=` copies | So two values are equal when |
@@ -794,10 +827,10 @@ value it was copied from, and that one rule says what "equal" means for every ty
 | a map | every key and its value | they have the same keys, and the values under each key are equal |
 | a heap owner `^T` | the value on the heap | the values they own are equal, or both are `null` |
 | a borrower `&T`, an ownership `@T` | the address | they point at the same place, or both are `null`. Two `&[]T` also need the same length |
-| a function | its two addresses (7.7), and the heap value it owns, if it owns one (7.8) | they are the same code, and what they keep is the same place on the stack, or equal heap values |
+| a function | its two addresses (7.7) | they are the same code, and they keep the same place |
 | a `type` | the type | they are the same type |
 | an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
-| a `package` | the file's variables (11.5) | they are the same file, and every variable is equal |
+| a `package` | the file's variables (11.5) | they are the same file, and every variable is equal. A function that keeps its own package value (11.5) counts as the same in both |
 
 `!=` is the opposite of `==`. Comparing copies nothing and changes nothing.
 
@@ -825,15 +858,15 @@ p == null                      // false: p owns a value
   and they are simply not equal.
 - A `null` takes the pointer type of the other side.
 - Two floats are equal when they are the same number. Every float is an ordinary number
-  (3.2), so a float always equals itself.
+  (3.2), so a float always equals itself. `0.0` and `-0.0` are the same number.
 - Comparing two big values looks at every part, the way `=` copies every part. To ask
   whether two borrowers lead to equal values, compare what they lead to: `r^ == s^`.
 
-### 3.8 The type of every value
+### 3.8 The type of every value **(filled in)**
 
-**(filled in)** The compiler gives every value a type before the program runs. This table
-says how, form by form. "Its place" is where the value is written: what it is declared as,
-assigned to, passed to, returned as, or held in (3.2).
+The compiler gives every value a type before the program runs. This table says how, form by
+form. "Its place" is where the value is written: what it is declared as, assigned to, passed
+to, returned as, held in or used as, or the other side of an operator (3.2).
 
 | Form | What it needs | Its type |
 |---|---|---|
@@ -841,7 +874,7 @@ assigned to, passed to, returned as, or held in (3.2).
 | `true`, `false` | | `bool` |
 | `'a'` | | `char` |
 | `null` | a place | the `^T`, `&T` or `@T` of its place (8.10) |
-| `[a, b, c]`, `"abc"` | every element is a `T` | the `[n]T` or `[]T` of its place, or its `?T` when there are two elements. With no place: `[n]T`, a fixed array of what the elements are (5.1) |
+| `[a, b, c]`, `"abc"` | every element is a `T` | the `[n]T` or `[]T` of its place, or its `?T` when there are two elements. With no place: `[n]T`, a fixed array of what the elements are. Written numbers among them take the type of the other elements (5.1) |
 | `{ x: int = 1; y: int = 2; }` | each value has the type written in its field | the struct type with those field types, in order (9.2) |
 | `{k1: v1, k2: v2}` | every key is a `K`, every value a `V` | the `{K}V` of its place. With no place: `K` and `V` are what the keys and values are (6.1) |
 | `(const x: P1, var y: P2){ … }` | every `return` gives an `R` | `(P1, P2)R`, where `R` is the return type of its place. With no place: `R` is what its `return`s give, or `void` (7.1) |
@@ -952,16 +985,33 @@ A type can still be held as a value: in an array or a map (4.1), as a function's
 A value's type is the one it was declared with. The type inside an `any` is read with
 `x.T` (4.5).
 
+**(filled in) A type name is a name whose type the compiler knows before the program runs.**
+There are three kinds: a built-in type (2.7), a `const` of type `type` whose value is a type
+written out, such as `Pair` and `Point`, and a `type` parameter of a function (4.3). A `const`
+of type `type` whose value has to be worked out, as in `const U: type = x.T;`, holds a type
+but is not a type name.
+
 **(filled in) A type that decides the type of something is written out.** After a `:`,
 inside another type, and as an argument that a function's type uses (4.3), a type is written
-as a type: a name, or one of the forms in 3.6. A type that is worked out any other way, such
-as `wholeTypes[1]` or `x.T`, is a value like any other. It can be compared, stored and
+with type names and the forms of 3.6. A type that is worked out any other way, such as
+`wholeTypes[1]`, `x.T` or `U` above, is a value like any other. It can be compared, stored and
 passed, but it can't declare anything:
 
 ```go
 var n: wholeTypes[1] = 5;      // ERROR: write the type itself: int
 x.T == int                     // fine: comparing two types gives a bool (3.7)
 ```
+
+**(filled in) A top-level type name can be used anywhere in its file,** above its declaration
+too (2.8). The compiler collects the top-level type names of a file before it reads anything
+else, so it always knows which names are types (3.2).
+
+**(adjusted)** The rule that a type is held as a `const` is checked where a type shows it: a
+declaration whose written type has `type` in it, such as `type`, `[2]type` or `{int}type`,
+has to be a `const`. An `any` can hold a type (4.5) and a `T` can stand for `type` (4.3)
+without their types showing it. A type held that way is only known while the program runs.
+By the rule above it can never declare anything, so nothing that is checked before the
+program runs depends on it.
 
 **(filled in) A type lasts as long as the program.** It is fixed before the program runs,
 wherever it is written. So a type that is handed to a function is never an argument that ends
@@ -998,16 +1048,22 @@ right there in the code.
 
 **(filled in) How a function type names the type it is given.** In `(type)([]T)T` the name
 `T` isn't declared anywhere. Inside a function type, a name that isn't declared stands for a
-type the function is given. The first such name is the function's first `type` parameter,
-the second such name is its second, and so on:
+type the function is given. The compiler matches the names to the `type` parameters in the
+order they appear, reading the type from left to right: each `type` in a parameter list opens
+a slot, and each new name takes the first slot to its left that has no name yet.
 
 ```go
 (type)([]T)T                   // T is the type handed to the type parameter
 (type, type)(A)B               // A is the first type handed in, and B is the second
+(type)(type)(A, B)A            // A belongs to the outer function, B to the function it gives back
+(type)([]T)U                   // ERROR: U isn't declared, and no type parameter is left for it
 ```
 
-- The name is used only to the right of the `type` it stands for, up to the end of that
-  function type.
+- A name with no free slot to its left is an error, like any name that isn't declared (2.8).
+- A name is used from its `type` parameter to the end of the function type that the
+  parameter belongs to.
+- The names come in the order of the `type` parameters. A type that uses only some of its
+  type parameters has those first in its parameter list.
 - The name itself is not part of the type: `(type)([]T)T` and `(type)([]E)E` are the same
   type (3.6).
 - The function value names its `type` parameters itself, `(const T: type)`, and they match
@@ -1033,8 +1089,9 @@ once, for every type at the same time. Inside it, `T` is the name of a type, so 
 wherever a type is written: `var x: T = v[0];`. A value of type `T` can be used in the ways
 every type allows: it can be declared, copied, moved, borrowed, put on the heap, passed,
 returned, wrapped (4.5), compared with `==` and `!=` (3.7), and held in arrays, structs and
-maps. What only some types allow is an error. To add two `T`s, the caller passes the function
-that adds them:
+maps. What only some types allow is an error. For the lifetime rules, a value of type `T`
+counts as one that may hold a borrower and a function, because `T` can be any type (8.5,
+8.13). To add two `T`s, the caller passes the function that adds them:
 
 ```go
 const sumBad: (type)(T, T)T = (const T: type){
@@ -1102,16 +1159,26 @@ What a conversion between the basic types gives:
 | a number or a `bool` to text, and back | `convert(int, []char)(42)`, `convert([]char, int)("42")` | `"42"`, `42` (5.10) |
 | a type to itself | `convert(int, int)(3)` | `3` |
 
-`convert` works between the number types, `bool` and `char`, and between those and the text
-type `[]char`, as the two tables list. Any other pair of types is an error:
+**(filled in)** `convert` works between the number types, `bool` and `char`, and between a
+number or a `bool` and the text type `[]char`, as the two tables list. Each of those types
+also converts to itself. Any other pair of types is an error:
 
 ```go
 convert([3]int, int)                   // ERROR: there is no conversion from an array to an int
 convert(bool, float)                   // ERROR: a bool converts to a whole number only
 ```
 
-`convert` itself is a function that takes two types, so its own type is `(type, type)(A)B`
-(4.3).
+**(filled in)** `convert` itself is a function that takes two types, so its own type is
+`(type, type)(A)B` (4.3). That type promises a conversion for every pair of types, and
+`convert` has one only for the pairs above. Where the compiler sees that the call runs
+`convert` (7.2), it rejects any other pair, as above. Where `convert` is reached through a
+variable, such a pair fails while the program runs (11.7):
+
+```go
+const change: (type, type)(A)B = convert;
+change(float, int)(2.5)                // 2: the same as convert(float, int)(2.5)
+change(bool, float)                    // fails while running: no conversion from bool to float
+```
 
 A conversion whose value doesn't fit fails while the program runs:
 
@@ -1162,7 +1229,8 @@ var z: any = wrapInt(7);           // holds the type int and the value 7
 inside (see "Underneath" below), and a value on the stack keeps its size (2.6). So a `var`
 `any` can be given a new value of the same type, and giving it a value of another type fails
 while the program runs (11.7). It is the rule for an unsized array, which keeps its first
-length (5.3):
+length (5.3). The value inside follows its own rule as well: an `any` that holds a `[]int` of
+length 3 can only be given a `[]int` of length 3.
 
 ```go
 var x: any = wrap(int)(3);
@@ -1246,9 +1314,9 @@ Both let one function work with many types:
 | mistakes show up | before the program runs | when an unwrap like `unwrap(int)(x)` runs |
 | best for | the same code for many types | values whose type you only learn while running |
 
-### 4.6 A type that names itself
+### 4.6 A type that names itself **(filled in)**
 
-**(filled in)** A type declared at the top level of a file can use any top-level type of that
+A type declared at the top level of a file can use any top-level type of that
 file, wherever it is declared, itself included (2.8). That is how a list node names the next
 node (8.14):
 
@@ -1353,8 +1421,10 @@ firstOf([1, 2, 3, 4])  // 1
 ```
 
 **(filled in) When a length is only known while running, the check is made while running.**
-The compiler rejects `a = [1, 2, 4, 5];` above because it can see both lengths. When it can't,
-giving an unsized array a value of another length fails while the program runs (11.7):
+The compiler rejects `a = [1, 2, 4, 5];` above because both lengths are in the code: `a` is a
+name declared with an array value written out, and the new value is an array value written
+out. In every other case, giving an unsized array a value of another length fails while the
+program runs (11.7):
 
 ```go
 var part: []int = a[0:2];      // length 2
@@ -1364,7 +1434,10 @@ part = a[1:n];                 // checked while running: fails unless n is 3
 **(filled in) Every holder of an unsized array has its own first value.** A name, a field, an
 element and a value on the heap each take their length from the first value they hold, and
 keep it. A parameter and a result get a new first value at every call. The same holds for
-every type whose size isn't in the type: a map (6.3) and an `any` (4.5).
+every type whose size isn't in the type: a map (6.3) and an `any` (4.5). Underneath, the
+elements of such an array aren't all one size. Each element holds its own size (the length of
+a `[]T`, the keys of a map, the type inside an `any`), and finding element `i` means stepping
+over the elements in front of it.
 
 ```go
 var rows: [2][]int = [[1, 2, 3], [4]];     // two rows: one of length 3, one of length 1
@@ -1372,8 +1445,8 @@ rows[1] = [9];                             // fine: still 1 long
 rows[1] = [9, 9];                          // ERROR: rows[1] has length 1
 ```
 
-A fixed array and an unsized array are different types, and a value never changes type by
-itself (3.2). A fixed array becomes an unsized one through a slice (5.9): `primes[:]` is a
+**(filled in)** A fixed array and an unsized array are different types, and a value never
+changes type by itself (3.2). A fixed array becomes an unsized one through a slice (5.9): `primes[:]` is a
 copy of `primes` as a `[]int`, and `&primes[:]` borrows it as an `&[]int`.
 
 ### 5.4 Arrays inside arrays
@@ -1545,7 +1618,7 @@ there:
 const primes: [3]int = [2, 3, 5];
 &primes[2:1]                           // ERROR: the start is after the end
 &primes[0:5]                           // ERROR: primes has length 3
-&scores[1:n]                           // checked while running: fails if n is over 4
+&scores[1:n]                           // checked while running: fails if n is below 1 or over 4 (adjusted)
 ```
 
 **Underneath, a slice is two numbers:** the address of its first element and how many
@@ -1553,9 +1626,9 @@ elements it borrows. Every `&[]T` is held this way, a borrower of a whole array 
 same function takes both. That is why `.length` works on it like on any unsized array, and why
 nothing is copied.
 
-### 5.10 Text
+### 5.10 Text **(filled in)**
 
-**(filled in)** Text is an array of `char`s (5.1). There is no separate text type, so
+Text is an array of `char`s (5.1). There is no separate text type, so
 everything an array does, a text does.
 
 **Writing it.** `"Jack"`, between two `"`, is the array value `['J', 'a', 'c', 'k']` written
@@ -1600,8 +1673,9 @@ const wrong: [3]char = "Jack";         // ERROR: "Jack" has 4 chars
 | `convert([]char, float)(t)`, for either float type | the float nearest to the number written in `t`: written like a float in the code (3.2), with or without a `-` in front, and the decimal point can be left out |
 | `convert([]char, bool)(t)` | `true` for `"true"` and `false` for `"false"` |
 
-A float whose size is `1.0e21` or more, or below `1.0e-6` and not zero, is written with a
-power of ten: `"1.5e21"`, `"2.0e-7"`.
+A float that is `1.0e21` or more away from zero, or closer to zero than `1.0e-6` without
+being zero, is written with a power of ten: `"1.5e21"`, `"2.0e-7"`. Zero is `"0.0"`, and
+`-0.0` is `"-0.0"`.
 
 Going from text to a value is checked when the line runs, like every conversion that might
 not fit (4.4). It fails when the text isn't written as the table says, or when the number
@@ -1617,9 +1691,9 @@ convert([]char, int)(word[:])          // 4 chars that aren't digits: fails whil
 A text held in a fixed array is converted through a slice, `word[:]`, because the conversion
 takes a `[]char` (5.3).
 
-### 5.11 Joining two arrays: `join`
+### 5.11 Joining two arrays: `join` **(filled in)**
 
-**(filled in)** An array never grows (5.3). `join` makes a new one. It is a built-in function
+An array never grows (5.3). `join` makes a new one. It is a built-in function
 that takes a type and gives back the function that joins two unsized arrays of that type: the
 result is a new unsized array holding the elements of the first, then the elements of the
 second.
@@ -1669,16 +1743,16 @@ be compared with `==` (3.7). So a `char`, a text, a struct or a `type` can be a 
 as a number.
 
 **(filled in) The keys of a map value all differ.** The compiler checks keys that are written
-values. Keys that are worked out while the program runs are checked then, and two equal keys
-fail there (11.7):
+values (3.2). Keys that are worked out while the program runs are checked then, and two equal
+keys fail there (11.7):
 
 ```go
 const doubled: {int}bool = {1: true, 1: false};    // ERROR: the key 1 is written twice
 const mixed: {int}bool = {a: true, b: false};      // checked while running: fails if a equals b
 ```
 
-A map can be empty: `{}` is the map value with no entries. It needs a place that says what its
-key and value types are (3.8).
+**(filled in)** A map can be empty: `{}` is the map value with no entries. It needs a place
+that says what its key and value types are (3.8).
 
 ### 6.2 Reading and changing entries
 
@@ -1692,9 +1766,10 @@ pairs[1] = [0, 0];     // ERROR: pairs is const
 An entry can be changed when the map is a `var`.
 
 **(filled in) A lookup is checked.** A map's keys never change (6.3). So when a map is a name
-that was declared with its keys written out, the compiler knows them, and it rejects a written
-key that isn't one of them. In every other case the check is made while the program runs, and
-a key that isn't in the map fails there (10.2, 11.7):
+declared with a map value whose keys are all written values (3.2), the compiler knows them,
+and it rejects a lookup with a written value that isn't one of them. In every other case the
+check is made while the program runs, and a key that isn't in the map fails there (10.2,
+11.7):
 
 ```go
 seen[7]                // ERROR: 7 isn't a key of seen
@@ -1715,8 +1790,11 @@ seen.length            // 2: the number of keys
 
 **(filled in) A whole new value needs the same keys.** A `var` map can be given a new map
 value, and that value has to have exactly the keys the map already has, in any order. The
-compiler checks it when it can see both sets of keys. Otherwise the check is made while the
-program runs (11.7). It is the rule for an unsized array, which keeps its first length (5.3):
+compiler checks it when it knows the map's keys (6.2) and the new value is a map value whose
+keys are all written values. Otherwise the check is made while the program runs (11.7). It is
+the rule for an unsized array, which keeps its first length (5.3). The map keeps its keys
+where they are: each new value goes to the entry with its key, so a borrower of an entry
+still leads to the same key.
 
 ```go
 seen = {4: true, 1: false};    // fine: the same two keys
