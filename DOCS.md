@@ -1211,8 +1211,8 @@ var look: (int)int = makeLookup(@^[10, 20, 30]);  // the array is made on the sp
 look(2)                // 30                       // straight over
 ```
 
-**To keep a local, put it on the heap and hand it to a parameter.** A local is never kept, but
-a parameter is. So move the local into a parameter with `@` (8.13), through a function that
+**To keep a local, declare it on the heap and hand it over.** A local is never kept, but a
+parameter is. So move the local into a parameter with `@` (8.13), through a function that
 gives back the function that uses it:
 
 ```go
@@ -1224,7 +1224,7 @@ const countFrom: (@^int)()int = (var @count: ^int){
 };
 
 const newCounter: ()()int = (){
-    var total: ^int = ^0;              // a local, declared on the heap (8.3)
+    var total: ^int = ^0;              // a local, declared on the heap
     return countFrom(@total);          // total is handed over and left null; its heap int goes
 };                                     // with the function
 
@@ -1235,7 +1235,7 @@ tally()                        // 2
 
 Nothing is copied: the heap int made in `newCounter` is the one `tally` counts with. Every
 piece is a rule from section 8: `^0` makes the heap value (8.3), and `@total` hands it to a
-parameter that asks for an ownership (8.13).
+parameter that asks for an ownership (8.13). No new syntax is needed.
 
 A kept parameter is kept the way it was declared (7.4). A copy stays the function's own. A
 borrowed parameter (`&T`) is still a borrow, so the function can't outlive what the caller lent
@@ -2949,7 +2949,7 @@ passed.
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8) |
-| keeping a local in a function given back | put it on the heap and hand it to a parameter with `@`: `return countFrom(@total);` (7.8) |
+| keeping a local in a function given back | declare it on the heap and hand it to a parameter with `@`: `return countFrom(@total);` (7.8) |
 | `var p: package = geom;` | `p` leads to the same file: the address is copied, never the file's variables (11.5) |
 
 ### What never changes
