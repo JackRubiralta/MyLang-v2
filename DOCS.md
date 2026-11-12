@@ -2839,6 +2839,47 @@ The new file has to have the names the code uses through `shapes`, each with the
 a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
 nothing is looked up while the program runs.
 
+### 11.6 Ownership and borrowing work on a package like on any variable
+
+A package is a value like any other, so everything in section 8 applies to it. It is used like
+a struct whose fields are the file's variables, field by field (8.8):
+
+| You write | What happens, the same as for any variable |
+|---|---|
+| `var p: package = geom;` | `p` gets its own copy of `geom`'s variables (8.8) |
+| `var b: &package = &geom;` | `b` borrows `geom`: one copy is shared, and nothing is copied (8.4) |
+| `var h: ^package = ^geom;` | a copy of `geom` on the heap (8.3) |
+| `var @mine: package = @geom;` | `mine` takes `geom`'s value over, field by field (8.9) |
+| `take(@geom)` | a parameter that asks for an ownership takes it at the call (8.13) |
+
+Borrowing is how two parts of a program share one copy:
+
+```go
+var shared: package = import("counter");
+
+const bumpTwice: (&package)void = (var p: &package){
+    p^.bump();
+    p^.bump();
+};
+
+bumpTwice(&shared);
+shared.count                   // 2: bumpTwice borrowed shared, so no copy was made
+```
+
+The borrowing rules hold too. A borrower of a package, or of one of its variables, can't
+outlive it (8.5), and while it is used further down, the package can't be given another file
+(8.12):
+
+```go
+var c: &int = &shared.count;
+shared = import("counter");    // ERROR: c is used below, and this would replace what c points at
+c^
+```
+
+A function that takes a package uses only the names that every package given to it has, each
+with the same type. The compiler checks this at each call, as it does when a `var` package is
+given another file (11.5).
+
 ---
 
 ## 12. Putting it together
@@ -2990,6 +3031,7 @@ passed.
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
 | `var p: package = geom;` | `p` gets its own copy of `geom`'s variables; the code isn't copied (11.5) |
 | `import("geom")` twice | two packages, each with its own variables (11.2) |
+| `&geom`, `^geom`, `@geom` | borrows, puts on the heap or moves a package, like any variable (11.6) |
 
 ### What never changes
 
