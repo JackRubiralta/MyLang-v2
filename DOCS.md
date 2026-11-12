@@ -785,7 +785,7 @@ value it was copied from, and that one rule says what "equal" means for every ty
 | a map | every key and its value | they have the same keys, and the values under each key are equal |
 | a heap owner `^T` | the value on the heap | the values they own are equal, or both are `null` |
 | a borrower `&T`, an ownership `@T` | the address | they point at the same place, or both are `null`. Two `&[]T` also need the same length |
-| a function | its code address, and what it keeps (7.7) | they are the same code and keep the same things |
+| a function | its two addresses (7.7), and the heap value it owns, if it owns one (7.8) | they are the same code, and what they keep is the same place on the stack, or equal heap values |
 | a `type` | the type | they are the same type |
 | an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
 | a `package` | the file's variables (11.5) | they are the same file, and every variable is equal |
@@ -1764,6 +1764,30 @@ const add: (int, int)int = (const x: int, const y: int){
 rejects a function that can get to the end of its body without one. A function that returns
 nothing ends at the end of its body, or earlier at a `return;` (7.3).
 
+**(filled in) What "every path" comes down to.** No statement branches, so a body runs
+straight down, into each block inside it. A block *always returns* when its last statement is
+a `return`, or is a block that always returns. A function that returns a value needs a body
+that always returns. Nothing is written after a `return`, or after a block that always
+returns, because it could never run:
+
+```go
+const one: ()int = (){
+    {
+        return 1;
+    }                          // this block always returns, so the body does too
+};
+
+const late: ()int = (){
+    return 1;
+    show(2);                   // ERROR: nothing after a return can run
+};
+```
+
+**(filled in) A function value is checked against its type.** It has as many parameters as
+the type lists, each with the type listed at its position, and every `return` in it gives a
+value of the return type. A function value written where nothing asks for a type takes its
+return type from what its `return`s give (3.8).
+
 ### 7.2 Calling a function
 
 ```go
@@ -1776,6 +1800,15 @@ itself, the parameter borrows it (8.4): `bump(&n)`.
 A call works out all of its arguments first, from left to right. Then it sets the
 parameters, from left to right. So one argument can't change what another argument reads
 (8.13).
+
+**(filled in)** A call gives exactly one argument for each parameter, and each argument has
+the type of its parameter (3.8). The value in front of the `(` is worked out before the
+arguments (2.9):
+
+```go
+add(1)                 // ERROR: add takes two ints
+add(1, true)           // ERROR: the second argument is a bool, and add takes an int
+```
 
 ### 7.3 A function that returns nothing
 
@@ -1814,6 +1847,10 @@ const half: (int)int = (const n: int){
     return;                    // ERROR: half returns an int: write the value
 };
 ```
+
+**(filled in)** A call to a function that returns nothing has no value (3.8), so it can't be
+given back either. `return hello();` is an error in every function: write `hello();` and then
+`return;`.
 
 ### 7.4 Parameters are declared like names
 
@@ -1929,6 +1966,21 @@ steps[2](5)            // 10
 
 `steps` can't outlive `one` or `two`, because the functions in it can't (7.8).
 
+**(filled in) What the second address is.** One address is always enough:
+
+| The function | The address of what it keeps |
+|---|---|
+| uses nothing from outside itself | empty |
+| uses names of a block around it (7.8) | that block's place on the stack |
+| is written in a struct value and uses its fields (9.6) | the struct value |
+| is written at the top level of a file (11.3) | the package value that holds the file's variables |
+| was given back by a call and keeps parameters of it (7.8) | the place of that call's parameters |
+| was given back and keeps only a heap value (7.8) | the heap value |
+
+Each of these places holds the address of the place around it: a block leads to the block or
+the struct value around it, and in the end to the package value of its file. So a function
+inside a function inside a file reaches everything it can see through one address.
+
 ### 7.8 Using a variable from outside the function
 
 A function's body is a block (2.6), and a block sees the names of the blocks around it. So
@@ -2025,6 +2077,38 @@ next()                         // 1
 next()                         // 2
 ```
 
+**(filled in) One call has one set of parameters.** When a call gives back more than one
+function, in a struct, an array or a pair, they all use the same kept parameters. It is the
+rule from the top of this section again: a function borrows the variables it uses, and here
+the variable is the call's parameter. Every new call has parameters of its own.
+
+```go
+const makeTally: (int){()void, ()int} = (var total: int){
+    var both: {()void, ()int} = {
+        up: ()void = (){ total = total + 1; };
+        get: ()int = (){ return total; };
+    };
+    return both;
+};
+
+var zero: int = 0;
+var tally: {()void, ()int} = makeTally(zero);
+tally.up();
+tally.up();
+tally.get()                    // 2: up and get use the same total
+```
+
+**(filled in) Copying a function doesn't copy what it keeps on the stack.** A function value
+is two addresses (7.7), and `=` copies those two. So a copy uses the same variables and the
+same kept parameters as the original, the way a copy of a borrower borrows the same value
+(8.8). And like the original, the copy can't outlive them:
+
+```go
+var again: ()int = next;       // again and next use the same kept count
+again()                        // 3
+next()                         // 4
+```
+
 **A parameter that takes a heap value can be filled at the call.** The value can be made on the
 spot and handed straight over with `@` (8.9), so nothing in the caller has to outlive the
 function:
@@ -2062,6 +2146,42 @@ way.
 
 The rule is only for a function the call gives back with `return`. A local is never kept by
 using it in the body: returning a function that does that is an error, as above.
+
+**(adjusted) Where kept parameters live, and how far the function can go.** Nothing goes on
+the heap unless the code says `^` (2.6). So the parameters a function keeps stay where the
+call put them: on the stack, in the block the call was written in. The function given back
+holds their address (7.7). They end when that block ends. Two rules follow.
+
+**A function given back can't outlive the block its call was written in.** It can't be given
+back from that block's function, and it can't be stored in something that lasts longer than
+the block. This comes on top of the rule about the arguments above. The top level of a file is
+a block as well, and it lasts as long as its package value (11.3):
+
+```go
+var keep: (int)int = double;
+
+const install: ()void = (){
+    keep = makeAdder(five);    // ERROR: the step is kept in this call of install, and keep lasts longer
+};
+
+const adderFor: (int)(int)int = (const by: int){
+    return makeAdder(by);      // ERROR: the step is kept in this call of adderFor, which ends here
+};
+
+const adderFrom: (int)(int)int = (const by: int){
+    return (const n: int){ return n + by; };   // fine: it keeps by, a parameter of adderFrom itself
+};
+```
+
+**A function that keeps only a heap value can go anywhere.** Sometimes the one thing a
+function given back uses from outside itself is a parameter that took a heap value over with
+`@`. Then nothing it keeps is on the stack: the function holds the address of that heap value,
+and owns it. It can go wherever a heap owner can: it can be given back again, stored, and
+moved. The heap value is freed when the function ends (8.11), and copying the function copies
+the heap value, as with every owner (8.8). `makeLookup` and `countFrom` above give back
+functions like this, which is why `newCounter` can hand on what `countFrom` gave it.
+
+A function that needs more than one value in this way takes them as one struct on the heap.
 
 Inside its own body, a function's name is the function itself, so a function made inside
 another can call itself (10.3).
@@ -2669,6 +2789,12 @@ A heap value is freed at the moment it has no owner left:
 
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
+
+**(filled in)** For the last row of the table, "the function ends" means one of two moments
+(7.8). A function that keeps only a heap value owns it, so the value is freed when that
+function value ends, like the value of any owner. Every other kept parameter sits on the
+stack in the block the call was written in, and a heap value it owns is freed when that block
+ends.
 
 ### 8.12 Nothing is freed while something still points at it
 
