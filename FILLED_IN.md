@@ -32,9 +32,9 @@ rules a package's names follow; the set-up order and `main`; what a failed check
 `print`, `read` and `exit`; the last-call rule for the stack; and one list of every check
 (Appendix B).
 
-The philosophy and the gap list below were written first, before any decision.
+The philosophy (1.3 and 1.4) and the gap list (1.5) were written first, before any decision.
 
-### 1.0 Where to look first
+### 1.1 Where to look first
 
 After the two bigger changes in section 4, these are the rules where I had to make a real
 choice. Each one has the options I weighed in its row of `DECISIONS.md`:
@@ -52,7 +52,7 @@ choice. Each one has the options I weighed in its row of `DECISIONS.md`:
 | 101 (11.3) | a file's names keep their own `const` and `var` under a `const` package |
 | 72, 90, 118 (7.2, 8.17, 8.6) | a `const` that a function the compiler can't see might change stays on the list of what isn't caught, as Jack left it, and a function in a `const` struct from elsewhere joins that list. The one exception: a `const` that is or holds a function is never lent to such a call |
 
-### 1.0b How this was checked
+### 1.2 How this was checked
 
 Three fresh reviewers, one after another, read only `DOCS.md`, `DECISIONS.md`, `UNDECIDED.md`
 and this file, with the same reading limits I had. Each looked for contradictions, rules
@@ -65,12 +65,22 @@ against the philosophy, gaps a compiler writer would hit, wrong examples, anythi
 | 2 | 33, 4 of them serious | field names by written type (9.9), functions in structs like functions in files (9.6), what a result can be given back from (7.8), the last call (10.4) |
 | 3 | 46, 4 of them serious | a result also comes from the function that was called (7.8), a `const` function is never lent to a call the compiler can't see (8.6), what "holds" means (8.5), one set of field names for each written type (9.9) |
 
-No round came back clean, and three rounds was the limit. Every finding of the third round was
-answered in the files, but nobody has reviewed those last fixes. The rules that moved in every
-round are the ones to read most carefully: 7.2, 7.8, 8.5, 8.6, 8.13, 9.6, 9.9 and 11.3. None
-of the three reviewers found anything that was decided from `UNDECIDED.md`.
+No round came back clean, and three rounds was the limit. After the third round I fixed every
+serious finding and most of the small ones, but nobody has reviewed those last fixes. The
+rules that moved in every round are the ones to read most carefully: 7.2, 7.8, 8.5, 8.6, 8.13,
+9.6, 9.9 and 11.3. None of the three reviewers found anything that was decided from
+`UNDECIDED.md`.
 
-### 1.1 The philosophy, as the two files show it
+A few findings of the third round were left as they are, on purpose:
+
+- `import` stays the one built-in that can't be passed around (rule 99, A13).
+- `0x` and `0b` stay, although there are no bit operations yet (rule 20).
+- Kept parameters still end with the call that holds them, which at the top level is the end
+  of the program. Section 4.1 gives the cost and the other option.
+- One cross-reference of Jack's in 3.2 points at 3.4 for `&&int`, which 3.4 doesn't show. I
+  left his text alone.
+
+### 1.3 The philosophy, as the two files show it
 
 These are the principles `DOCS.md` and `DECISIONS.md` show, in my own words. Every gap below
 was decided against them.
@@ -90,7 +100,7 @@ was decided against them.
 | 11 | **A type is never called.** What acts is a function, and built-ins are ordinary function values | DOCS 4.1, 4.4; DECISIONS 4.2 |
 | 12 | **Say what happens underneath.** A `bool` is a number, a pair is an array of two, a function is an address | DOCS 3.1, 5.7, 5.8, 7.7, 8.18 |
 
-### 1.2 How the files decided real cases
+### 1.4 How the files decided real cases
 
 Reading the decided cases side by side shows the patterns behind them. I used these patterns
 as the test for every new rule.
@@ -129,7 +139,7 @@ and most uniform, and the row for that rule says so.
 
 ---
 
-### 1.3 The gaps, sorted into groups that touch each other
+### 1.5 The gaps, sorted into groups that touch each other
 
 This list was written before anything was decided. Each group was then decided as a whole.
 
@@ -246,7 +256,7 @@ This list was written before anything was decided. Each group was then decided a
 
 ## 2. Every filled-in rule
 
-The last column names the principle that decided the rule, by its number in the table in 1.1:
+The last column names the principle that decided the rule, by its number in the table in 1.3:
 1 first-class, 2 explicit, 3 the default stays unmarked, 4 strict types, 5 declarative,
 6 reuse before adding, 7 one rule and no special cases, 8 the compiler checks what it can,
 9 do what most languages do, 10 symbols and marks, 11 a type is never called, 12 say what
