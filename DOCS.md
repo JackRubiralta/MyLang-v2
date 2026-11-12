@@ -862,6 +862,66 @@ because `false` is 0 and `true` is 1. The types keep the two apart in the code.
 
 Its main use is choosing (section 10).
 
+### 5.9 Slices: borrowing part of an array
+
+`&a[i:j]` borrows the elements of `a` from index `i` up to, but not including, index `j`. Its
+type is `&[]T`, the same type as a borrower of a whole unsized array (5.6), so a function that
+takes an `&[]int` takes either:
+
+```go
+var scores: []int = [10, 20, 30, 40];
+
+const middle: &[]int = &scores[1:3];   // borrows 20 and 30
+middle^[0]                             // 20
+middle^.length                         // 2
+
+sumBorrow(&scores[1:3])                // 50: no copy (5.6)
+```
+
+| You write | It borrows |
+|---|---|
+| `&a[1:3]` | elements 1 and 2 |
+| `&a[1:]` | from element 1 to the end |
+| `&a[:2]` | elements 0 and 1 |
+| `&a[:]` | the whole array, the same as `&a` |
+
+A slice is a borrower, so everything in section 8 holds for it. A `var` slice can change the
+elements it borrows, a slice of a `const` array is a `const` borrower (8.6), it can't outlive
+the array (8.5), and the array can't be given a new value or moved while the slice is used
+further down (8.12):
+
+```go
+var front: &[]int = &scores[:2];
+front^[0] = 99;                        // scores is now [99, 20, 30, 40]
+```
+
+A slice of a slice borrows from the same array: `&middle^[1:]` borrows `30`.
+
+**Without the `&`, it is a copy.** `a[1:3]` on its own gives the elements as a new unsized
+array, the same way every `=` copies (8.8):
+
+```go
+var part: []int = scores[1:3];         // part is its own [20, 30]
+part[0] = 5;                           // scores doesn't change
+```
+
+**The bounds are checked.** The start can't be after the end, and the end can't be past the
+length. When both are written as numbers and the length is in the type, the compiler checks
+them. Otherwise the check is made while the program runs, and a slice out of range fails
+there:
+
+```go
+const primes: [3]int = [2, 3, 5];
+&primes[2:1]                           // ERROR: the start is after the end
+&primes[0:5]                           // ERROR: primes has length 3
+&scores[1:n]                           // checked while running: fails if n is over 4
+```
+
+**Underneath, a slice is two numbers:** the address of its first element and how many
+elements it borrows. Every `&[]T` is held this way, a borrower of a whole array too, so the
+same function takes both. That is why `.length` works on it like on any unsized array, and why
+nothing is copied.
+
 ---
 
 ## 6. Maps
@@ -2853,6 +2913,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `package` | a file used from another file (11.2) |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
+| `&a[i:j]` | a slice: borrows elements `i` up to `j` of `a`, as an `&[]T` (5.9) |
 | `?T` | pair: one `T` for `false`, one for `true` |
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
@@ -2926,6 +2987,8 @@ passed.
 | `var x: int = p^;` | `x` is a plain copy of the heap value |
 | `var b: &int = &a;` | `b` borrows `a`: no copy |
 | `f(&a)` with an `&int` parameter | the parameter borrows the caller's `a`: no copy |
+| `var s: &[]int = &a[1:3];` | `s` borrows two elements of `a`: no copy (5.9) |
+| `var part: []int = a[1:3];` | `part` is a copy of two elements of `a` (5.9) |
 | `look(&makeBig(1)^)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
@@ -2972,6 +3035,7 @@ passed.
 | `return;` in a function of type `(int)int` | a function that returns a value has to give one (7.3) |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
 | `scores.length = 4;` | a length never changes |
+| `&primes[2:1]` and `&primes[0:5]` where `primes` is a `[3]int` | a slice's start can't be after its end, or its end past the length (5.9) |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
 | `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
 | `var x: int = p;` where `p` is a `^int` | write `p^` |
@@ -2997,3 +3061,4 @@ Four checks happen while the program runs:
 | `unwrap(bool)(x)` and other unwraps of an `any` | `x` holds a different type |
 | `cases[op]` and other map lookups | the key isn't in the map |
 | `p^`, for a heap owner or a borrower | `p` is `null` |
+| `&a[i:j]` with `i` or `j` worked out while running | the slice is out of range (5.9) |
