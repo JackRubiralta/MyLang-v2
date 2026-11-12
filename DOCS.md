@@ -4417,8 +4417,8 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 
 The order of operations is the usual one: what is behind a value (`p^`, `a[0]`, `f(1)`,
 `pt.x`), then what is in front of it (`!`, `-`, `^`, `&`, `@`), then `*`, `/` and `%`, then `+`
-and `-`, then the comparisons, then `&&`, then `||`. Operators in the same step go from left to right, and
-brackets go first (3.2).
+and `-`, then the comparisons, then `&&`, then `||`. Operators in the same step go from left
+to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 
 ### Ownership
 
@@ -4504,7 +4504,7 @@ the place they are written for (3.8).
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
-| a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8) |
+| a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8). **(adjusted)** Nor can it leave the call it is in, except by being given back again |
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
 | `var p: package = geom;` | `p` gets its own copy of `geom`'s variables; the code isn't copied (11.5) |
 | `import("geom")` twice | two packages, each with its own variables (11.2) |
@@ -4578,9 +4578,10 @@ the place they are written for (3.8).
 | `const Bad: type = {int, Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
-| `return 1; show(2);` | nothing after a `return` can run (7.1) |
-| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | a function given back can't outlive the block its call was written in (7.8) |
-| `fs[0](&limit)` where `limit` is `const` | a `const` isn't lent to a function the compiler can't see (8.6) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | a function given back can't be stored where it outlasts the call it is in (7.8) |
+| `var y: &int = x;` where `x` is a `const` borrower | a copy of a `const` borrower can only read (8.6) |
+| `kept = b;` where `b` is a `&int` parameter and `kept` outlasts the call | what a parameter borrows is only known to last as long as the call (8.5) |
+| `const addIt: (int)void = counter.add;` | a function field is called through its struct, not read out (9.6) |
 | `p.z` where no struct value of `p`'s type has a field `z` | a field name comes from the struct values of the type (9.9) |
 | `import(fileName)` | the file is written out in the code (11.2) |
 | `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
@@ -4596,6 +4597,7 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | `unwrap(bool)(x)` and other unwraps of an `any` | `x` holds a different type |
 | `cases[op]` and other map lookups | the key isn't in the map |
 | `p^`, for a heap owner or a borrower | `p` is `null` |
+| `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
 | `&a[i:j]` with `i` or `j` worked out while running | the slice is out of range (5.9) |
 | `a + b`, `a / b` and the other sums **(filled in)** | the answer doesn't fit the type, or a number is divided by zero (3.2) |
 | `a[i]` **(filled in)** | the index is out of range (5.2) |
@@ -4603,6 +4605,8 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | giving a new value to an unsized array, a map or an `any` **(filled in)** | the length, the keys or the type inside differ from the first value's (5.3, 6.3, 4.5) |
 | a map value with keys worked out while running **(filled in)** | two keys are equal (6.1) |
 | `^v`, and any call **(filled in)** | the heap or the stack is full (8.3, 10.4) |
+| `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.8) |
+| a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
 
 ---
 
@@ -4688,17 +4692,20 @@ Param         = Kind [ "@" ] NAME ":" Type
 
 ### A.4 Telling the forms apart
 
-Some forms start with the same symbol. The compiler knows which names are types (3.2), and
-with that these rules always decide:
+Some forms start with the same symbol. The compiler knows which names are types: it collects
+the top-level type names of a file before it reads anything else (4.2). "A type" below is a
+type that is written out, with type names and the forms of 3.6. With that, these rules
+always decide:
 
 | What is read | It is |
 |---|---|
 | `&&` where a `Front` can start | two `&` marks (3.2) |
-| `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2 |
+| `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2. So a mark never puts a type on the heap or borrows one: `^int` is always a type |
 | `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
 | `(` | a call, a function value, a function type or a group, by the table in 3.2 |
+| `()` followed by `{` | a function type when the braces hold types, as in `(){int, int}`. Otherwise a function value with no parameters (3.2) |
 | `{` followed by `NAME : Type =` | a struct value |
-| `{` followed by a value and a `:` in any other way | a map value |
+| `{` followed by a value and then a `:`, when it isn't the row above | a map value |
 | `{` holding types, as in `{int, int}` or `{int}bool` | a struct type or a map type (3.6) |
 | `{ }` with nothing inside, where a value is expected | a map value with no entries |
 | `{` where a statement starts, when it isn't one of the four above | a block. The `{` after a function value's parameters always starts its body |
@@ -4718,7 +4725,7 @@ program runs. The rules themselves are in the sections named.
 | The compiler rejects | Example | Rule |
 |---|---|---|
 | a character outside ASCII that isn't in a comment or a text | `var café: int = 1;` | 2.7 |
-| a number that runs into a name | `2total` | 2.7 |
+| a number that runs into a name, or into a digit its base doesn't have | `2total`, `0b12` | 2.7, 3.2 |
 | a reserved word used as a name | `var return: int = 1;` | 2.7 |
 | a number with a decimal point that has no digit on one side | `.5`, `3.` | 3.2 |
 | an escape that doesn't exist | `'\q'` | 3.2 |
@@ -4739,8 +4746,7 @@ program runs. The rules themselves are in the sections named.
 | a left side that isn't a place | `makePoint(1, 2).x = 5;`, `3 = count;` | 2.9 |
 | assigning a length | `scores.length = 4;` | 5.5 |
 | a `return` outside a function body | `return 1;` at the top level of a file | 2.9 |
-| a function that returns a value, with a body that doesn't always return | a `(int)int` whose body ends without a `return` | 7.1 |
-| anything written after a `return`, or after a block that always returns | `return 1; show(2);` | 7.1 |
+| a function that returns a value, with a body that runs to its end without meeting a `return` | a `(int)int` whose body is only `show(1);` | 7.1 |
 | a value given back by a function that returns nothing | `return 5;` in a `()void` | 7.3 |
 | no value given back by a function that returns one | `return;` in an `(int)int` | 7.3 |
 | a call that has no value, used as a value | `var x: int = show(5);`, `return hello();` | 3.8, 7.3 |
@@ -4763,9 +4769,10 @@ program runs. The rules themselves are in the sections named.
 | a value written on the spot with nothing to take its type from | `[]`, `{}` or `null` with no place | 3.8 |
 | a type that is called | `int(3.0)`, `Point(1, 2)` | 4.1 |
 | a type that isn't written out where it decides a type | `var n: wholeTypes[1] = 5;`, `first(x.T)` | 4.2, 4.3 |
-| in a function type, a type name used to the left of its `type` | `(T, type)int` | 4.3 |
+| a `const` of type `type` that isn't a type name, used as a type | `const U: type = x.T;` and then `var n: U = 5;` | 4.2 |
+| in a function type, a name with no `type` parameter to its left that is still free | `(T, type)int`, `(type)([]T)U` | 4.3 |
 | a generic function that uses a `T` in a way not every type allows | `a + b` for two `T`s | 4.3 |
-| a conversion between two types that have none | `convert([3]int, int)`, `convert(bool, float)` | 4.4 |
+| a conversion between two types that have none, where the compiler sees that the call runs `convert` | `convert([3]int, int)`, `convert(bool, float)` | 4.4 |
 | a plain value where an `any` is asked for, or an `any` where another type is | `describe(3);`, `double(x);` | 4.5 |
 | a type that holds itself without a pointer or a function type between | `const Bad: type = {int, Bad};` | 4.6 |
 | following something that isn't a pointer | `x^` for a plain `int` | 8.7 |
@@ -4781,15 +4788,15 @@ program runs. The rules themselves are in the sections named.
 | changing an element, an entry or a field of a `const` | `primes[0] = 7;`, `pairs[1] = [0, 0];`, `origin.x = 1;` | 5.2, 6.2, 9.3 |
 | an index that isn't an `int` | `scores[small]`, `primes[true]` | 5.2 |
 | a written index out of range for a length that is in the type | `primes[3]` for a `[3]int` | 5.2 |
-| an unsized array given a value of another length, when both lengths are in view | `a = [1, 2, 4, 5];` for a length of 3 | 5.3 |
+| a name declared with an array value written out, given an array value written out of another length | `a = [1, 2, 4, 5];` for a length of 3 | 5.3 |
 | a fixed array where an unsized one is asked for, or the other way round | `firstOf(primes)`: write `primes[:]` | 5.3 |
 | a pair looked up with anything but a `bool` | `sizes[1]` | 5.8 |
 | a pair value that doesn't have two values | `const three: ?int = [1, 2, 3];` | 5.8 |
 | written slice bounds out of order, or past a length that is in the type | `&primes[2:1]`, `&primes[0:5]` | 5.9 |
 | a key written twice in a map value | `{1: true, 1: false}` | 6.1 |
-| a lookup with a key of the wrong type | `seen['a']` for an `{int}bool` | 6.2 |
-| a written key that isn't in a map whose keys are in view | `seen[7]`, `seen[7] = true;` | 6.2, 6.3 |
-| a map given a value with other keys, when both sets of keys are in view | `seen = {1: false};` | 6.3 |
+| a lookup with a key of the wrong type | `seen['a']` for an `{int}bool` | 3.8 |
+| a written value used as a key that isn't in a map declared with written keys | `seen[7]`, `seen[7] = true;` | 6.2, 6.3 |
+| such a map given a map value whose written keys are not the same | `seen = {1: false};` | 6.3 |
 
 ### B.5 Functions
 
@@ -4800,8 +4807,8 @@ program runs. The rules themselves are in the sections named.
 | a function value whose parameters don't match its type | `const f: (int)int = (const a: int, const b: int){ … };` | 7.1 |
 | a `return` whose value isn't the function's return type | `return true;` in an `(int)int` | 7.1 |
 | a function that uses a name declared inside the function around it, given back or stored where it lasts longer | `return (){ return x; };` | 7.8 |
-| a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);` | 7.8 |
-| a function given back that outlives the block its call was written in | `keep = makeAdder(five);`, `return makeAdder(by);` | 7.8 |
+| a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);`, `return makeAdder(by);` | 7.8 |
+| a function given back that is stored where it outlasts the call it is in | `keep = makeAdder(five);` inside a function | 7.8 |
 
 ### B.6 Ownership
 
@@ -4813,10 +4820,11 @@ check these rules:
 | each of `T`, `^T`, `&T` and `@T` is used only as itself: `^5` for a `^int`, `p^` for the value, `&count` for a borrower, `@p` for an ownership | 8.3, 8.4, 8.7, 8.9 |
 | a borrower, an ownership, or a value that holds one, doesn't outlive what it points at | 8.5 |
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
-| a `const` is lent only where the compiler sees that it is only read | 8.6 |
+| a `var` borrower is made only from a `var` name or another `var` borrower, wherever the compiler sees both | 8.6 |
+| what a parameter borrows isn't put in a variable that outlasts the call | 8.5 |
 | both sides of a move are ownerships, and the one on the right comes from a `var` owner, not from a borrower | 8.9 |
 | `null` is given only to a `^T`, an `&T` or an `@T` | 8.10 |
-| an owner isn't changed while a pointer made by following it is still used below | 8.12 |
+| an owner isn't changed while a pointer made by following it is still used below, and a call to a function that uses the pointer is such a use | 8.12 |
 | a call doesn't change or take an owner that another pointer in use followed | 8.12 |
 | a borrower that is given back comes from a borrowed parameter | 8.13 |
 
@@ -4828,9 +4836,10 @@ check these rules:
 | a field whose written type isn't the type at its position | `{ x: int = 1; y: bool = true; }` for a `Point` | 9.2 |
 | a field named like a name that can be seen where the struct value is written | a field `count` beside a `var count` | 2.8, 9.9 |
 | a function in a `const` struct that changes a field | `count = count + n;` in the block of a `const` struct | 9.3 |
-| a function field called through a `const` struct, when the compiler can't see the function | `frozen.add(1);` | 9.3 |
-| a field name that no struct value of the type gives | `p.z` | 9.9 |
-| one name given to two positions of the same struct type | `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` | 9.9 |
+| a function field read out as a value | `const addIt: (int)void = counter.add;` | 9.6 |
+| a function in a struct value that uses the fields of a struct value around its own | a function in an inner block that names a field of the outer block | 9.6 |
+| a field name that no struct value the file knows gives to the type | `p.z` | 9.9 |
+| a name that the file knows for two positions of one struct type, used on that type | `p.x`, when `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` are both known | 9.9 |
 
 ### B.8 Files and packages
 
@@ -4840,6 +4849,7 @@ check these rules:
 | `import` used in any way but a call by its own name | `const load: ([]char)package = import;` | 11.2 |
 | files that import each other, directly or through other files | `a` imports `b`, and `b` imports `a` | 11.2 |
 | a name that isn't a top-level name of every file a package can hold, with one type | `shapes.area` after `shapes = import("other");` when `other` has no `area` | 11.3, 11.5 |
+| a type reached through a package that can hold more than one file | `var b: shapes.Box = …;` when `shapes` is given two files | 3.6, 11.3 |
 | a new value for a `const` name of a file | `a.bump = a.bump;` | 11.3 |
 | a `const` package given another file | `a = import("counter");` | 11.3 |
 | a top-level `main` in the file you run that isn't a `const` of type `()int` | `var main: int = 0;` | 11.4 |
@@ -4855,23 +4865,29 @@ error line.
 | `a + b`, `a - b`, `a * b`, `a / b` on floats | the answer is too big for the type | `number out of range` | 3.2 |
 | `a / b`, `a % b` | `b` is zero | `division by zero` | 3.2 |
 | `convert(int, int8)(n)` and every conversion between numbers, `bool` and `char` | the value doesn't fit the type it is converted to | `conversion out of range` | 4.4 |
+| a call of `convert` through a variable | the two types have no conversion | `no conversion between the types` | 4.4 |
 | `convert([]char, int)(t)` and every conversion from text | the text isn't written as the type asks | `text is not a value of the type` | 5.10 |
 | the same conversions | the number in the text doesn't fit the type | `conversion out of range` | 5.10 |
 | `unwrap(bool)(x)` | `x` holds another type | `unwrap of another type` | 4.5 |
 | `x = wrap(bool)(true);` for a `var` `any` | `x` holds another type | `any of another type` | 4.5 |
 | `a[i]` | `i` is below 0, or not below the length | `index out of range` | 5.2 |
 | `a[i:j]`, `&a[i:j]` | `i` is below 0 or above `j`, or `j` is above the length | `slice out of range` | 5.9 |
-| `a = b;` for unsized arrays, also through a pointer or into an element or a field | the lengths differ | `length does not match` | 5.3 |
+| `a = b;` for unsized arrays, also through a pointer, into an element or a field, or inside an `any` | the lengths differ | `length does not match` | 5.3, 4.5 |
 | `{k1: v1, k2: v2}` with keys worked out while running | two keys are equal | `key written twice` | 6.1 |
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
 | `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `^v` | there is no room left on the heap | `out of heap` | 8.3 |
-| any call | there is no room left on the stack | `out of stack` | 10.4 |
+| any call, and a declaration that needs more stack than is left | there is no room left on the stack | `out of stack` | 10.4 |
+| `print(t)` | the output can't be written | `output failed` | 11.8 |
+| `read()` | the input can't be read | `input failed` | 11.8 |
 | the `int` that `main` returns, and `exit(n)` | the number isn't from 0 to 255 | `conversion out of range` | 11.4, 11.8 |
 
-Where the compiler already knows that one of these would fail, because every value involved
-is written in the code, it rejects the line instead (3.2, 5.2, 5.9, 6.1, 6.2, 6.3).
+For the checks of 3.2, 5.2, 5.3, 5.9, 6.1, 6.2 and 6.3, the compiler rejects the line instead
+when the values involved are written values, as those sections say. Every other check in this
+table is always made while the program runs: `convert(int, int8)(300)` is accepted, and fails
+when it runs (4.4).
 
-One mistake is caught by neither: following a borrower that is kept inside a heap value after
-what it borrowed has been removed (8.17).
+Two kinds of mistake are caught neither by the compiler nor by a check while running. Both
+are listed in 8.17: following a borrower after what it borrowed is gone, and changing a
+`const` through a function the compiler can't see.
