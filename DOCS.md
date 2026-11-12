@@ -3704,6 +3704,45 @@ sumFrom(&scores, 0)    // 60
 
 `sumFrom` borrows the array, so no call copies it (5.6).
 
+### 10.4 How deep a function can call itself
+
+**(filled in)** Every call that hasn't ended holds its parameters and names on the stack
+(2.6). The stack has a limit, set by the system the program runs on. A program that calls
+deeper than the stack allows fails while it runs (11.7), like any other check. `sumFrom` above
+has one call on the stack for each element, because every call still has an addition to do
+when the next call comes back.
+
+**The last call takes over the stack of the function that makes it.** When the last thing a
+function does is a call, its own parameters and names aren't needed any more. So they end
+before that call starts, and the call uses their place on the stack. A function that calls
+itself as its last step can repeat any number of times, and the stack doesn't grow.
+
+A call is the last thing a function does when both of these hold:
+
+| Condition | In detail |
+|---|---|
+| nothing comes after it | it is the whole value of a `return`, as in `return f(a, b);`. Or the function returns nothing, and the call is the last statement of its body |
+| it doesn't need the function's own names | no argument is, or holds, a borrower or an ownership of a parameter or a name declared in the function. And the function that is called doesn't use one of them (7.8) |
+
+The arguments, and the function to call, are worked out before the names end (2.9). In every
+other case the call is an ordinary one, and the names end after it, as in 2.6.
+
+```go
+const sumTo: (&[]int, int, int)int = (const values: &[]int, const i: int, const total: int){
+    const cases: ?(&[]int, int, int)int = [
+        (const v: &[]int, const k: int, const t: int){ return sumTo(v, k + 1, t + v^[k]); },   // false: go on
+        (const v: &[]int, const k: int, const t: int){ return t; }                              // true: past the end
+    ];
+    return cases[i == values^.length](values, i, total);
+};
+
+sumTo(&scores, 0, 0)   // 60, and the stack stays as small for a million elements
+```
+
+Every call here is a last call. The running total is handed on as an argument, so nothing is
+left to do when a call comes back. `values` and `v` borrow the caller's array, not a name of
+`sumTo`, so they don't hold the stack either.
+
 ---
 
 ## 11. Files and packages
@@ -3755,6 +3794,27 @@ geom.made = geom.made + 1;             // geom's variable changes
 - **Two files can't import each other,** directly or through other files: each import would
   make a new copy, forever.
 
+**(filled in) What `import` takes.** `import` takes one text, and the text is written out in
+the code, so the compiler knows every file of a program before it runs:
+
+```go
+const geom: package = import("geom");            // the file geom.my, in this file's folder
+const deep: package = import("shapes/geom");     // shapes/geom.my
+const util: package = import("../common/util");  // ../common/util.my: .. is the folder above
+const which: package = import(fileName);         // ERROR: the file has to be written out
+```
+
+- The text is the file's path without the `.my` (2.7). Its parts are joined with `/`.
+- `import` has the type `([]char)package`. Unlike the other built-ins, it is always called by
+  its own name with its text written out, because a file that is only named while the program
+  runs couldn't be checked.
+
+**(filled in) What an import does when it runs.** An import is a call, so it runs where it is
+written. It makes a new package value: it works out the file's top-level declarations, from
+the top down (11.4). That is all an import runs. As a top-level declaration it runs when its
+own file is set up. Inside a function it runs at each call of that function, and makes a new
+copy each time.
+
 ### 11.3 What a file can use from another
 
 Everything at the top level of an imported file can be used: its types, functions and
@@ -3782,6 +3842,34 @@ a.bump();
 a.count                // 2
 b.count                // 0: b has its own count
 ```
+
+**(filled in) A file's names keep their own `const` and `var`.** A struct's fields follow the
+struct's word, because they have none of their own (9.3). A file's top-level names each have
+one. So `a.count` can be given a new value because `count` is a `var` in its file, even though
+`a` is a `const`, and a `const` name of a file never changes. The word on the package itself
+says only whether the whole package can be given another file (11.5) or have its value moved
+away (11.6):
+
+```go
+a.count = 5;                   // fine: count is a var in the file counter
+a.bump = a.bump;               // ERROR: bump is a const in the file counter
+a = import("counter");         // ERROR: a is const
+```
+
+**(filled in) How the compiler checks a name reached through a package.** An `import` names
+its file in the code, and a package keeps its file wherever it goes: into a declaration, an
+assignment, an argument, a result, an element or a field. The compiler follows every package
+from its `import`, so for every place that holds a package it knows which files can be there.
+
+| The place can hold | `g.name` is accepted when |
+|---|---|
+| one file | `name` is a top-level name of that file |
+| more than one file: a `var` package given another file (11.5), a parameter that calls give different packages (11.6), an array of packages | `name` is a top-level name of every one of those files, with the same type in each. It can be assigned when it is a `var` in each |
+
+Two places need the worst case, as in 8.12. A function called through a variable, an array or
+a map could be any function of its type, so a package handed to it has to have the names that
+every function of that type in the program uses through that parameter. And a package taken
+out of an `any` (4.5) could be any file the program wraps into one.
 
 ### 11.4 Order, where statements go, and `main`
 
@@ -3813,6 +3901,37 @@ const main: ()int = (){
 When the file you run declares `main`, the program runs that file's statements from the top,
 then calls `main`. The `int` it returns is the program's result, `0` when everything went well.
 
+**(filled in) When a file's names are set up.** The top-level declarations of a file are
+worked out in order, from the top down, each value when its line is reached. For the file you
+run, that happens when the program starts, together with its statements, in the order
+written. For every other file it happens each time an `import` of it runs (11.2).
+
+A function's body can use top-level names declared below it, so a call could reach a name
+that isn't set up yet. The compiler rejects that call: **a call at the top level can run only
+when every top-level name its function uses is declared above the call.** The compiler reads
+the function for this, and the functions it calls, as in 8.12. A call through a variable, an
+array or a map counts as using every top-level name of the file.
+
+```go
+const readLate: ()int = (){ return late; };
+
+const early: int = readLate();     // ERROR: readLate uses late, which is set up below this line
+var late: int = 5;
+const onTime: int = readLate();    // fine: late is set up by now
+```
+
+**(filled in) The rules for `main`.**
+
+- `main` matters only in the file you run. If that file declares a top-level `main`, it has to
+  be a `const` of type `()int`. In an imported file `main` is an ordinary name, and nothing
+  calls it.
+- The program runs the file's top-level lines from the top down, and then calls `main`.
+- The `int` that `main` returns is the program's status. A status is a number from 0 to 255:
+  the `int` is converted the way `convert(int, uint8)` converts it (4.4), and a number outside
+  that range fails in the same way (11.7).
+- A file with no `main` ends after its last line, with status 0.
+- `exit` ends a program before that (11.8).
+
 ### 11.5 Underneath: a package value is an address
 
 A package value holds the address of the file's code, the way a function value is the address
@@ -3835,6 +3954,14 @@ shapes.area(3, 4)              // 12, from geomFast
 The new file has to have the names the code uses through `shapes`, each with the same type, as
 a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
 nothing is looked up while the program runs.
+
+**(filled in)** This is how that works underneath. For each file the compiler writes a table
+into the program, with one entry for each of the file's top-level names. A package value holds
+the address of its file's table, and then its own copy of the file's variables. Every name
+that the program reaches through a package has one fixed position in all these tables, so
+`shapes.area` reads the entry at that position, whichever file `shapes` holds. A `var` package
+has room for the variables of the biggest file it is ever given, and the compiler knows which
+files those are (11.3).
 
 ### 11.6 Ownership and borrowing work on a package like on any variable
 
