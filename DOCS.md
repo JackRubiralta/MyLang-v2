@@ -2156,7 +2156,8 @@ is left to die.
 
 **(adjusted)** What the handed-over value holds still counts. When a value given with `@`
 has a borrower or a function inside it, the function given back can't outlive what that part
-points at (8.5).
+points at (8.5). And this rule is for a result that keeps parameters: which results do is
+said further down, under "Which results keep parameters".
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
