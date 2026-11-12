@@ -2652,10 +2652,15 @@ var view: &[1000]int = &big^;      // fine: view ends no later than big
 
 An ownership (8.9) holds a variable's address too, so the same rule applies to it.
 
-**(filled in) A value that holds a borrower follows the rule for it.** A struct, an array, a
-pair, a map or an `any` that has a borrower, an ownership or a function inside it can't
-outlive what that part borrows or uses. It is the field-by-field rule again (8.8): the
-lifetime rules for a whole value are the rules for each of its parts.
+**(filled in) A value that holds a borrower follows the rule for it.** A value *holds* a
+borrower, an ownership or a function when it is one, or has one in a field, an element or an
+entry, at any depth. An `any`, a `T` (4.3) and a package count as holding all three, because
+the compiler can't see inside them. What lies behind a pointer doesn't count: the compiler
+can't follow it there (8.17).
+
+A value that holds a borrower, an ownership or a function can't outlive what that part
+borrows or uses. It is the field-by-field rule again (8.8): the lifetime rules for a whole
+value are the rules for each of its parts.
 
 ```go
 var both: [2]&int = [&left, &right];   // fine: both ends no later than left and right
@@ -2665,16 +2670,11 @@ var both: [2]&int = [&left, &right];   // fine: both ends no later than left and
 }
 ```
 
-The compiler can't see inside an `any` (4.5). So an `any` counts as holding everything that
-the value wrapped into it held. A package counts as holding what its file's variables hold
-(11.5).
-
 **(filled in) What comes in through a parameter lasts as long as the call, as far as the
-function knows.** That goes for a parameter that is a borrower or an ownership, and for one
-that is or holds a function: a function type, an `any`, a `T`, a package, or a struct, array,
-pair or map with one of these inside. Inside the function, such a parameter can be put in
-something that ends with the call, and it can be given back (7.8, 8.13). It can't be put in a
-variable that outlasts the call:
+function knows.** That goes for every parameter that holds a borrower, an ownership or a
+function. Inside the function, such a parameter can be put in something that ends with the
+call, and it can be given back (7.8, 8.13). It can't be put in a variable that outlasts the
+call:
 
 ```go
 var kept: &int = null;
@@ -2689,8 +2689,9 @@ const setKeep: ((int)int)void = (const f: (int)int){
 };
 ```
 
-Stored through another pointer, into a place the caller lent, it is the case that 8.17 lists:
-`linkBack` in 8.15 stores its parameter `back` that way, and the compiler can't follow it.
+Stored through a pointer, into a place the caller lent, it is one of the cases that 8.17
+lists: `linkBack` in 8.15 stores its parameter `back` that way, and the compiler can't follow
+it.
 
 A value on the heap can also be made to end before its owner's `}`. Rule 8.12 covers that.
 
@@ -2721,8 +2722,9 @@ A parameter works the same way: `(const v: &[]int)` borrows an array to read it,
 `(var x: &int)` borrows a value to change it.
 
 **(filled in) A `var` borrower is made only from something that may be changed.** That is a
-`var` name, with `&`, or another `var` borrower. A copy of a `const` borrower can only read,
-so it goes only into a `const` borrower or a `const` parameter, or it is given back (8.13):
+place that can be assigned (2.9), with `&` in front, a value made on the spot (8.4), or
+another `var` borrower. A copy of a `const` borrower can only read, so it goes only into a
+`const` borrower or a `const` parameter, or it is given back (8.13):
 
 ```go
 const relay: (&int)void = (const x: &int){
@@ -2732,8 +2734,21 @@ const relay: (&int)void = (const x: &int){
 ```
 
 **(filled in)** At a call the compiler sees (7.2), it checks each `&` argument against the
-parameter it goes to. At a call through a variable only the type is known, and the type doesn't say whether a
-`&T` parameter is read or changed (7.4). That case is listed in 8.17.
+parameter it goes to. At a call through a variable only the type is known, and the type
+doesn't say whether a `&T` parameter is read or changed (7.4). That case is listed in 8.17.
+
+**(filled in) A `const` that is or holds a function is never lent to a call through a
+variable.** The compiler relies on knowing which function such a `const` holds (7.2), so
+nothing may be able to replace it. The rule covers `&` in front of the `const`, and handing
+on a borrower that can only read it:
+
+```go
+const quiet: ()void = (){ };
+
+const run: ((&()void)void)void = (const f: (&()void)void){
+    f(&quiet);                 // ERROR: quiet is a const function, and the compiler can't see what f does
+};
+```
 
 **(filled in)** An ownership is given only by a `var` (8.9), so there is never an ownership of
 a `const`. A `const` ownership of a `var` can only read it, like a `const` borrower: changing
@@ -2932,7 +2947,8 @@ holder may do to someone else's variable:
 |---|---|---|---|
 | `const b: &T` | yes | no | no |
 | `var b: &T` | yes | yes | no |
-| `h: @T` | yes | yes | yes |
+| `var h: @T` | yes | yes | yes |
+| `const h: @T` **(filled in)** | yes | no | no |
 
 So the mark at a call shows what a function may do to a variable you pass it: `f(x)`
 nothing, because it gets a copy, `f(&x)` read or change it, and `f(@x)` takes its value
@@ -3219,7 +3235,13 @@ b^.value
 ```
 
 A call through a variable (7.2) counts as changing every outside variable, because the
-compiler can't tell which function runs.
+compiler can't tell which function runs. **(adjusted: "through a variable" is the case of
+7.2)**
+
+**(filled in)** "Every outside variable" means every variable that a function could reach
+without being handed it: every top-level `var`, and each name of a function around the call
+that a function body written inside that function uses. A name that only the lines of its own
+block use can't be reached by any other function, so it doesn't count.
 
 **(filled in) A call also counts as a use of the pointers its function uses.** A function that
 uses a pointer from around it (7.8) keeps that pointer in use: "still used below" includes
@@ -3401,13 +3423,13 @@ const head: ([2]&int)&int = (const bs: [2]&int){
 var h: &int = head(both);      // h comes from what both borrows: left and right (8.4)
 ```
 
-**(filled in) A result that can hold a pointer counts like one.** The caller sees only the
-type of a result. When that type has a `&` or an `@` in it, or is an `any`, the result counts
-like a borrower that came back: it comes from everything that was lent to the call. A result
-that can hold a function follows 7.8: where the compiler sees the function that was called,
-it looks at what comes back, and otherwise the result counts as keeping every parameter. A
-result with none of these in its type is a plain copy, and it lives as long as the holder it
-is put in.
+**(filled in) A result that holds a pointer counts like a borrower that came back.** The
+caller sees only the type of a result. When that type holds a borrower or an ownership (8.5),
+the result comes from everything that was lent to the call. A pointer that lies behind a `^`
+in the type doesn't count: `copyLinks` in 8.15 gives back a `^Link` whose `prev` borrowers
+sit inside heap values, where the compiler doesn't follow them (8.17), so the copy is a value
+of its own. A result that holds a function follows 7.8. A result that holds none of these is
+a plain copy, and it lives as long as the holder it is put in.
 
 ### 8.14 A linked list, step by step
 
@@ -3587,7 +3609,8 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 |---|---|
 | `p^`, for a heap owner or a borrower | `p` is `null` |
 | `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
-| `^v` **(filled in)** | there is no room left on the heap (11.7) |
+| `var @q: ^int = h;`, `@q = h;`, `take(h)`: taking a value through an ownership **(filled in)** | `h` is `null` (8.10) |
+| `^v`, and `=` where it copies a heap owner **(filled in)** | there is no room left on the heap (8.3) |
 
 **(filled in)** Every check the compiler makes, and every check made while running, is listed
 in Appendix B.
@@ -3602,8 +3625,8 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 - **A borrower kept inside a heap value** (the `prev` in 8.15) whose target is removed
   first. It isn't a variable, so the compiler can't see when it will be used. Removing or
   replacing a node that another node's `prev` still borrows is the programmer's job.
-  **(filled in)** The same holds for every borrower that is stored through a pointer, the
-  way `linkBack` stores its parameter `back` (8.5).
+  **(filled in)** The same holds for every borrower, ownership or function that is stored
+  through a pointer, the way `linkBack` stores its parameter `back` (7.8, 8.5).
 - **A copy of a value whose borrowers point back into itself,** like the `prev` list in
   8.15. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
   original until they are set again.
@@ -3611,19 +3634,21 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
   type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
   (7.4). When a function is called by its own name the compiler looks at the function.
   **(adjusted)** When it is called through a variable (7.2), as in `f(&limit)` where `f` is a
-  parameter, only the type is known.
+  parameter, only the type is known. **(filled in)** One kind of `const` is turned away even
+  there: a `const` that is or holds a function (8.6).
 - **(filled in) A function in a `const` struct that the compiler can't see.** A function
   written in a struct value can change the fields of its own struct (9.6). When a struct value
   comes from somewhere else into a `const`, the compiler can't tell what its function fields
   do, and a call of one can change the fields of the `const` struct (9.3).
 
-**(filled in) What happens in these cases.** In the first two, a borrower can be followed
-after what it borrowed is gone. That is not checked while the program runs either: it reads
-or changes whatever is at the old address, and what the program does then isn't defined.
-These are the only mistakes that reach memory that is gone. In the last two, a `const` is
-changed. Nothing else goes wrong: the memory is there and every type still holds. So a
-`const` that is lent with `&`, or that holds a function, sits in ordinary memory, and the
-compiler doesn't assume that it kept its value across a call through a variable.
+**(filled in) What happens in these cases.** In the first two, a pointer can be followed, or
+a function called, after what it points at or keeps is gone. That is not checked while the
+program runs either: it reads or changes whatever is at the old address, and what the program
+does then isn't defined. These are the only mistakes that reach memory that is gone. In the
+last two, a `const` is changed. It is never a `const` that tells the compiler which function
+a call runs (8.6), so nothing else goes wrong: the memory is there and every type still
+holds. A `const` that is lent with `&` sits in ordinary memory, and the compiler doesn't
+assume that it kept its value across a call through a variable.
 
 Rule 8.12 also turns away some code that is safe, such as two borrowers returned from the
 same list when one of them is used to change the list. That code has to be reordered.
