@@ -45,6 +45,11 @@ Why each rule is the way it is is in `DECISIONS.md`.
 12. [Putting it together](#12-putting-it-together)
 13. [Quick reference](#13-quick-reference)
 
+Two appendices **(filled in)**:
+
+- [Appendix A: The full grammar](#appendix-a-the-full-grammar)
+- [Appendix B: Every check](#appendix-b-every-check)
+
 ---
 
 ## 1. Everything is a first-class value
@@ -4175,15 +4180,18 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 
 | Operators | Work on | Give |
 |---|---|---|
-| `+` `-` `*` | two numbers of the same type | a number of that type |
-| `==` `!=` `<` `>` `<=` `>=` | two values of the same type | a `bool` |
+| `+` `-` `*` `/` | two numbers of the same type | a number of that type. On whole numbers, `/` drops the part after the decimal point **(filled in: `/`)** |
+| `%` **(filled in)** | two whole numbers of the same type | the remainder |
+| `-` in front **(filled in)** | one signed whole number or float | its negative |
+| `==` `!=` | two values of the same type, whatever the type | a `bool`: `==` compares what `=` copies (3.7) **(filled in: every type)** |
+| `<` `>` `<=` `>=` | two numbers of the same type, or two `char`s | a `bool` **(filled in: which types)** |
 | `&&` `\|\|` | two `bool`s | a `bool`: and, or. The right side is worked out only when it's needed |
 | `!` | one `bool` | a `bool`: not |
 | `( )` around a value | any value that isn't a type | the same value, worked out first |
 
 The order of operations is the usual one: what is behind a value (`p^`, `a[0]`, `f(1)`,
-`pt.x`), then what is in front of it (`!`, `^`, `&`, `@`), then `*`, then `+` and `-`, then the
-comparisons, then `&&`, then `||`. Operators in the same step go from left to right, and
+`pt.x`), then what is in front of it (`!`, `-`, `^`, `&`, `@`), then `*`, `/` and `%`, then `+`
+and `-`, then the comparisons, then `&&`, then `||`. Operators in the same step go from left to right, and
 brackets go first (3.2).
 
 ### Ownership
@@ -4210,6 +4218,7 @@ brackets go first (3.2).
 | to choose a value by a `bool` | a pair: `sizes[count > 10]` (10.1) |
 | to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.2) |
 | to repeat, like a loop | a function that calls itself (10.3) |
+| to repeat without the stack growing **(filled in)** | make the call the last thing the function does (10.4) |
 
 ### Built-in functions
 
@@ -4219,9 +4228,37 @@ brackets go first (3.2).
 | `wrap(int)` | `(int)any` | wraps a value in an `any` (4.5) |
 | `unwrap(int)` | `(any)int` | takes the value back out of an `any`, checked while running (4.5) |
 | `import("geom")` | `package` | gives the file `geom` as a package (11.2) |
+| `convert(int, []char)`, `convert([]char, int)` **(filled in)** | `(int)[]char`, `([]char)int` | writes a number as text, and reads one back (5.10) |
+| `join(char)` **(filled in)** | `([]char, []char)[]char` | joins two unsized arrays into a new one (5.11) |
+| `print` **(filled in)** | `([]char)void` | writes a text to the output (11.8) |
+| `read` **(filled in)** | `()[]char` | gives the next line of the input (11.8) |
+| `exit` **(filled in)** | `(int)void` | ends the program with a status (11.8) |
 
 Built-ins are first-class values like everything else: they can be named, stored and
-passed.
+passed. **(filled in)** The one exception is `import`, which is always called by its own name
+with its text written out (11.2). The built-ins that take a type have these types
+themselves: `convert` is a `(type, type)(A)B`, `wrap` a `(type)(T)any`, `unwrap` a
+`(type)(any)T` and `join` a `(type)([]T, []T)[]T` (4.3).
+
+### Values written in the code
+
+**(filled in)**
+
+| You write | It is |
+|---|---|
+| `42`, `0xFF`, `0b1010` | a whole number, in base ten, sixteen or two (3.2) |
+| `9.5`, `1.5e3` | a number with a decimal point (3.2) |
+| `'a'`, `'\n'` | a `char` (3.2) |
+| `"Jack"` | a text: the array value `['J', 'a', 'c', 'k']` (5.10) |
+| `true`, `false` | a `bool` |
+| `null` | a pointer that points at nothing (8.10) |
+| `[1, 2, 3]` | an array value, or a pair value when a `?T` is asked for (5.1, 5.8) |
+| `{1: true, 4: false}` | a map value (6.1) |
+| `{ x: int = 1; y: int = 2; }` | a struct value (9.2) |
+| `(const x: int){ return x; }` | a function value (7.1) |
+
+A number, a `null`, an array, a text, a map value and a function value take their type from
+the place they are written for (3.8).
 
 ### What copies and what shares
 
@@ -4257,6 +4294,8 @@ passed.
 | the length of an array | the type `[n]T`, or the first value of a `[]T` |
 | the keys of a map | its first value |
 | what a `const` borrower borrows | its declaration |
+| the type inside an `any` **(filled in)** | its first value (4.5) |
+| the file a `const` package holds **(filled in)** | its declaration (11.3) |
 
 ### What the compiler rejects
 
@@ -4299,9 +4338,31 @@ passed.
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
 
-The full list for ownership is in 8.16.
+**(filled in)** These lines are rejected by the filled-in rules:
 
-Four checks happen while the program runs:
+| Line | Reason |
+|---|---|
+| `var count: int = 5;` where a `count` can already be seen | a name is declared only once (2.8) |
+| `a = b = 3;` | an assignment is a statement, not a value (2.9) |
+| `-level` where `level` is a `uint8` | a `-` in front works on signed numbers and floats (3.2) |
+| `var over: int8 = 100 + 100;` and `count / 0` | the answer doesn't fit, and division by zero: the compiler sees both (3.2) |
+| `0 < count < 10` | `0 < count` is a `bool`, and `<` doesn't work on a `bool` (3.2) |
+| `first(x.T)` | a type that decides a type is written out (4.3) |
+| `a + b` where both are a `T` in a generic function | `+` doesn't work on every type (4.3) |
+| `const Bad: type = {int, Bad};` | a type can't hold itself directly (4.6) |
+| `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
+| `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
+| `return 1; show(2);` | nothing after a `return` can run (7.1) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | a function given back can't outlive the block its call was written in (7.8) |
+| `fs[0](&limit)` where `limit` is `const` | a `const` isn't lent to a function the compiler can't see (8.6) |
+| `p.z` where no struct value of `p`'s type has a field `z` | a field name comes from the struct values of the type (9.9) |
+| `import(fileName)` | the file is written out in the code (11.2) |
+| `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
+
+The full list for ownership is in 8.16, and every check is in Appendix B.
+
+**(adjusted)** These checks happen while the program runs. A check that fails stops the
+program (11.7), and Appendix B lists all of them with what each one prints:
 
 | Line | Fails when |
 |---|---|
@@ -4310,6 +4371,12 @@ Four checks happen while the program runs:
 | `cases[op]` and other map lookups | the key isn't in the map |
 | `p^`, for a heap owner or a borrower | `p` is `null` |
 | `&a[i:j]` with `i` or `j` worked out while running | the slice is out of range (5.9) |
+| `a + b`, `a / b` and the other sums **(filled in)** | the answer doesn't fit the type, or a number is divided by zero (3.2) |
+| `a[i]` **(filled in)** | the index is out of range (5.2) |
+| `convert([]char, int)(t)` **(filled in)** | the text isn't a number, or the number doesn't fit (5.10) |
+| giving a new value to an unsized array, a map or an `any` **(filled in)** | the length, the keys or the type inside differ from the first value's (5.3, 6.3, 4.5) |
+| a map value with keys worked out while running **(filled in)** | two keys are equal (6.1) |
+| `^v`, and any call **(filled in)** | the heap or the stack is full (8.3, 10.4) |
 
 ---
 
