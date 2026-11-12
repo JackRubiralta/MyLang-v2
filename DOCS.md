@@ -306,13 +306,16 @@ Every statement ends with `;` (2.5), except a block, which ends at its `}`.
 | an element | `scores[0] = 15;` | the array can be assigned (5.2) |
 | a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
 | a field | `p.x = 5;` | the struct can be assigned (9.3) |
+| a name of a package | `geom.made = 1;` | the name is a `var` in its file (11.3) |
 | what a pointer leads to | `p^ = 6;` | `p` is a `var` heap owner, a `var` borrower or a `var` ownership (8.3, 8.6, 8.9) |
 | an ownership | `@q = @p;` | `q` can be assigned. This is a move (8.9) |
 
 The forms combine, read from left to right: `list^.next^.value = 3;`, `table[0][1] = 12;`,
 `both[0]^ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
 changed through that name.** So the left side of an assignment starts at a `var` name, or at
-a value with no name that is then followed with `^`:
+a value with no name that is then followed with `^`. Only one thing carries a word of its own
+past the name it is reached through: a top-level name of a file, reached through a package
+(11.3).
 
 ```go
 second(&list^)^.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
@@ -4003,6 +4006,90 @@ c^
 A function that takes a package uses only the names that every package given to it has, each
 with the same type. The compiler checks this at each call, as it does when a `var` package is
 given another file (11.5).
+
+### 11.7 When a check fails while the program runs
+
+**(filled in)** The compiler catches most mistakes. A mistake that depends on a value the
+program only has while it runs is checked at the line where it happens, and Appendix B lists
+every such check. All of them fail in the same way:
+
+1. **The program stops at once.** Nothing after the failing step runs: not the rest of the
+   line, and not the rest of `main`.
+2. **One line goes to the error output,** saying what failed and where. Its form is
+   `error: FILE:LINE: REASON`, with the file and the line of the step that failed:
+
+   ```
+   error: geom.my:12: division by zero
+   ```
+
+3. **The program ends with status 1.**
+
+- Text that was printed before the failure has been written out (11.8).
+- The program's heap values are not freed one by one. All of its memory goes back to the
+  system together.
+- A failure can't be caught, and a program never goes on after one. A program that isn't sure
+  tests first, and the test is in the code:
+
+| To be sure that | Test first |
+|---|---|
+| a pointer can be followed | `p != null` (8.10) |
+| an index is in range | `i >= 0 && i < a.length` (5.2) |
+| a division works | `b != 0` (3.2) |
+| an `any` holds the type | `x.T == int` (4.5) |
+| a key is in a map | compare with the keys, which the code that made the map knows (6.3) |
+
+### 11.8 Output, input and ending the program
+
+**(filled in)** Three built-in functions connect a program to the outside. Like `convert`,
+each one is an ordinary function value (4.4):
+
+| You write | Its type | What it does |
+|---|---|---|
+| `print` | `([]char)void` | writes a text to the output |
+| `read` | `()[]char` | gives the next line of the input |
+| `exit` | `(int)void` | ends the program with a status |
+
+**`print` writes exactly the `char`s it is given,** in order, to the program's standard
+output. It adds nothing, so a line break is written `\n`. Any other value is turned into text
+first (5.10):
+
+```go
+print("Hello\n");                                          // Hello, and a line break
+print(join(char)(convert(int, []char)(count), "\n"));      // the number in count, and a line break
+print(word[:]);                                            // a fixed array goes in as a slice (5.3)
+```
+
+**`read` gives the next line of the standard input,** as a new `[]char`: every `char` up to
+and including the next `\n`. When the input has ended, it gives a text with no `char`s, so an
+empty result always means the end:
+
+| The input holds | `read()` gives |
+|---|---|
+| `21` and a line break | `"21\n"` |
+| an empty line | `"\n"` |
+| `end`, and then the input ends without a line break | `"end"` |
+| nothing more | `""` |
+
+**`exit` ends the program at once,** with the status it is given. `exit(0);` says that
+everything went well. The status is a number from 0 to 255, by the same rule as for `main`
+(11.4). Nothing after an `exit` runs. The compiler doesn't treat `exit` as special, so a
+function that returns a value still ends in a `return` (7.1).
+
+A whole program that uses all of this:
+
+```go
+// the file you run: it asks for a number and prints the number doubled
+const main: ()int = (){
+    print("Number: ");
+    const line: []char = read();                                        // for example "21\n"
+    const number: int = convert([]char, int)(line[:line.length - 1]);   // 21: the line without its \n
+    print(join(char)(convert(int, []char)(number * 2), "\n"));         // prints 42 and a line break
+    return 0;
+};
+```
+
+If what was typed isn't a whole number, the conversion fails (11.7): the program writes its
+error line and ends with status 1.
 
 ---
 
