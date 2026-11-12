@@ -2164,9 +2164,9 @@ holds their address (7.7). They end when that block ends. Two rules follow.
 **A function given back can't outlive the block its call was written in.** It can't be given
 back from that block's function, and it can't be stored in something that lasts longer than
 the block. This comes on top of the rule about the arguments above. The top level of a file is
-a block as well, and it lasts as long as its package value (11.3). A function that a built-in
-gives back, such as `convert(float, int)` or `wrap(int)`, keeps nothing, so this rule never
-holds it back.
+a block as well, and it lasts as long as its package value (11.3). **(filled in)** A function
+that a built-in gives back, such as `convert(float, int)` or `wrap(int)`, keeps nothing, so
+this rule never holds it back.
 
 ```go
 var keep: (int)int = double;

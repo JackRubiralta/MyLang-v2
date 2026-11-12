@@ -11,8 +11,44 @@ Nothing in `UNDECIDED.md` was decided, used or built on.
 
 ## 1. Summary
 
-*(The counts and the short summary are written at the end of this section, once every gap is
-filled. The philosophy and the gap list below were written first, before any decision.)*
+`DOCS.md` had the heart of the language: declarations, types, ownership, structs, choosing,
+files. It did not yet say how the source is written, what most operators do at their edges,
+what several rules mean for the compiler, or what happens when something goes wrong while the
+program runs. Those gaps are filled now:
+
+- **103 rules were filled in.** They are listed in section 2, each with its reason and the
+  principle that decided it.
+- **6 rules of Jack's were adjusted.** They are listed in section 3.
+- **1 of those is a bigger change,** and it is the first thing to review. It is in section 4:
+  how far a function given back can travel.
+- **Nothing waits on `UNDECIDED.md`** (section 5).
+
+What was added, in short: the source text and every literal; a full grammar (Appendix A);
+`/`, `%` and a minus in front; one rule for results that don't fit; equality for every type;
+the type of every value; the rules for names; every form of assignment; generics checked
+once; text as an array of `char`s with `join` and `convert`; map keys; field names; the
+rules a package's names follow; the set-up order and `main`; what a failed check does;
+`print`, `read` and `exit`; the last-call rule for the stack; and one list of every check
+(Appendix B).
+
+The philosophy and the gap list below were written first, before any decision.
+
+### 1.0 Where to look first
+
+After the bigger change in section 4, these are the rules where I had to make a real choice.
+Each one has the options I weighed in its row of `DECISIONS.md`:
+
+| Rule | The choice |
+|---|---|
+| 10 (DOCS 2.8) | no shadowing at all, where most languages allow it |
+| 27, 28 (3.2) | a result that doesn't fit fails, and there are no special float values |
+| 34 (3.7) | `==` works on every type and compares what `=` copies |
+| 42 (4.3) | a generic function is checked once, so `+` on a `T` is an error |
+| 83 (9.3) | a function field can't be called through a `const` struct the compiler can't see into |
+| 86 (9.9) | field names are labels for positions, gathered from every struct value of the type |
+| 88 (10.4) | the last call takes over the stack |
+| 89 (11.2) | `import` is the one built-in that can't be passed around |
+| 91 (11.3) | a file's names keep their own `const` and `var` under a `const` package |
 
 ### 1.1 The philosophy, as the two files show it
 
@@ -337,3 +373,80 @@ happens underneath.
 | 11.8 | 101 | `exit: (int)void` ends the program with a status | The same status rule as for `main` | 6, 11 |
 | App. A | 102 | The full grammar, with the order of operations built in, and the rules that tell the forms apart | One place for whoever writes the parser | 12 |
 | App. B | 103 | Every check the compiler makes and every check made while running, with the reason each one prints | One place for whoever writes the compiler | 8 |
+
+---
+
+## 3. Adjusted rules
+
+Every existing rule that changed. Each is marked **(adjusted)** in `DOCS.md`, and
+`DECISIONS.md` section 13 has the same list.
+
+| # | DOCS | Old wording | New wording | Why |
+|---|---|---|---|---|
+| A1 | 7.8 | "It can't outlive what was passed in… An argument handed over with `@` doesn't count." | The same, and also: "A function given back can't outlive the block its call was written in", unless it keeps only a heap value it took with `@` | Kept parameters need a place to live that isn't hidden heap use. **This is the bigger change: section 4** |
+| A2 | 8.6, 8.17 | Under "What the compiler doesn't catch": "A borrower of a `const` given to a function that is held in a variable… only the type is known." | "A `const` is lent only where the compiler can see that it is only read." `fs[0](&limit)` is an error | A `const` could otherwise change. 8.12 already counts every `&` argument of such a call as one that may change, so this is that rule applied again |
+| A3 | 8.17 | "Not settled yet: Two functions given back by one call that use the same `var` parameter… Whether they share the kept parameter or each keep their own." | "Nothing is left unsettled… They share it: one call has one set of parameters (7.8)." | The docs' own open point, decided by rule 70 |
+| A4 | 5.9 | "`&a[:]` \| the whole array, the same as `&a`" | "the whole array. When `a` is unsized it is the same as `&a`. When `a` is fixed, `&a` is an `&[3]T` and `&a[:]` is the `&[]T`" | An `&[3]T` and an `&[]T` are different types, and a value never changes type by itself |
+| A5 | 13 | "Four checks happen while the program runs:" | "These checks happen while the program runs. A check that fails stops the program (11.7), and Appendix B lists all of them" | The table had five rows already, and the filled-in rules add more |
+| A6 | 3.2, 13 | The order of operations, step 2: "`!` and the marks". Step 3: "`*`" | Step 2: "`!`, `-` and the marks". Step 3: "`*` `/` `%`" | The new operators needed a place in the order. Nothing that was there moved |
+
+Tables that only gained rows (3.2, 8.8, 8.16, 8.18 and the tables of section 13) are not
+listed here: each new row is marked **(filled in)** where it stands.
+
+---
+
+## 4. Bigger changes
+
+### 4.1 How far a function given back can travel (DOCS 7.8, A1)
+
+**The gap.** 7.8 says a function given back keeps the parameters it uses, and that they "live
+as long as it does". 7.7 says every function value is two addresses. The docs say nothing
+goes on the heap unless the code says `^`. Nothing said where the kept parameters are, so a
+compiler writer could not build `makeAdder`.
+
+**The options.**
+
+| Option | What it means | Against the philosophy |
+|---|---|---|
+| a. A hidden heap block for kept parameters | Every `makeAdder(five)` quietly allocates, and something has to free it | Heap use the code doesn't show. It breaks "explicit" at its centre |
+| b. Function values that carry their kept parameters inside | A function value has a different size for each function | It undoes Jack's decision that every function value is two addresses, and with it arrays and maps of functions |
+| c. Only Jack's rule: the function can't outlive the arguments | No new restriction | It can't be built. `keep = makeAdder(five);` inside a function passes the rule when `five` and `keep` are both top-level names, yet the kept `step` has nowhere to live once that function ends |
+| d. Kept parameters stay on the stack in the block the call was written in, and the function can't outlive that block. A function that keeps only one heap value owns it and can go anywhere | One new restriction, and one exception that the heap makes possible | Nothing hidden. It is the borrower rule once more: what a function points at has to outlive it |
+
+**Picked: d.** It keeps every rule Jack wrote and every example in the docs. `makeAdder`,
+`makeCounter`, `steps`, `makeLookup`, `countFrom` and `newCounter` all work as written.
+`newCounter` works because of the exception: the function `countFrom` gives back keeps only
+the heap value it took with `@`, so it can be handed on.
+
+**What it rejects that the old wording allowed.**
+
+```go
+const install: ()void = (){
+    keep = makeAdder(five);    // the step would have to outlive this call of install
+};
+```
+
+A call that hands over two heap values with `@`, or a heap value and a plain one, also gives
+back a function that stays in its block.
+
+**How to write those cases.** Put everything the function needs into one struct on the heap,
+and hand it over with `@`. The `^` then shows the heap use, which is what the docs ask for.
+
+**What Jack may want to change.** If functions given back should travel freely with any kept
+parameters, the honest way is option a with a mark that shows the allocation. That would be
+a new piece of syntax, close to idea 1 in `UNDECIDED.md`, so I did not go there.
+
+---
+
+## 5. Waiting on `UNDECIDED.md`
+
+Nothing waits. Every gap could be filled with the rules that are decided.
+
+Two filled-in rules would read more simply if an undecided idea were accepted. Both were
+written with today's rules instead, and neither depends on the idea:
+
+| Rule | Today | With the undecided idea |
+|---|---|---|
+| 4.1 above, keeping several values in a function that travels | one struct on the heap, handed to a helper with `@` | idea 1 (kept names after a `;`) would write it without the helper |
+| 65 (DOCS 7.1), "every path reaches a `return`" | a body is one straight line, so the rule is "the body always returns" | idea 2 (`if` and `else`) would bring branches back, and the rule would need its branch cases again |
+
