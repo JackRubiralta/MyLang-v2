@@ -711,6 +711,12 @@ var scores: []int = [10, 20, 30];       // unsized: the length comes from the fi
 | `[3]int` | the type |
 | `[]int` | the first value it's given |
 
+The size between the brackets is a number, or nothing. A type can't go there:
+
+```go
+const sizes: [bool]int = [3, 10];       // ERROR: the size of an array is a number
+```
+
 An array holds values of one type, and that can be any type:
 
 ```go
@@ -853,13 +859,6 @@ A pair always has both values, so a lookup never fails.
 Underneath, a pair is just an array of two, a `[2]T`, the same way a `bool` is just a number
 underneath (3.1). Looking it up with `false` takes the first value and with `true` the second,
 because `false` is 0 and `true` is 1. The types keep the two apart in the code.
-
-An array's size is always a number, so a type can't go between the brackets. A pair is written
-`?T`:
-
-```go
-const sizes: [bool]int = [3, 10];      // ERROR: the size of an array is a number: write ?int
-```
 
 Its main use is choosing (section 10).
 
@@ -2963,7 +2962,7 @@ passed.
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `?int` | a pair is looked up with a `bool` |
-| `var sizes: [bool]int = [3, 10];` | the size of an array is a number: a pair is written `?int` (5.8) |
+| `var sizes: [bool]int = [3, 10];` | the size of an array is a number (5.1) |
 | `shapes = import("other");` where `other` lacks a name the code uses from `shapes` | a package in a `var` can only be given a file with the same names and types (11.5) |
 | two files that import each other | imports can't go round in a circle (11.2) |
 | a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
