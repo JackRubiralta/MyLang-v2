@@ -2195,7 +2195,10 @@ said further down, under "Which results keep parameters".
 then kept, as if the function given back used it, and one level up the result counts as
 coming from the arguments of this function. A result that comes from a name declared inside
 the function, or from a value made on the spot, can't be given back, because those end with
-the call. `adderFor` and `adderPlus` further down show both.
+the call. `adderFor` and `adderPlus` further down show both. This is for an argument that was
+handed on as it is. Where the function lent something with `&`, rule 8.13 decides: a result
+that holds a borrower of a copied parameter, or of a name declared in the function, can't be
+given back.
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
