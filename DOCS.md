@@ -167,7 +167,7 @@ own. How long something lives depends on where it's written:
 | What | It lives until… |
 |---|---|
 | a name | the end of the block it's declared in |
-| a parameter | its function call ends, or as long as a function the call gives back uses it (7.8) |
+| a parameter | its function call ends. A parameter that a function given back keeps lives until the call that holds it ends (7.8) **(adjusted)** |
 | a value that isn't given a name | the end of its statement |
 | a value on the heap | its owner ends, or gives it up (8.11) |
 
@@ -184,9 +184,6 @@ var a: int = 1;
 
 When a name ends, its value is removed from the stack. If the name owns a value on the
 heap, that value is freed too.
-
-**(filled in)** A parameter that a function given back uses is a kept parameter. It lives
-until the function call that holds it ends (7.8).
 
 ### 2.7 Writing the source **(filled in)**
 
@@ -274,7 +271,7 @@ Two names can be spelled the same when neither can be seen from the other, like 
 front of the `.`, so it never clashes with a name declared somewhere else.
 
 **A name is used only below its declaration.** A name that is used but never declared is an
-error. The value of a declaration uses names declared above it. There are four exceptions, and each is safe because nothing runs too early:
+error. The value of a declaration uses names declared above it. There are five exceptions, and each is safe because nothing runs too early:
 
 | Exception | Why it is safe |
 |---|---|
@@ -282,6 +279,7 @@ error. The value of a declaration uses names declared above it. There are four e
 | a function's body can use the function's own name (7.8) | the same reason |
 | a type name declared at the top level can be used anywhere in its file, also in its own declaration (4.2, 4.6) | a type is known before the program runs, so nothing runs at all |
 | a type name declared inside a function can be used in its own declaration (4.6) | the same reason |
+| a function written in a struct value can use every field of its block, also one written below it (9.6) | the body runs only when the function is called, and 9.2 keeps a call from coming too early |
 
 A top-level name can be seen in every function body of its file. So no parameter and no name
 inside a function can be spelled like a top-level name of the same file.
@@ -315,7 +313,7 @@ written only inside a function body.
 | Place | Example | It can be assigned when |
 |---|---|---|
 | a name | `count = 4;` | the name is a `var` (2.3) |
-| an element | `scores[0] = 15;`, `sizes[true] = 5;` | the array or the pair can be assigned (5.2, 5.8) |
+| an element | `scores[0] = 15;` | the array or the pair can be assigned (5.2, 5.8) |
 | a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
 | a field | `p.x = 5;` | the struct can be assigned (9.3) |
 | a name of a package | `geom.made = 1;` | the name is a `var` in its file (11.3) |
@@ -539,7 +537,8 @@ also for the one `a` where `a / -1` doesn't fit.
 **(filled in) `-` in front of a number gives its negative.** It works on a signed whole
 number or a float, and never on an unsigned number. A `-` directly in front of a written
 number is part of that number when its type is checked, so `-128` fits in an `int8` although
-`128` doesn't. With brackets in between, as in `-(128)`, the `128` has to fit by itself:
+`128` doesn't. Spaces between the `-` and the number make no difference. With brackets in
+between, as in `-(128)`, the `128` has to fit by itself:
 
 ```go
 var low: int8 = -128;          // fine: -128 is in range for an int8
@@ -563,8 +562,10 @@ never wraps around, and it never turns into another type.
 **(filled in)** So a float is always an ordinary number: there is no infinity and no "not a
 number" value, and dividing by `0.0` fails like dividing by `0`. Floats follow the IEEE 754
 standard that processors use: a `float32` is its 32-bit format and a `float64` its 64-bit
-format. An answer that can't be held exactly is rounded to the nearest value that can, and
-one too small to tell from zero becomes zero. `0.0` and `-0.0` are equal (3.7), and each
+format. An answer that can't be held exactly is rounded to the nearest value that can. When
+two are equally near, it is the one whose last binary digit is 0. An answer too small to tell
+from zero becomes zero. A written float is checked like a written whole number: `1.0e39` is
+too big for a `float32`, so writing it for one is an error. `0.0` and `-0.0` are equal (3.7), and each
 keeps its sign when it is written as text (5.10).
 
 **(filled in)** The compiler makes the check itself where it already knows the answer: when
@@ -601,7 +602,8 @@ const wrong: bool = count == small;    // ERROR: an int and an int8
 | `==` `!=` | two values of the same type, whatever the type. What "equal" means for each type is in 3.7 |
 | `<` `>` `<=` `>=` | two numbers of the same type, or two `char`s, which compare by their numbers |
 
-A comparison gives a `bool`, and a `bool` has no order, so comparisons don't chain:
+A comparison gives a `bool`, and a `bool` has no order. So `<`, `>`, `<=` and `>=` don't
+chain:
 
 ```go
 const between: bool = 0 < count < 10;         // ERROR: 0 < count is a bool, and < doesn't work on a bool
@@ -832,10 +834,10 @@ value it was copied from, and that one rule says what "equal" means for every ty
 | a map | every key and its value | they have the same keys, and the values under each key are equal |
 | a heap owner `^T` | the value on the heap | the values they own are equal, or both are `null` |
 | a borrower `&T`, an ownership `@T` | the address | they point at the same place, or both are `null`. Two `&[]T` also need the same length |
-| a function | its two addresses (7.7) | they are the same code, and they keep the same place. Inside two structs or two packages that are compared, a function that keeps its own struct or package (9.6, 11.5) counts as keeping the same place |
+| a function | its two addresses (7.7) | they are the same code, and they keep the same place. Inside two structs or two packages that are compared, a function that keeps its own struct or package, or a place inside it (9.6, 11.5), counts as keeping the same place |
 | a `type` | the type | they are the same type |
 | an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
-| a `package` | the file's variables (11.5) | they are the same file, and every variable is equal |
+| a `package` | everything in the file that has to be worked out (11.5) | they are the same file, and each of those values is equal |
 
 `!=` is the opposite of `==`. Comparing copies nothing and changes nothing.
 
@@ -990,7 +992,7 @@ A type can still be held as a value: in an array or a map (4.1), as a function's
 A value's type is the one it was declared with. The type inside an `any` is read with
 `x.T` (4.5).
 
-**(filled in) A type name is a name whose type the compiler knows before the program runs.**
+**(filled in) A type name is a name whose value, a type, the compiler knows before the program runs.**
 There are three kinds: a built-in type (2.7), a `const` of type `type` whose value is a type
 written out, such as `Pair` and `Point`, and a `type` parameter of a function (4.3). A `const`
 of type `type` whose value has to be worked out, as in `const U: type = x.T;`, holds a type
@@ -1009,13 +1011,15 @@ x.T == int                     // fine: comparing two types gives a bool (3.7)
 
 **(filled in) A top-level type name can be used anywhere in its file,** above its declaration
 too (2.8). The compiler collects the top-level type names of a file before it reads anything
-else, so it always knows which names are types (3.2).
+else, so it always knows which names are types (3.2). It does this for the imported files
+first, and it goes on until it finds no new one, because a type name can be declared with
+another type name.
 
 **(adjusted)** The rule that a type is held as a `const` is checked where a type shows it: a
-name, a parameter or a field has to be a `const` when its type is `type`, or is an array, a
-pair, a map or a struct with `type` inside it, such as `[2]type` or `{int}type`. A type name
-for such a type counts the same. A function type that takes a `type` holds no type, so a
-function of type `(type)([]T)T` can be a `var`. An `any` can hold a type (4.5) and a `T` can
+name, a parameter or a field has to be a `const` when its written type has `type` in it
+anywhere outside a function type: `type`, `[2]type`, `{int}type`, `^type`. A type name for
+such a type counts the same. A function type that takes a `type` holds no type, so a function
+of type `(type)([]T)T` can be a `var`. An `any` can hold a type (4.5) and a `T` can
 stand for `type` (4.3) without their types showing it. A type held that way is only known while the program runs.
 By the rule above it can never declare anything, so nothing that is checked before the
 program runs depends on it.
@@ -1175,13 +1179,15 @@ What a conversion between the basic types gives:
 | a number or a `bool` to text, and back | `convert(int, []char)(42)`, `convert([]char, int)("42")` | `"42"`, `42` (5.10) |
 | a type to itself | `convert(int, int)(3)` | `3` |
 
-**(filled in)** `convert` works between the number types, `bool` and `char`, and between a
-number or a `bool` and the text type `[]char`, as the two tables list. Each of those types
-also converts to itself. Any other pair of types is an error:
+**(filled in)** These are all the pairs `convert` has, in both directions: two number types;
+a `char` and a whole-number type; a `bool` and a whole-number type; a number and `[]char`; a
+`bool` and `[]char`. Each of these types also converts to itself. Any other pair is an error,
+and so is a pair with a type parameter in it, because not every `T` converts (4.3):
 
 ```go
 convert([3]int, int)                   // ERROR: there is no conversion from an array to an int
 convert(bool, float)                   // ERROR: a bool converts to a whole number only
+convert(char, []char)                  // ERROR: a char is no number: write ['a'] for a text of one char
 ```
 
 **(filled in)** `convert` itself is a function that takes two types, so its own type is
@@ -1314,6 +1320,8 @@ var y: {type, bool} = {
 };
 ```
 
+**(filled in)** These are pictures only: a real `var` can't hold a `type` (4.2).
+
 The second field's type depends on the first, so every `any` can have a different shape
 inside. An `any` sits on the stack like everything else. Its size depends on the value
 inside, so it's known when the `any` is made or passed in, the same as an unsized array
@@ -1348,7 +1356,7 @@ whatever it leads to:
 
 ```go
 const Bad: type = {int, Bad};          // ERROR: a Bad would hold a Bad, which holds a Bad, without end
-const Rows: type = [2]Rows;            // ERROR: the same
+const Rows: type = [2]Rows;            // ERROR: a Rows would hold two Rows, each holding two more
 const Step: type = (int)Step;          // fine: a function that returns a function of its own type
 ```
 
@@ -1567,9 +1575,9 @@ primes[true]                           // ERROR: a [3] array is indexed with a n
 
 A pair always has both values, so a lookup never fails.
 
-**(filled in)** The two values of a pair are held like the elements of an array (5.7). So a
-value of a `var` pair can be given a new value, `sizes[true] = 12;`, and it can be borrowed,
-`&sizes[big]`.
+**(filled in)** The two values of a pair are held like the elements of an array (5.7). So
+with `var limits: ?int = [3, 10];`, a value can be given a new value, `limits[true] = 12;`,
+and it can be borrowed, `&limits[big]`.
 
 **(filled in)** A pair value is written with exactly two values, and a pair has no `.length`,
 because the answer is always two:
@@ -1632,7 +1640,7 @@ part[0] = 5;                           // scores doesn't change
 ```
 
 **The bounds are checked.** The start can't be after the end, and the end can't be past the
-length. **(adjusted)** When both are written values and the compiler knows the length (5.2),
+length. **(filled in)** The start can't be below 0 either. **(adjusted)** When both are written values and the compiler knows the length (5.2),
 the compiler checks them, and a bound that is left out counts as written. Otherwise the check
 is made while the program runs, and a slice out of range fails there:
 
@@ -1698,6 +1706,17 @@ const wrong: [3]char = "Jack";         // ERROR: "Jack" has 4 chars
 A float that is `1.0e21` or more away from zero, or closer to zero than `1.0e-6` without
 being zero, is written with a power of ten: `"1.5e21"`, `"2.0e-7"`. Zero is `"0.0"`, and
 `-0.0` is `"-0.0"`.
+
+The exact forms, in the notation of Appendix A:
+
+```
+whole number as text = [ "-" ] Digit { Digit }
+float as text        = [ "-" ] Digit { Digit } [ "." Digit { Digit } ] [ ( "e" | "E" ) [ "+" | "-" ] Digit { Digit } ]
+```
+
+Reading takes any text of these forms: `"007"` is 7, `"-0"` is 0, and `"1e5"` is `100000.0`.
+Writing gives a whole number with no zeros in front, and a float with a digit on both sides
+of the point. With a power of ten, exactly one digit stands in front of the point.
 
 Going from text to a value is checked when the line runs, like every conversion that might
 not fit (4.4). It fails when the text isn't written as the table says, or when the number
@@ -2122,7 +2141,8 @@ package. A function that uses only its own parameters, built-ins, types and func
 need nothing keeps nothing.
 
 Each of the last two places in the table also holds the address of the place around it, and
-in the end the address of the package value. So a function inside a function inside a file
+in the end the address of the package value. A block at the top level of a file is part of
+the package value, so a function that uses a name of such a block keeps the package value. So a function inside a function inside a file
 reaches everything it can see through one address. A struct value holds only its fields
 (9.8), and that is why a function that uses a struct's fields can use nothing else that needs
 a place (9.6).
@@ -2796,7 +2816,7 @@ never changed.
 | a function **(filled in)** | the same code, using the same variables and kept parameters (7.8) |
 | a `type` **(filled in)** | the same type |
 | an `any` **(filled in)** | its own copy of the type and the value inside |
-| a `package` **(filled in)** | its own copy of the file's variables (11.5) |
+| a `package` **(filled in)** | its own copy of everything in the file that has to be worked out (11.5) |
 
 ```go
 var a: int = 3;
@@ -3717,12 +3737,20 @@ A struct is declared with `const` or `var`, like any other value. The fields car
 
 **(filled in)** The block has one field for each type in the shape, in the same order, and
 the type written in each field is the type at its position. A field's value can use the
-fields written above it, like the names above a declaration in any block (2.8):
+fields written above it, like the names above a declaration in any block (2.8). A call in a
+field's value follows the rule for a call at the top level of a file (11.4): it can run only
+when every field that its function uses is written above the call.
 
 ```go
 var q: Point = { x: int = 1; };                   // ERROR: a Point has two fields
 var r: Point = { x: int = 1; y: bool = true; };   // ERROR: the second field of a Point is an int
 var s: Point = { x: int = 2; y: int = x * 3; };   // fine: y uses x, so y is 6
+
+var early: {()int, int, ^int} = {
+    peek: ()int = (){ return last^; };            // fine by itself: a body can use a field below it (9.6)
+    first: int = peek();                          // ERROR: peek uses last, which is written below this line
+    last: ^int = ^5;
+};
 ```
 
 This mirrors functions: the type lists only the types, and the value gives the names.
@@ -3847,14 +3875,17 @@ Files work the same way (11.3).
 **(filled in) A function that uses the fields keeps its own struct.** It keeps the address of
 the struct value it sits in (7.7), the way a function in a file keeps its package (11.5).
 When a struct value is copied, moved or given back, each function in the new struct that kept
-the address of the old one, or of a place inside it, keeps the same place in the new one
-instead. That is how each copy's functions come to use its own fields. The functions that are
-re-aimed are the ones held in the struct itself, not the ones behind a pointer.
+the address of the old one, or of a place inside it, is re-aimed: it keeps the same place in
+the new struct instead. That is how each copy's functions come to use its own fields. The
+functions that are re-aimed are the ones held in the struct itself, not the ones behind a
+pointer.
 
-**(filled in) What such a function can use.**
+**(adjusted) What such a function can use.** A block sees the names of the blocks around it
+(7.8), but a function that uses its struct's fields gives that up:
 
 - It is written as the value of a field, or inside an array, a pair or a map that is the
-  value of a field.
+  value of a field. A function written anywhere else in the block, such as an argument in a
+  field's value, is an ordinary function, and it can't use the fields.
 - Its body can use every field of its block, above it or below it, because the body runs only
   when the struct is complete. It can call another function field by its name.
 - It has one address for what it keeps (7.7), and that address is the struct. So it can't
@@ -3944,11 +3975,10 @@ every value, the compiler knows how its type was written where the value was dec
 type name such as `Point`, or as a struct type written out, such as `{bool, int}`. `p.x` is
 looked up by that:
 
-| The type of `p` was written as | `x` is a label given by |
+| The type of `p` was written as | Its field names are the ones given by |
 |---|---|
-| a type name declared in this file, such as `Point` | the struct values written for `Point` in this file |
-| a type name of another file, such as `geom.Box` | the struct values written for `Box` in the file of `geom`, and those written for `geom.Box` in this file |
-| a struct type written out, such as `{bool, int}` | the struct values written for that same written-out type in this file |
+| a type name, such as `Point` or `geom.Box` | the struct values written for that type name in the file that declares it |
+| a struct type written out, such as `{bool, int}` | the struct values written for that type, with no type name, in the file where it was written |
 
 A struct value is *written for* the type that its place asks for (3.8): the block in
 `var p: Point = { … };` is written for `Point`. The written form goes with a type through
@@ -3966,16 +3996,26 @@ p.x                    // 1
 s.w                    // 3
 s = p;                 // fine: a Point and a Size are the same type (3.6)
 s.w                    // 1: the first field, under the name that Size gives it
-s.x                    // ERROR: no struct value written for Size has a field x
+s.x                    // ERROR: the fields of a Size are w and h
+var q: Point = { a: int = 0; b: int = 0; };    // ERROR: the fields of a Point are x and y
 ```
 
 | Rule | Example |
 |---|---|
-| a name that no struct value written for the type gives is an error | `s.x` above |
-| a name that is given to two positions of one written type can't be used | with `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` both written for `Point`, `p.x` could mean either field |
-| one position can have several names | a second value `{ a: int = 0; b: int = 0; }` written for `Point` makes `p.a` the same field as `p.x` |
-| a type name declared as another type name has that name's labels as well | `const Box: type = geom.Box;` |
+| every struct value written for one written type gives the same names, in the same order | `q` above |
+| a name that those struct values don't give is an error | `s.x` above |
+| a type name whose own file writes no struct value for it has no field names | struct values can be written for it anywhere, but `.x` can't be used on it |
+| a type name declared as another type name has that name's field names | `const Box: type = geom.Box;` |
 | a `T` and an `any` have no field names | a generic function can't read a field of a `T` (4.3) |
+
+Some finer points:
+
+- Two struct types written out are the same written type when they are the same type (3.6).
+  So two unnamed structs of one shape in one file share their field names. To give them
+  different names, give one of the types a name.
+- The same file imported under two names gives the same field names: `a.Box` and `b.Box`.
+- Where a value could have two written forms, as an element of `[p, s]` that has no place of
+  its own, the first one counts.
 
 It is the picture from 5.7 again: the fields of a struct are reached by position, and their
 names are labels for the positions. The labels come from struct values in the file itself, or
@@ -4087,7 +4127,8 @@ sumFrom(&scores, 0)    // 60
 
 Every call that hasn't ended holds its parameters and names on the stack
 (2.6). The stack has a limit, set by the system the program runs on. A program that calls
-deeper than the stack allows fails while it runs (11.7), like any other check. `sumFrom` above
+deeper than the stack allows fails while it runs (11.7), like any other check. A declaration
+needs room on the stack too, and it fails the same way when there is none left. `sumFrom` above
 has one call on the stack for each element, because every call still has an addition to do
 when the next call comes back.
 
@@ -4104,7 +4145,9 @@ A call is the last thing a function does when both of these hold:
 | nothing it uses lives in this call | What lives in this call is: the function's parameters and names, the heap values they own, the kept parameters this call holds (7.8), and the values made on the spot in the statement. An argument uses one of these when it is, or holds, a pointer to it or a function that uses it. The function that is called uses one when it keeps it. An ownership that a parameter of the called function takes over doesn't count, because its value has moved before the call starts (8.13) |
 
 The arguments, and the function to call, are worked out before the names end (2.9). The other
-values made on the spot in the statement are gone by then as well. In every other case the
+values made on the spot in the statement are gone by then as well. When the last call gives
+back a function that keeps its parameters (7.8), those parameters are held by the caller of
+the function that made the last call, as if that caller had made the call itself. In every other case the
 call is an ordinary one, and the names end after it, as in 2.6.
 
 ```go
@@ -4189,6 +4232,10 @@ const which: package = import(fileName);         // ERROR: the file has to be wr
 
 - The text is the file's path without the `.my` (2.7). Its parts are joined with `/`. A text
   that leads to no file is an error.
+- Two texts that lead to the same file name the same file, however they are written:
+  `"geom"` and `"shapes/../geom"`.
+- A file can't import itself, at its top level or inside a function: it is the smallest
+  circle of imports.
 - `import` has the type `([]char)package`. Unlike the other built-ins, it is always called by
   its own name with its text written out, because a file that is only named while the program
   runs couldn't be checked.
@@ -4247,14 +4294,17 @@ the whole program:
 
 | Place | The files it can hold |
 |---|---|
-| a name declared with a package: a `const`, a `var` or a parameter | the files of everything it is given: by its declaration, by each assignment to it, and for a parameter by the argument of each call the compiler sees (7.2) |
-| a borrower or an ownership of such a name, and a parameter that is handed one | the same files as the name: the two count as one place |
 | an `import("geom")` | exactly that file |
-| everything else: an element, a map entry, a field, a heap value, the inside of an `any`, the result of any other call | one shared place for the whole program. It holds every file that is ever put into any of them |
+| a name: a `const`, a `var` or a parameter that is a package, or that is an array, a pair, a map or a struct with packages inside it | the files of everything it is given: by its declaration, by each assignment to it or to a part of it, and for a parameter by the argument of each call the compiler sees (7.2). All the packages inside one name count together |
+| a borrower or an ownership of such a name, and a parameter that is handed one | the same files as the name: the two count as one place |
+| the result of a call the compiler sees | the files the compiler finds that the function can give back |
+| everything else: a heap value, the inside of an `any`, the result of a call through a variable | one shared place for the whole program. It holds every file that is ever put into any of them |
 
-A function that is used in any way but a call the compiler sees could be handed anything. So
-its package parameters also hold everything in the shared place, and a package that is handed
-to a call through a variable goes into the shared place.
+A function that is used in any other way than a call the compiler sees could be handed
+anything. So its package parameters also hold everything in the shared place, and a package
+that is handed to a call through a variable goes into the shared place. A name also joins the
+shared place when a borrower or an ownership of it is put where the compiler can't follow: on
+the heap, into an `any`, or into a call through a variable.
 
 `g.name` is accepted when `name` is a top-level name of every file that the place of `g` can
 hold, with the same type in each. It can be assigned when it is a `var` in each. A type is
@@ -4296,8 +4346,9 @@ worked out in order, from the top down, each value when its line is reached. For
 run, that happens when the program starts, together with its statements, in the order
 written. For every other file it happens each time an `import` of it runs (11.2).
 
-Two kinds of top-level name are ready from the start, because nothing has to run to make
-them: a `const` whose value is a function value written out, and a type name (4.2). Every other
+Three kinds of top-level name are ready from the start, because nothing has to run to make
+them: a `const` whose value is a function value written out, a `const` whose value is a
+written value (3.2), such as `const limit: int = 10;`, and a type name (4.2). Every other
 top-level name is set up when its line is reached: every `var`, and every `const` whose value
 has to be worked out.
 
@@ -4332,9 +4383,10 @@ const onTime: int = readLate();    // fine: late is set up by now
 
 A package value holds the address of the file's code, the way a function value is the address
 of its code (7.7), and its own copy of the file's variables. Copying a package value copies its
-variables (8.8), and the code stays one address. **(adjusted)** Function values written out
-and types never change and need nothing worked out, so they are never copied. A `const` whose
-value is worked out when the file is set up is held with the variables (see below).
+variables (8.8), and the code stays one address. **(adjusted)** A name that is ready from the
+start (11.4) never changes and needs nothing worked out, so it is never copied: a function
+value written out, a written value, a type. A `const` whose value is worked out when the file
+is set up is held with the variables (see below).
 
 So a package can be held like a function. It can be a `const` or a `var`, passed to a function
 or kept in an array, and a `var` one can be given another file, as a `var` function can be
@@ -4356,11 +4408,13 @@ nothing is looked up while the program runs.
 into the program, with one entry for each of the file's top-level names. A package value holds
 the address of its file's table, and then its own copy of everything in the file that has to
 be worked out: every `var`, every `const` that isn't ready from the start (11.4), and the kept
-parameters of the calls made at the file's top level (7.8). Only function values written out
-and types are never copied. Every name that the program reaches through a package has one
+parameters of the calls made at the file's top level (7.8). The names that are ready from the
+start are never copied. Every name that the program reaches through a package has one
 fixed position in all these tables, so `shapes.area` reads the entry at that position,
 whichever file `shapes` holds. A `var` package has room for the biggest file its place can
-hold (11.3).
+hold (11.3), as far as the sizes are in the types. A top-level value with no size in its type
+(5.3) counts at the size it has in the package the holder is first given. A later package
+that needs more room than that fails while the program runs (11.7).
 
 **(filled in)** A function written at the top level of a file that needs its package (7.7)
 keeps the address of the package value it is reached through: `a.bump` is the code of `bump`
@@ -4646,8 +4700,8 @@ to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 | `exit` **(filled in)** | `(int)void` | ends the program with a status (11.8) |
 
 Built-ins are first-class values like everything else: they can be named, stored and
-passed. **(filled in)** The one exception is `import`, which is always called by its own name
-with its text written out (11.2). The built-ins that take a type have these types
+passed. **(adjusted)** The one exception is `import`, which is always called by its own name
+with its text written out (11.2). **(filled in)** The built-ins that take a type have these types
 themselves: `convert` is a `(type, type)(A)B`, `wrap` a `(type)(T)any`, `unwrap` a
 `(type)(any)T` and `join` a `(type)([]T, []T)[]T` (4.3).
 
@@ -4884,7 +4938,7 @@ always decide:
 
 | What is read | It is |
 |---|---|
-| `&&` where a `Front` can start | two `&` marks (3.2) |
+| `&&` where a `Front` can start, or in a type | two `&` marks (3.2) |
 | `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2. So a mark never puts a type on the heap or borrows one: `^int` is always a type |
 | `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
 | `(` | a call, a function value, a function type or a group, by the table in 3.2 |
