@@ -60,12 +60,12 @@ way.
 
 **Status:** undecided.
 
-**What `DOCS.md` does instead.** A choice is a lookup: a choice array `[bool]T` picks one of two
+**What `DOCS.md` does instead.** A choice is a lookup: a pair `?T` picks one of two
 values or functions, and a map of functions picks one of many (`DOCS.md` 10.1, 10.2). Recursion
-stops with a choice array too (10.3).
+stops with a pair too (10.3).
 
 **What `if` would add.** A choice written as a statement, so only the chosen side runs and a
-`return` inside it ends the function. These examples in `DOCS.md` use a choice array now and
+`return` inside it ends the function. These examples in `DOCS.md` use a pair now and
 would read more simply with an `if`: the null test and `valueOr` (8.10), `length` (8.14),
 `linkBack` (8.15), and `factorial` and `sumFrom` (10.3). `return;` (7.3) would also become
 useful for stopping a function early, and the rule that every path reaches a `return` (7.1)

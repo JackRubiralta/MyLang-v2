@@ -361,7 +361,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 |---|---|---|---|
 | fixed array | `[n]T` | `[3]int` | array of 3 ints |
 | unsized array | `[]T` | `[]int` | array of ints |
-| choice array | `[bool]T` | `[bool]int` | two ints: one for `false`, one for `true` |
+| pair | `?T` | `?int` | two ints: one for `false`, one for `true` |
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
@@ -430,7 +430,7 @@ ps[0]^                 // index, follow → an int
 ```
 Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
-          | "[" "bool" "]" Type               (choice array: indexed by a bool)
+          | "?" Type                          (pair: one Type for false, one for true)
           | "{" Type "}" Type                 (map: {key}value)
           | "{" TypeList "}"                  (struct: its field types, section 9)
           | "^" Type                          (a value on the heap, section 8)
@@ -823,35 +823,30 @@ var b: {int, [2]int} = {
 
 In both, the length is known and it never changes.
 
-### 5.8 A choice array: `[bool]T`
+### 5.8 A pair: `?T`
 
-`[bool]T` is an array with exactly two slots that is indexed with a `bool` instead of a
-number. The first slot is for `false` and the second is for `true`:
+`?T` is a pair: exactly two values of type `T`, one for `false` and one for `true`, looked up
+with a `bool`. It is written like an array of two, the value for `false` first, and its type
+comes from the declaration, the same way `5` takes the type of the place it's written (3.2):
 
 ```go
-const sizes: [bool]int = [3, 10];      // the slot for false, then the slot for true
+const sizes: ?int = [3, 10];           // the value for false, then the value for true
 sizes[false]                           // 3
 sizes[true]                            // 10
 
 const big: bool = count > 10;
 sizes[big]                             // 3 or 10, picked by big
-sizes.length                           // 2
 ```
 
-| Type | Slots | Indexed by |
-|---|---|---|
-| `[3]T` | 3 | `0`, `1`, `2` |
-| `[bool]T` | 2 | `false`, `true` |
-
-The two kinds of index don't mix:
+A pair is always looked up with a `bool`, and an array with a number:
 
 ```go
-sizes[1]                               // ERROR: a [bool] array is indexed with a bool
+sizes[1]                               // ERROR: a pair is looked up with a bool
 primes[true]                           // ERROR: a [3] array is indexed with a number
 ```
 
-Underneath, a `[bool]T` is laid out exactly like a `[2]T`: `false` is the first slot and
-`true` is the second. Its main use is choosing (section 10).
+A pair always has both values, so a lookup never fails. Underneath, a `?T` is laid out like a
+`[2]T`: `false` first, then `true`. Its main use is choosing (section 10).
 
 ---
 
@@ -1793,12 +1788,12 @@ later = ^8;                // later owns a new heap int
 ```
 
 **Testing for it:** `p == null` and `p != null` give a `bool`. Comparing doesn't copy
-anything and doesn't change `p`. A choice array (10.1) then picks what to do. A function that
+anything and doesn't change `p`. A pair (10.1) then picks what to do. A function that
 is handed an owner to test borrows the owner itself:
 
 ```go
 const valueOr: (&^int, int)int = (const owner: &^int, const fallback: int){
-    const cases: [bool](&^int, int)int = [
+    const cases: ?(&^int, int)int = [
         (const o: &^int, const f: int){ return o^^; },     // false: it owns a value, so read it
         (const o: &^int, const f: int){ return f; }        // true: it is null
     ];
@@ -2181,7 +2176,7 @@ on the next one:
 
 ```go
 const length: (&^Node)int = (const owner: &^Node){
-    const cases: [bool](&^Node)int = [
+    const cases: ?(&^Node)int = [
         (const o: &^Node){ return 1 + length(&o^^.next); },    // false: count this node, go on
         (const o: &^Node){ return 0; }                          // true: no node here, so stop
     ];
@@ -2222,7 +2217,7 @@ function makes the plain copy, then sets every `prev` inside it:
 
 ```go
 const linkBack: (&^Link, &Link)void = (var owner: &^Link, var before: &Link){
-    const cases: [bool](&^Link, &Link)void = [
+    const cases: ?(&^Link, &Link)void = [
         (var o: &^Link, var back: &Link){
             o^^.prev = back;                  // this node's prev borrows the node before it
             linkBack(&o^^.next, &o^^);        // go on: the next owner, with this node before it
@@ -2511,21 +2506,20 @@ and its position in the shape (`{int, int}`: `x` first, `y` second).
 
 A choice is made by a lookup. MyLang has no loops: repeating is a function calling itself.
 
-### 10.1 Choosing by lookup: `[bool]T`
+### 10.1 Choosing by lookup: `?T`
 
-A choice array (5.8) holds one value for `false` and one for `true`, and a `bool` picks
-between them.
+A pair (5.8) holds one value for `false` and one for `true`, and a `bool` picks between them.
 
 ```go
-const sizes: [bool]int = [3, 10];      // false, then true
+const sizes: ?int = [3, 10];           // false, then true
 const size: int = sizes[count > 10];   // 10 when count is over 10, otherwise 3
 ```
 
-Both values in a choice array are worked out before the lookup. To run code for only the
+Both values in a pair are worked out before the lookup. To run code for only the
 chosen side, put **functions** in the slots: look up the function, then call it.
 
 ```go
-const absOf: [bool](int)int = [
+const absOf: ?(int)int = [
     (const k: int){ return k; },           // false: not below 0
     (const k: int){ return 0 - k; }        // true: below 0
 ];
@@ -2572,11 +2566,11 @@ cases[2](5, 3)         // 2
 
 ### 10.3 Repeating: a function that calls itself
 
-A function can call itself by its own name. A choice array decides when to stop:
+A function can call itself by its own name. A pair decides when to stop:
 
 ```go
 const factorial: (int)int = (const n: int){
-    const cases: [bool](int)int = [
+    const cases: ?(int)int = [
         (const k: int){ return k * factorial(k - 1); },    // false: keep going
         (const k: int){ return 1; }                         // true: n is 0, so stop
     ];
@@ -2590,7 +2584,7 @@ The same shape goes through an array, one index at a time:
 
 ```go
 const sumFrom: (&[]int, int)int = (const values: &[]int, const i: int){
-    const cases: [bool](&[]int, int)int = [
+    const cases: ?(&[]int, int)int = [
         (const v: &[]int, const k: int){ return v^[k] + sumFrom(v, k + 1); },   // false: add this one, go on
         (const v: &[]int, const k: int){ return 0; }                            // true: past the end, so stop
     ];
@@ -2845,7 +2839,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `package` | a file used from another file (11.2) |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
-| `[bool]T` | choice array: one `T` for `false`, one for `true` |
+| `?T` | pair: one `T` for `false`, one for `true` |
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
 | `(P1)void` | function returning nothing |
@@ -2890,7 +2884,7 @@ brackets go first (3.2).
 |---|---|
 | to test several things at once | `count > 0 && count < 10` (3.2) |
 | to stop a function that returns nothing early | `return;` (7.3) |
-| to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.1) |
+| to choose a value by a `bool` | a pair: `sizes[count > 10]` (10.1) |
 | to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.2) |
 | to repeat, like a loop | a function that calls itself (10.3) |
 
@@ -2953,7 +2947,7 @@ passed.
 | `describe(3);` | `describe` takes an `any`: write `wrap(int)(3)` |
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
 | `primes[0] = 7;` | `primes` is `const` |
-| `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
+| `sizes[1]` where `sizes` is a `?int` | a pair is looked up with a `bool` |
 | `shapes = import("other");` where `other` lacks a name the code uses from `shapes` | a package in a `var` can only be given a file with the same names and types (11.5) |
 | two files that import each other | imports can't go round in a circle (11.2) |
 | a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
