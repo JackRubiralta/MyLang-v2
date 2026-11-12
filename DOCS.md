@@ -3484,8 +3484,8 @@ Every check the compiler makes, and every check made while running, is listed in
 
 ### 8.17 What the compiler doesn't catch
 
-**(adjusted)** This section used to end with a list of what wasn't settled. Nothing is left
-on that list: two functions given back by one call share the parameters they keep (7.8).
+**(adjusted)** Nothing here is left unsettled. Two functions given back by one call share the
+parameters they keep (7.8).
 
 Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 
@@ -3632,10 +3632,8 @@ origin.x = 1;          // ERROR: origin is const
 Arrays and maps follow the same rule (5.2, 6.2).
 
 **(filled in) A function inside a `const` struct can't change its fields either** (9.6). When
-the struct is declared with its block, the compiler sees the function, and rejects the change
-where it is written. When the struct value comes from somewhere else, the compiler can't tell
-which function a field holds. Then calling that field through a `const` struct counts as a
-call that may change the fields, as in 8.12, and it is an error:
+a struct is declared `const` with its block written out, its fields are `const` inside the
+block too, and the compiler rejects the change where it is written:
 
 ```go
 const fixed: {int, (int)void} = {
@@ -3644,10 +3642,16 @@ const fixed: {int, (int)void} = {
         count = count + n;     // ERROR: count is a field of a const struct
     };
 };
+```
 
+A struct value that comes into a `const` from somewhere else brings its functions with it,
+and the compiler can't see what they do. A call through that `const` struct can then change
+its fields. It is one of the cases the compiler doesn't catch (8.17):
+
+```go
 const frozen: {int, (int)void} = counter;   // a copy of the var struct counter from 9.6
-frozen.count                   // fine: reading a field
-frozen.add(1);                 // ERROR: frozen is const, and add may change its fields
+frozen.count = 9;              // ERROR: frozen is const
+frozen.add(1);                 // not caught: add changes frozen.count
 ```
 
 ### 9.4 Setting a struct to another struct
@@ -3701,19 +3705,31 @@ other.add(1);                  // other.count is now 8, and counter.count is sti
 
 Files work the same way (11.3).
 
-**(filled in) A function read out of a struct uses the struct it was read from.** It borrows
-that struct's fields (7.8), so it can't outlive the struct, and a call to it counts as
-changing the struct (8.12):
+**(filled in) A function field is used by calling it through its struct.** A function written
+in a struct value works on whichever struct it is called through, so on its own it has no
+fields to work on. A function field can be called and it can be given a new value, but it
+can't be read out as a value:
 
 ```go
-const addToCounter: (int)void = counter.add;
-addToCounter(3);               // counter.count goes up by 3
+counter.add(3);                                                 // fine: called through counter
+const addIt: (int)void = counter.add;                           // ERROR: a function field is called, not read out
+const addTo: (int)void = (const n: int){ counter.add(n); };     // fine: a function that calls it through counter
+addTo(3);                                                       // counter.count goes up by 3
 ```
 
-**(filled in) Underneath,** a function written in a struct value keeps the address of that
-struct value (7.7). When the struct is copied or moved, each function in the new struct that
-kept the address of the old struct keeps the address of the new one instead. That is how each
-copy's functions come to use its own fields.
+`addTo` uses `counter` from around it. So it borrows `counter`, like every function that uses
+a variable (7.8), and the code shows it.
+
+**(filled in) A function in a struct value uses the fields of its own block.** Only a
+function that is itself the value of a field uses them this way: a function inside an array,
+a pair or a map in the block is not called through the struct. Like any function, it can
+also use the names around the struct value (7.8). It can't use the fields of another struct
+value that its own is written inside, because a call hands over one struct only.
+
+**(filled in) Underneath,** a call through a struct hands the function the address of that
+struct, beside its arguments, and the function finds the fields from there (9.8). Nothing
+about the struct is kept in the function value. So copying or moving a struct needs nothing
+special: the copy's functions are handed the copy's address when they are called through it.
 
 ### 9.7 A struct is copied, like every value
 
@@ -3762,17 +3778,18 @@ block in a variable keeps it: the variable's own place on the stack holds the wh
 just as an `int` variable holds its number. A field is found from the start of that block
 and its position in the shape (`{int, int}`: `x` first, `y` second).
 
-### 9.9 Field names
+### 9.9 Field names **(filled in)**
 
-**(filled in)** A struct type lists only types (9.1), and the struct value gives the names
+A struct type lists only types (9.1), and the struct value gives the names
 (9.2). So the names are not part of the type: `{ x: int = 1; y: int = 2; }` and
 `{ w: int = 3; h: int = 4; }` both have the type `{int, int}`, and either one goes wherever
 that type is asked for (3.6).
 
 **A field name is a label for a position in a struct type.** Every struct value labels the
-positions of its type. `p.x` is the field at the position labelled `x`. The compiler gathers
-the labels of a struct type from every struct value of that type in the program: the file you
-run and every file it imports, directly or through other files.
+positions of its type. `p.x` is the field at the position labelled `x`. A file knows the
+labels that struct values give in the file itself and in the files it imports, directly or
+through other files. So a field name, like every other name, comes from this file or from a
+file it imports (11.1).
 
 ```go
 const sumOf: (Point)int = (const pt: Point){
@@ -3782,8 +3799,8 @@ const sumOf: (Point)int = (const pt: Point){
 
 | Rule | Example |
 |---|---|
-| a name that no struct value of the type gives is an error | `p.z`, when no `{int, int}` value has a field `z` |
-| one name can't label two positions of the same type | `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` in one program are an error at both |
+| a name that no struct value the file knows gives to the type is an error | `p.z`, when no `{int, int}` value has a field `z` |
+| a name that the file knows for two positions of one type can't be used in that file | with `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` both known, `p.x` is an error: it could mean either field |
 | one position can have several names | with the two values at the top, `p.x` and `p.w` are the same field of any `{int, int}` |
 
 A `Point` and a size made of two `int`s are the same type, so a function that takes one takes
@@ -3891,9 +3908,9 @@ sumFrom(&scores, 0)    // 60
 
 `sumFrom` borrows the array, so no call copies it (5.6).
 
-### 10.4 How deep a function can call itself
+### 10.4 How deep a function can call itself **(filled in)**
 
-**(filled in)** Every call that hasn't ended holds its parameters and names on the stack
+Every call that hasn't ended holds its parameters and names on the stack
 (2.6). The stack has a limit, set by the system the program runs on. A program that calls
 deeper than the stack allows fails while it runs (11.7), like any other check. `sumFrom` above
 has one call on the stack for each element, because every call still has an addition to do
@@ -3909,7 +3926,7 @@ A call is the last thing a function does when both of these hold:
 | Condition | In detail |
 |---|---|
 | nothing comes after it | it is the whole value of a `return`, as in `return f(a, b);`. Or the function returns nothing, and the call is the last statement of its body |
-| it doesn't need the function's own names | no argument is, or holds, a borrower or an ownership of a parameter or a name declared in the function. And the function that is called doesn't use one of them (7.8) |
+| nothing it uses is on this function's stack | no argument is, or holds, a pointer to one of this function's parameters or names. No argument is, or holds, a function that uses them, or one whose kept parameters are held by this call (7.8). The same goes for the function that is called. And no argument borrows a value made on the spot, because such a value lives to the end of the statement (2.6) |
 
 The arguments, and the function to call, are worked out before the names end (2.9). In every
 other case the call is an ordinary one, and the names end after it, as in 2.6.
@@ -3991,7 +4008,8 @@ const util: package = import("../common/util");  // ../common/util.my: .. is the
 const which: package = import(fileName);         // ERROR: the file has to be written out
 ```
 
-- The text is the file's path without the `.my` (2.7). Its parts are joined with `/`.
+- The text is the file's path without the `.my` (2.7). Its parts are joined with `/`. A text
+  that leads to no file is an error.
 - `import` has the type `([]char)package`. Unlike the other built-ins, it is always called by
   its own name with its text written out, because a file that is only named while the program
   runs couldn't be checked.
@@ -4044,19 +4062,23 @@ a = import("counter");         // ERROR: a is const
 ```
 
 **(filled in) How the compiler checks a name reached through a package.** An `import` names
-its file in the code, and a package keeps its file wherever it goes: into a declaration, an
-assignment, an argument, a result, an element or a field. The compiler follows every package
-from its `import`, so for every place that holds a package it knows which files can be there.
+its file in the code, and a package keeps its file wherever it goes. So for every place that
+can hold a package, the compiler works out which files can be there. It does this once, over
+the whole program:
 
-| The place can hold | `g.name` is accepted when |
+| Place | The files it can hold |
 |---|---|
-| one file | `name` is a top-level name of that file |
-| more than one file: a `var` package given another file (11.5), a parameter that calls give different packages (11.6), an array of packages | `name` is a top-level name of every one of those files, with the same type in each. It can be assigned when it is a `var` in each |
+| a name declared with a package: a `const`, a `var` or a parameter | the files of everything it is given: by its declaration, by each assignment to it, and for a parameter by the argument of each call the compiler sees (7.2) |
+| a borrower or an ownership of such a name, and a parameter that is handed one | the same files as the name: the two count as one place |
+| everything else: an element, a map entry, a field, a heap value, the inside of an `any`, the result of a call | one shared place for the whole program. It holds every file that is ever put into any of them |
 
-Two places need the worst case, as in 8.12. A function called through a variable, an array or
-a map could be any function of its type, so a package handed to it has to have the names that
-every function of that type in the program uses through that parameter. And a package taken
-out of an `any` (4.5) could be any file the program wraps into one.
+A function that is used in any way but a call the compiler sees could be handed anything. So
+its package parameters also hold everything in the shared place, and a package that is handed
+to a call through a variable goes into the shared place.
+
+`g.name` is accepted when `name` is a top-level name of every file that the place of `g` can
+hold, with the same type in each. It can be assigned when it is a `var` in each. A type is
+reached this way only through a place that can hold one file (3.6).
 
 ### 11.4 Order, where statements go, and `main`
 
@@ -4064,8 +4086,9 @@ out of an `any` (4.5) could be any file the program wraps into one.
   declared. A body runs only when the function is called, so two functions can call each
   other. The value in a top-level declaration still uses only names declared above it.
 - **Statements that run, such as `countUp();`, go only in the file you run.** An imported file
-  holds only declarations. Nothing runs because a file was imported, so the order the program
-  runs in never depends on imports.
+  holds only declarations. **(adjusted)** All that runs when a file is imported is the working
+  out of those declarations' values, at the line where the `import` is written (11.2). So
+  the order the program runs in is always the order the code shows.
 
 ```go
 // the file geom
@@ -4094,7 +4117,7 @@ run, that happens when the program starts, together with its statements, in the 
 written. For every other file it happens each time an `import` of it runs (11.2).
 
 Two kinds of top-level name are ready from the start, because nothing has to run to make
-them: a `const` whose value is a function value written out, and a type. Every other
+them: a `const` whose value is a function value written out, and a type name (4.2). Every other
 top-level name is set up when its line is reached: every `var`, and every `const` whose value
 has to be worked out.
 
@@ -4148,13 +4171,23 @@ The new file has to have the names the code uses through `shapes`, each with the
 a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
 nothing is looked up while the program runs.
 
-**(filled in)** This is how that works underneath. For each file the compiler writes a table
+**(adjusted)** This is how that works underneath. For each file the compiler writes a table
 into the program, with one entry for each of the file's top-level names. A package value holds
-the address of its file's table, and then its own copy of the file's variables. Every name
-that the program reaches through a package has one fixed position in all these tables, so
-`shapes.area` reads the entry at that position, whichever file `shapes` holds. A `var` package
-has room for the variables of the biggest file it is ever given, and the compiler knows which
-files those are (11.3).
+the address of its file's table, and then its own copy of everything in the file that has to
+be worked out: every `var`, every `const` that isn't ready from the start (11.4), and the kept
+parameters of the calls made at the file's top level (7.8). Only function values written out
+and types are never copied. Every name that the program reaches through a package has one
+fixed position in all these tables, so `shapes.area` reads the entry at that position,
+whichever file `shapes` holds. A `var` package has room for the biggest file its place can
+hold (11.3).
+
+**(filled in)** A function written at the top level of a file keeps the address of the
+package value it is reached through: `a.bump` is the code of `bump` together with the address
+of `a`. A function value that is held in a package, in one of its variables or worked-out
+`const`s, keeps an address too. When a package value is copied or moved, each function in the
+new package that kept the address of the old one, or of a place inside it, keeps the same
+place in the new one instead. That is how "the copy it is called through" (11.3) holds for a
+function that is stored in a file's variable.
 
 ### 11.6 Ownership and borrowing work on a package like on any variable
 
@@ -4201,16 +4234,19 @@ A function that takes a package uses only the names that every package given to 
 with the same type. The compiler checks this at each call, as it does when a `var` package is
 given another file (11.5).
 
-### 11.7 When a check fails while the program runs
+### 11.7 When a check fails while the program runs **(filled in)**
 
-**(filled in)** The compiler catches most mistakes. A mistake that depends on a value the
+The compiler catches most mistakes. A mistake that depends on a value the
 program only has while it runs is checked at the line where it happens, and Appendix B lists
 every such check. All of them fail in the same way:
 
 1. **The program stops at once.** Nothing after the failing step runs: not the rest of the
    line, and not the rest of `main`.
 2. **One line goes to the error output,** saying what failed and where. Its form is
-   `error: FILE:LINE: REASON`, with the file and the line of the step that failed:
+   `error: FILE:LINE: REASON`. `FILE` is the name of the source file with its `.my`, as its
+   path from the folder of the file you run. `LINE` is the line, counted from 1, of the
+   operator, bracket or call that failed. For the status of `main` it is the line of the
+   `return` that gave the number:
 
    ```
    error: geom.my:12: division by zero
@@ -4232,9 +4268,9 @@ every such check. All of them fail in the same way:
 | an `any` holds the type | `x.T == int` (4.5) |
 | a key is in a map | compare with the keys, which the code that made the map knows (6.3) |
 
-### 11.8 Output, input and ending the program
+### 11.8 Output, input and ending the program **(filled in)**
 
-**(filled in)** Three built-in functions connect a program to the outside. Like `convert`,
+Three built-in functions connect a program to the outside. Like `convert`,
 each one is an ordinary function value (4.4):
 
 | You write | Its type | What it does |
@@ -4263,6 +4299,8 @@ empty result always means the end:
 | an empty line | `"\n"` |
 | `end`, and then the input ends without a line break | `"end"` |
 | nothing more | `""` |
+
+When the output can't be written, or the input can't be read, the program fails (11.7).
 
 **`exit` ends the program at once,** with the status it is given. `exit(0);` says that
 everything went well. The status is a number from 0 to 255, by the same rule as for `main`
