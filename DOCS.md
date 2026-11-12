@@ -4309,3 +4309,103 @@ Four checks happen while the program runs:
 | `cases[op]` and other map lookups | the key isn't in the map |
 | `p^`, for a heap owner or a borrower | `p` is `null` |
 | `&a[i:j]` with `i` or `j` worked out while running | the slice is out of range (5.9) |
+
+---
+
+## Appendix A: The full grammar
+
+**(filled in)** This is the whole language in the notation of 3.6: `|` separates choices,
+`[ ]` holds something that can be left out, `{ }` holds something that can come any number
+of times, and words in quotes are written as they stand. The order of operations from 3.2 is
+built in: each line of `Value` is one step of that table.
+
+### A.1 Words and symbols
+
+```
+NAME    = Letter { Letter | Digit }                 (not a reserved word, 2.7)
+NUMBER  = Digit { Digit }                           (base ten)
+        | "0x" Hex { Hex }                          (base sixteen)
+        | "0b" Bit { Bit }                          (base two)
+FLOAT   = Digit { Digit } "." Digit { Digit } [ ( "e" | "E" ) [ "+" | "-" ] Digit { Digit } ]
+CHAR    = "'" ( Character | Escape ) "'"
+TEXT    = '"' { Character | Escape } '"'            (on one line, 5.10)
+Escape  = "\" ( "n" | "t" | "r" | "0" | "\" | "'" | '"' | "x" Hex Hex )
+
+Letter  = "a" to "z" | "A" to "Z" | "_"
+Digit   = "0" to "9"
+Hex     = Digit | "a" to "f" | "A" to "F"
+Bit     = "0" | "1"
+Character = any character except a line break, "\" and the quote that closes it
+```
+
+Spaces, tabs, line breaks and comments (`//` to the end of the line) can stand between any
+two of these (2.7).
+
+### A.2 Files and statements
+
+```
+File        = { Statement }                         (an imported file holds only Declarations, 11.4)
+
+Statement   = Declaration
+            | Assignment
+            | Value ";"                             (a value on its own, 2.9)
+            | "return" [ Value ] ";"                (only inside a function body, 7.1, 7.3)
+            | Block
+
+Declaration = Kind [ "@" ] NAME ":" Type "=" Value ";"      (2.1; the "@" marks a name that takes a value over, 8.9)
+Kind        = "const" | "var"
+Assignment  = [ "@" ] Behind "=" Value ";"          (the left side is a place, 2.9; with "@" it is a move, 8.9)
+Block       = "{" { Statement } "}"                 (no ";" after it, 2.9)
+```
+
+### A.3 Values
+
+```
+Value       = Or
+Or          = And { "||" And }                                          (step 7)
+And         = Compare { "&&" Compare }                                  (step 6)
+Compare     = Sum { ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) Sum }     (step 5)
+Sum         = Product { ( "+" | "-" ) Product }                         (step 4)
+Product     = Front { ( "*" | "/" | "%" ) Front }                       (step 3)
+Front       = ( "!" | "-" | "^" | "&" | "@" ) Front                     (step 2: in front of a value)
+            | Behind
+Behind      = Simple { "^"                                              (step 1: behind a value)
+                     | "[" Value "]"                                    (an index or a lookup)
+                     | "[" [ Value ] ":" [ Value ] "]"                  (a slice, 5.9)
+                     | "." NAME                                         (a field, a package's name, .length, .T)
+                     | "(" [ Value { "," Value } ] ")"                  (a call)
+                     }
+Simple      = NAME | NUMBER | FLOAT | CHAR | TEXT
+            | "true" | "false" | "null"
+            | "(" Value ")"                                             (a group, 3.2)
+            | ArrayValue | MapValue | StructValue | FunctionValue
+            | Type                                                      (a type is a value, 4.1)
+
+ArrayValue    = "[" [ Value { "," Value } ] "]"                         (an array, or a pair with two values, 5.8)
+MapValue      = "{" [ Entry { "," Entry } ] "}"
+Entry         = Value ":" Value                                         (a key, then its value)
+StructValue   = "{" Field { Field } "}"
+Field         = NAME ":" Type "=" Value ";"
+FunctionValue = "(" [ Param { "," Param } ] ")" Block
+Param         = Kind [ "@" ] NAME ":" Type
+```
+
+`Type`, `Return`, `TypeList` and `BasicType` are in 3.6.
+
+### A.4 Telling the forms apart
+
+Some forms start with the same symbol. The compiler knows which names are types (3.2), and
+with that these rules always decide:
+
+| What is read | It is |
+|---|---|
+| `&&` where a `Front` can start | two `&` marks (3.2) |
+| `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2 |
+| `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
+| `(` | a call, a function value, a function type or a group, by the table in 3.2 |
+| `{` followed by `NAME : Type =` | a struct value |
+| `{` followed by a value and a `:` in any other way | a map value |
+| `{` holding types, as in `{int, int}` or `{int}bool` | a struct type or a map type (3.6) |
+| `{ }` with nothing inside, where a value is expected | a map value with no entries |
+| `{` where a statement starts, when it isn't one of the four above | a block. The `{` after a function value's parameters always starts its body |
+| a statement that starts with a value followed by `=` | an assignment. Without the `=` it is a value on its own |
