@@ -9,7 +9,7 @@ MyLang is a **declarative, explicit, first-class** language.
   you write `@`. Otherwise every value is copied when it's declared, assigned or passed.
 - **Declarative:** every name is declared in one shape that states what kind of name it
   is, what it's called, what type it has and what value it starts with. There are no loops:
-  repeating is a function calling itself. A choice is an `if`, or a lookup.
+  repeating is a function calling itself. A choice is a lookup.
 
 This file documents the language: values, names, types, arrays, maps, functions, ownership
 (the heap, borrowing and moving), structs, choosing and repeating, and files.
@@ -296,7 +296,7 @@ const empty: bool = !count;            // ERROR: count is an int, not a bool: wr
 `||` already makes it `true`, so in those two cases the right side is skipped:
 
 ```go
-if (p != null && p^ > 10) { ... }      // p^ is followed only when p isn't null (8.10)
+const big: bool = p != null && p^ > 10;    // p^ is followed only when p isn't null (8.10)
 ```
 
 `&&` between two values is *and*. In front of a value or inside a type it is two borrow
@@ -931,9 +931,8 @@ const add: (int, int)int = (const x: int, const y: int){
 `return value;` ends the function and gives back the value.
 
 **A function that returns a value has to reach a `return` on every path.** The compiler
-rejects a function that can get to the end of its body without one, such as a function
-whose only `return` is inside an `if` with no `else` (10.1). A function that returns nothing
-ends at the end of its body, or earlier at a `return;` (7.3).
+rejects a function that can get to the end of its body without one. A function that returns
+nothing ends at the end of its body, or earlier at a `return;` (7.3).
 
 ### 7.2 Calling a function
 
@@ -964,14 +963,12 @@ const hello: ()void = (){      // takes nothing, returns nothing
 hello();
 ```
 
-`return;` on its own ends it early:
+`return;` on its own ends it where it stands:
 
 ```go
-const showPositive: (int)void = (const value: int){
-    if (value < 0) {
-        return;                // nothing to show, so stop here
-    }
-    show(value);
+const greet: ()void = (){
+    show(1);
+    return;                    // greet ends here
 };
 ```
 
@@ -1237,7 +1234,7 @@ The rule is only for a function the call gives back with `return`. A local is ne
 using it in the body: returning a function that does that is an error, as above.
 
 Inside its own body, a function's name is the function itself, so a function made inside
-another can call itself (10.4).
+another can call itself (10.3).
 
 ---
 
@@ -1796,25 +1793,16 @@ later = ^8;                // later owns a new heap int
 ```
 
 **Testing for it:** `p == null` and `p != null` give a `bool`. Comparing doesn't copy
-anything and doesn't change `p`. An `if` (10.1) then picks what to do:
-
-```go
-if (p == null) {
-    p = ^0;                // p owned nothing, so give it a value
-} else {
-    p^ = p^ + 1;           // p owns a value here, so following it is safe
-}
-```
-
-A function that is handed an owner to test borrows the owner itself:
+anything and doesn't change `p`. A choice array (10.1) then picks what to do. A function that
+is handed an owner to test borrows the owner itself:
 
 ```go
 const valueOr: (&^int, int)int = (const owner: &^int, const fallback: int){
-    if (owner^ == null) {
-        return fallback;
-    } else {
-        return owner^^;
-    }
+    const cases: [bool](&^int, int)int = [
+        (const o: &^int, const f: int){ return o^^; },     // false: it owns a value, so read it
+        (const o: &^int, const f: int){ return f; }        // true: it is null
+    ];
+    return cases[owner^ == null](owner, fallback);
 };
 
 valueOr(&p, 0)             // p's value, or 0 when p is null
@@ -2193,18 +2181,18 @@ on the next one:
 
 ```go
 const length: (&^Node)int = (const owner: &^Node){
-    if (owner^ == null) {
-        return 0;                              // no node here, so stop
-    } else {
-        return 1 + length(&owner^^.next);      // count this node, go on with the next owner
-    }
+    const cases: [bool](&^Node)int = [
+        (const o: &^Node){ return 1 + length(&o^^.next); },    // false: count this node, go on
+        (const o: &^Node){ return 0; }                          // true: no node here, so stop
+    ];
+    return cases[owner^ == null](owner);
 };
 
 length(&list)                          // the number of nodes
 ```
 
-`owner^` is the owner and `owner^^` is the node it owns, so `&owner^^.next` borrows the next
-owner. Nothing is copied and nothing changes owner on the way.
+`o^` is the owner and `o^^` is the node it owns, so `&o^^.next` borrows the next owner.
+Nothing is copied and nothing changes owner on the way.
 
 ### 8.15 Two links to one value
 
@@ -2234,10 +2222,14 @@ function makes the plain copy, then sets every `prev` inside it:
 
 ```go
 const linkBack: (&^Link, &Link)void = (var owner: &^Link, var before: &Link){
-    if (owner^ != null) {
-        owner^^.prev = before;                // this node's prev borrows the node before it
-        linkBack(&owner^^.next, &owner^^);    // go on: the next owner, with this node before it
-    }
+    const cases: [bool](&^Link, &Link)void = [
+        (var o: &^Link, var back: &Link){
+            o^^.prev = back;                  // this node's prev borrows the node before it
+            linkBack(&o^^.next, &o^^);        // go on: the next owner, with this node before it
+        },
+        (var o: &^Link, var back: &Link){ }   // no node here, so stop
+    ];
+    cases[owner^ == null](owner, before);
 };
 
 const copyLinks: (&^Link)^Link = (const from: &^Link){
@@ -2517,107 +2509,12 @@ and its position in the shape (`{int, int}`: `x` first, `y` second).
 
 ## 10. Choosing and repeating
 
-A choice is written with `if`, or made by a lookup. MyLang has no loops: repeating is a
-function calling itself.
+A choice is made by a lookup. MyLang has no loops: repeating is a function calling itself.
 
-### 10.1 `if` and `else`
-
-```go
-if (count > 10) {
-    size = 10;
-} else {
-    size = 3;
-}
-```
-
-| Part | What it says |
-|---|---|
-| `(count > 10)` | the condition, in brackets. It has to be a `bool` |
-| the first `{ }` | runs when the condition is `true` |
-| `else if (…) { }` | another test, tried only when every test above it was `false`. There can be several |
-| `else { }` | runs when every test was `false`. It can be left out |
-
-Only the chosen side runs. Each `{ }` is a block (2.6), so a name declared inside it ends at
-its `}`. An `if` doesn't end with `;`, the same as a block on its own.
-
-```go
-const abs: (int)int = (const n: int){
-    if (n < 0) {
-        return 0 - n;
-    } else {
-        return n;
-    }
-};
-
-abs(7)                 // 7
-abs(0 - 7)             // 7
-```
-
-`return` inside an `if` ends the whole function.
-
-A function that returns a value has to reach a `return` on every path (7.1). An `if` with no
-`else` leaves a path without one:
-
-```go
-const cap: (int)int = (const n: int){
-    if (n > 10) {
-        return 10;
-    }
-};                     // ERROR: when n isn't over 10, the function ends without a return
-```
-
-Give the `if` an `else` that returns, as `abs` does, or put a `return` after it:
-
-```go
-const cap: (int)int = (const n: int){
-    if (n > 10) {
-        return 10;
-    }
-    return n;          // fine: every path reaches a return
-};
-
-cap(12)                // 10
-cap(7)                 // 7
-```
-
-The compiler doesn't work out the conditions. It counts both sides of every `if` as
-possible, so two `if`s that cover every case between them still need a `return` after them.
-
-With `else if`, the tests are tried from the top, and the first one that is `true` runs:
-
-```go
-if (n < 0) {
-    sign = 0 - 1;
-} else if (n == 0) {
-    sign = 0;
-} else {
-    sign = 1;
-}
-```
-
-`else if` is the same as an `if` written inside the `else` block, with one pair of braces
-fewer.
-
-The condition is never anything but a `bool`, because a value never changes type by itself
-(3.2):
-
-```go
-if (count) { ... }         // ERROR: count is an int, not a bool: write count != 0
-```
-
-Several tests go in one condition with `&&`, `||` and `!` (3.2):
-
-```go
-if (count > 0 && count < 10) { ... }       // both tests have to be true
-if (p == null || p^ == 0) { ... }          // p^ is followed only when p isn't null
-if (!ready) { ... }                        // runs when ready is false
-```
-
-### 10.2 Choosing by lookup: `[bool]T`
+### 10.1 Choosing by lookup: `[bool]T`
 
 A choice array (5.8) holds one value for `false` and one for `true`, and a `bool` picks
-between them. It is a value, so it goes where a statement can't: in the middle of a
-declaration.
+between them.
 
 ```go
 const sizes: [bool]int = [3, 10];      // false, then true
@@ -2625,8 +2522,7 @@ const size: int = sizes[count > 10];   // 10 when count is over 10, otherwise 3
 ```
 
 Both values in a choice array are worked out before the lookup. To run code for only the
-chosen side, use an `if`, or put **functions** in the slots: look up the function, then call
-it.
+chosen side, put **functions** in the slots: look up the function, then call it.
 
 ```go
 const absOf: [bool](int)int = [
@@ -2639,7 +2535,7 @@ absOf[n < 0](n)        // pick the function for the answer, then call it
 
 The slot for `false` is written first, because `false` is the first slot.
 
-### 10.3 Choosing between many: a map of functions
+### 10.2 Choosing between many: a map of functions
 
 For more than two cases, put one function per case in a map, with the case as the key.
 Looking up the key picks the function, and calling it runs that case. This does the job of
@@ -2674,17 +2570,17 @@ const cases: {int}(int, int)int = {1: add, 2: sub};
 cases[2](5, 3)         // 2
 ```
 
-### 10.4 Repeating: a function that calls itself
+### 10.3 Repeating: a function that calls itself
 
-A function can call itself by its own name. An `if` decides when to stop:
+A function can call itself by its own name. A choice array decides when to stop:
 
 ```go
 const factorial: (int)int = (const n: int){
-    if (n == 0) {
-        return 1;                      // stop
-    } else {
-        return n * factorial(n - 1);   // keep going
-    }
+    const cases: [bool](int)int = [
+        (const k: int){ return k * factorial(k - 1); },    // false: keep going
+        (const k: int){ return 1; }                         // true: n is 0, so stop
+    ];
+    return cases[n == 0](n);
 };
 
 factorial(4)           // 24
@@ -2694,11 +2590,11 @@ The same shape goes through an array, one index at a time:
 
 ```go
 const sumFrom: (&[]int, int)int = (const values: &[]int, const i: int){
-    if (i == values^.length) {
-        return 0;                                      // past the end, so stop
-    } else {
-        return values^[i] + sumFrom(values, i + 1);    // add this one, go on
-    }
+    const cases: [bool](&[]int, int)int = [
+        (const v: &[]int, const k: int){ return v^[k] + sumFrom(v, k + 1); },   // false: add this one, go on
+        (const v: &[]int, const k: int){ return 0; }                            // true: past the end, so stop
+    ];
+    return cases[i == values^.length](values, i);
 };
 
 var scores: []int = [10, 20, 30];
@@ -2992,12 +2888,11 @@ brackets go first (3.2).
 
 | You want | You write |
 |---|---|
-| to choose | `if (n < 0) { … } else if (n == 0) { … } else { … }` (10.1) |
-| to test several things at once | `if (count > 0 && count < 10) { … }` (3.2) |
+| to test several things at once | `count > 0 && count < 10` (3.2) |
 | to stop a function that returns nothing early | `return;` (7.3) |
-| to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.2) |
-| to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.3) |
-| to repeat, like a loop | a function that calls itself (10.4) |
+| to choose a value by a `bool` | a choice array: `sizes[count > 10]` (10.1) |
+| to choose between many, like a `switch` | a map of functions: `cases[op](a, b)` (10.2) |
+| to repeat, like a loop | a function that calls itself (10.3) |
 
 ### Built-in functions
 
@@ -3059,12 +2954,11 @@ passed.
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
-| `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
 | `shapes = import("other");` where `other` lacks a name the code uses from `shapes` | a package in a `var` can only be given a file with the same names and types (11.5) |
 | two files that import each other | imports can't go round in a circle (11.2) |
 | a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
-| a function of type `(int)int` whose only `return` is inside an `if` with no `else` | a function that returns a value has to reach a `return` on every path (7.1) |
+| a function of type `(int)int` that can reach the end of its body without a `return` | a function that returns a value has to reach a `return` on every path (7.1) |
 | `return 5;` in a function of type `()void` | a function that returns nothing gives no value back (7.3) |
 | `return;` in a function of type `(int)int` | a function that returns a value has to give one (7.3) |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |

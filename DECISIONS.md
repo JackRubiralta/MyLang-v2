@@ -193,7 +193,7 @@ What follows from it:
 | Choice | Why |
 |---|---|
 | A function is written `(params){ body }`, its type is `(int, int)int`, and parameters are declared like names | Everything is declared in the same shape |
-| A function that returns a value has to reach a `return` on every path | Otherwise it could end with nothing to give back. The compiler counts both sides of every `if` as possible **(filled in)** |
+| A function that returns a value has to reach a `return` on every path | Otherwise it could end with nothing to give back |
 | `return;` on its own stops a `void` function early | Jack: "that's allowed", as in most languages |
 | A function's body is a block, so it sees the names around it and can change a `var` from outside | Jack: "just variables in a broader scope" |
 
@@ -216,8 +216,7 @@ What follows from it:
 | Choice | Why |
 |---|---|
 | Repeating is a function that calls itself | The language is declarative |
-| `if (cond) { } else if (cond) { } else { }` | "We can have if statements." Recursion needs a way to stop, and the form comes from Jack's own 2024 notes. The condition must be a `bool` |
-| Choice arrays `[bool]T` and maps of functions | A lookup chooses a value in the middle of a declaration, where a statement can't go, and a map of functions does the job of a `switch` |
+| Choosing is a lookup: choice arrays `[bool]T` and maps of functions | A `bool` picks a slot, and a map of functions does the job of a `switch`. Recursion uses a lookup to stop |
 
 ---
 
@@ -226,7 +225,7 @@ What follows from it:
 | Choice | Why |
 |---|---|
 | `&&`, `\|\|` and `!`, on `bool`s only | Jack: "use symbols" |
-| The right side of `&&` and `\|\|` runs only when it's needed | `if (p != null && p^ > 10)` is then safe **(filled in)** |
+| The right side of `&&` and `\|\|` runs only when it's needed | `p != null && p^ > 10` is then safe **(filled in)** |
 | The usual order of operations, and brackets that group | "Do whatever the conventions are for most programming languages." What is behind a value goes first, then what is in front, then `*`, then `+ -`, then comparisons, then `&&`, then `\|\|` |
 | A type is never grouped: in a type, `(` always starts a function type | It keeps the rule from section 4.1. `(a)` is a function type when `a` is a type, and a group when it isn't |
 | `&&` in front of a value or inside a type is two borrow marks | Where it stands tells the two apart: `&&int` is a borrower of a borrower |
