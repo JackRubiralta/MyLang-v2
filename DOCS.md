@@ -271,7 +271,8 @@ Two names can be spelled the same when neither can be seen from the other, like 
 front of the `.`, so it never clashes with a name declared somewhere else.
 
 **A name is used only below its declaration.** A name that is used but never declared is an
-error. The value of a declaration uses names declared above it. There are five exceptions, and each is safe because nothing runs too early:
+error. The value of a declaration uses names declared above it. There are five exceptions, and
+each is safe because nothing runs too early:
 
 | Exception | Why it is safe |
 |---|---|
@@ -463,9 +464,9 @@ const letter: char = 'a';
 | `\"` | `"` |
 | `\x41` | the character whose number is written with two base-sixteen digits: here 65, `'A'` |
 
-**(filled in)** A `\` followed by anything else is an error. A `char` is 8 bits (3.1): one byte, holding a
-number from 0 to 255. The characters of ASCII have the numbers 0 to 127. A character outside
-ASCII takes more than one byte in UTF-8, so it doesn't fit in a `char`:
+**(filled in)** A `\` followed by anything else is an error. A `char` is 8 bits (3.1): one
+byte, holding a number from 0 to 255. The characters of ASCII have the numbers 0 to 127. A
+character outside ASCII takes more than one byte in UTF-8, so it doesn't fit in a `char`:
 
 ```go
 const e: char = 'é';           // ERROR: é is two bytes, and a char holds one
@@ -562,10 +563,10 @@ never wraps around, and it never turns into another type.
 **(filled in)** So a float is always an ordinary number: there is no infinity and no "not a
 number" value, and dividing by `0.0` fails like dividing by `0`. Floats follow the IEEE 754
 standard that processors use: a `float32` is its 32-bit format and a `float64` its 64-bit
-format. An answer that can't be held exactly is rounded to the nearest value that can. When
-two are equally near, it is the one whose last binary digit is 0. An answer too small to tell
-from zero becomes zero. A written float is checked like a written whole number: `1.0e39` is
-too big for a `float32`, so writing it for one is an error. `0.0` and `-0.0` are equal (3.7), and each
+format. An answer that can't be held exactly is rounded to the nearest value that can. When two
+are equally near, it is the one whose last binary digit is 0. An answer too small to tell from
+zero becomes zero. A written float is checked like a written whole number: `1.0e39` is too big
+for a `float32`, so writing it for one is an error. `0.0` and `-0.0` are equal (3.7), and each
 keeps its sign when it is written as text (5.10).
 
 **(filled in)** The compiler makes the check itself where it already knows the answer: when
@@ -992,11 +993,11 @@ A type can still be held as a value: in an array or a map (4.1), as a function's
 A value's type is the one it was declared with. The type inside an `any` is read with
 `x.T` (4.5).
 
-**(filled in) A type name is a name whose value, a type, the compiler knows before the program runs.**
-There are three kinds: a built-in type (2.7), a `const` of type `type` whose value is a type
-written out, such as `Pair` and `Point`, and a `type` parameter of a function (4.3). A `const`
-of type `type` whose value has to be worked out, as in `const U: type = x.T;`, holds a type
-but is not a type name.
+**(filled in) A type name is a name whose value, a type, the compiler knows before the program
+runs.** There are three kinds: a built-in type (2.7), a `const` of type `type` whose value is a
+type written out, such as `Pair` and `Point`, and a `type` parameter of a function (4.3). A
+`const` of type `type` whose value has to be worked out, as in `const U: type = x.T;`, holds a
+type but is not a type name.
 
 **(filled in) A type that decides the type of something is written out.** After a `:`,
 inside another type, and as an argument that a function's type uses (4.3), a type is written
@@ -1017,12 +1018,12 @@ another type name.
 
 **(adjusted)** The rule that a type is held as a `const` is checked where a type shows it: a
 name, a parameter or a field has to be a `const` when its written type has `type` in it
-anywhere outside a function type: `type`, `[2]type`, `{int}type`, `^type`. A type name for
-such a type counts the same. A function type that takes a `type` holds no type, so a function
-of type `(type)([]T)T` can be a `var`. An `any` can hold a type (4.5) and a `T` can
-stand for `type` (4.3) without their types showing it. A type held that way is only known while the program runs.
-By the rule above it can never declare anything, so nothing that is checked before the
-program runs depends on it.
+anywhere outside a function type: `type`, `[2]type`, `{int}type`, `^type`. A type name for such
+a type counts the same. A function type that takes a `type` holds no type, so a function of
+type `(type)([]T)T` can be a `var`. An `any` can hold a type (4.5) and a `T` can stand for
+`type` (4.3) without their types showing it. A type held that way is only known while the
+program runs. By the rule above it can never declare anything, so nothing that is checked
+before the program runs depends on it.
 
 **(filled in) A type never ends too soon.** A type points at nothing, and a type that is
 handed to a function is copied into the parameter like every value. So a type is never an
@@ -1472,8 +1473,8 @@ rows[1] = [9, 9];                          // fails while running: rows[1] has l
 ```
 
 **(filled in)** A fixed array and an unsized array are different types, and a value never
-changes type by itself (3.2). A fixed array becomes an unsized one through a slice (5.9): `primes[:]` is a
-copy of `primes` as a `[]int`, and `&primes[:]` borrows it as an `&[]int`.
+changes type by itself (3.2). A fixed array becomes an unsized one through a slice (5.9):
+`primes[:]` is a copy of `primes` as a `[]int`, and `&primes[:]` borrows it as an `&[]int`.
 
 ### 5.4 Arrays inside arrays
 
@@ -1640,9 +1641,10 @@ part[0] = 5;                           // scores doesn't change
 ```
 
 **The bounds are checked.** The start can't be after the end, and the end can't be past the
-length. **(filled in)** The start can't be below 0 either. **(adjusted)** When both are written values and the compiler knows the length (5.2),
-the compiler checks them, and a bound that is left out counts as written. Otherwise the check
-is made while the program runs, and a slice out of range fails there:
+length. **(filled in)** The start can't be below 0 either. **(adjusted)** When both are written
+values and the compiler knows the length (5.2), the compiler checks them, and a bound that is
+left out counts as written. Otherwise the check is made while the program runs, and a slice out
+of range fails there:
 
 ```go
 const primes: [3]int = [2, 3, 5];
@@ -2140,12 +2142,12 @@ A function *needs its package* when it uses a top-level `var` of its file, or a 
 package. A function that uses only its own parameters, built-ins, types and functions that
 need nothing keeps nothing.
 
-Each of the last two places in the table also holds the address of the place around it, and
-in the end the address of the package value. A block at the top level of a file is part of
-the package value, so a function that uses a name of such a block keeps the package value. So a function inside a function inside a file
-reaches everything it can see through one address. A struct value holds only its fields
-(9.8), and that is why a function that uses a struct's fields can use nothing else that needs
-a place (9.6).
+Each of the last two places in the table also holds the address of the place around it, and in
+the end the address of the package value. So a function inside a function inside a file reaches
+everything it can see through one address. A block at the top level of a file is part of the
+package value, so a function that uses a name of such a block keeps the package value. A struct
+value holds only its fields (9.8), and that is why a function that uses a struct's fields can
+use nothing else that needs a place (9.6).
 
 ### 7.8 Using a variable from outside the function
 
@@ -2312,8 +2314,8 @@ const newCounter: ()()int = (){
 A kept parameter is kept the way it was declared (7.4). A copy stays the function's own. A
 borrowed parameter (`&T`) is still a borrow, so the function can't outlive what the caller lent
 (8.13). A parameter that took the caller's heap value over (`@`) keeps that value, and the
-value is freed when the kept parameters end, as said below **(adjusted)** (8.11). `first` (4.3) keeps its `T` the same
-way.
+value is freed when the kept parameters end, as said below **(adjusted)** (8.11). `first` (4.3)
+keeps its `T` the same way.
 
 The rule is only for a function the call gives back with `return`. A local is never kept by
 using it in the body: returning a function that does that is an error, as above.
@@ -2322,16 +2324,16 @@ using it in the body: returning a function that does that is an error, as above.
 the heap unless the code says `^` (2.6). So the parameters a function keeps stay on the
 stack, with the function call that made the call: the call whose body the line is in. For a
 line at the top level of a file, that place is the package value (11.5). The function given
-back holds their address (7.7). Four rules follow.
+back holds their address (7.7). The rules below follow from that.
 
 **Kept parameters go along when the function is given back again.** When a function
 `return`s a function that it was given back, the kept parameters move to its own caller, like
 every value that is given back (8.8). This holds for a function on its own, and for one
 inside the struct, array, pair, map or `any` that is given back, at any depth, as long as no
-pointer lies in between. It is how
-`newCounter` above hands on what `countFrom` gave it: the kept `count`, and the heap value it
-owns, move to whoever called `newCounter`. When the kept parameters lead on to other kept
-parameters that this call holds (7.7), those move with them.
+pointer lies in between. It is how `newCounter` above hands on what `countFrom` gave it: the
+kept `count`, and the heap value it owns, move to whoever called `newCounter`. When the kept
+parameters lead on to other kept parameters that this call holds (7.7), those move with
+them.
 
 **A function given back can't leave its call in any other way.** Inside a function, it can't
 be put in a variable that outlasts the call it is in: a top-level `var`, or a `var` of a
@@ -3812,8 +3814,8 @@ const fixed: {int, (int)void} = {
 ```
 
 **(filled in)** A struct value that comes into a `const` from somewhere else brings its
-functions with it, and the compiler can't see what they do. A call through that `const` struct can then change
-its fields. It is one of the cases the compiler doesn't catch (8.17):
+functions with it, and the compiler can't see what they do. A call through that `const` struct
+can then change its fields. It is one of the cases the compiler doesn't catch (8.17):
 
 ```go
 const frozen: {int, (int)void} = counter;   // a copy of the var struct counter from 9.6
@@ -3886,8 +3888,9 @@ pointer.
 - It is written as the value of a field, or inside an array, a pair or a map that is the
   value of a field. A function written anywhere else in the block, such as an argument in a
   field's value, is an ordinary function, and it can't use the fields.
-- Its body can use every field of its block, above it or below it, because the body runs only
-  when the struct is complete. It can call another function field by its name.
+- Its body can use every field of its block, above it or below it. The body runs only when
+  the function is called, and a call can't come before those fields are written (9.2). It
+  can call another function field by its name.
 - It has one address for what it keeps (7.7), and that address is the struct. So it can't
   also use a name that needs another place: a parameter or a name of a function around the
   struct value, or anything that needs the package (7.7). What it needs from outside goes
@@ -4146,9 +4149,9 @@ A call is the last thing a function does when both of these hold:
 
 The arguments, and the function to call, are worked out before the names end (2.9). The other
 values made on the spot in the statement are gone by then as well. When the last call gives
-back a function that keeps its parameters (7.8), those parameters are held by the caller of
-the function that made the last call, as if that caller had made the call itself. In every other case the
-call is an ordinary one, and the names end after it, as in 2.6.
+back a function that keeps its parameters (7.8), those parameters are held by the caller of the
+function that made the last call, as if that caller had made the call itself. In every other
+case the call is an ordinary one, and the names end after it, as in 2.6.
 
 ```go
 const sumTo: (&[]int, int, int)int = (const values: &[]int, const i: int, const total: int){
@@ -4418,11 +4421,11 @@ that needs more room than that fails while the program runs (11.7).
 
 **(filled in)** A function written at the top level of a file that needs its package (7.7)
 keeps the address of the package value it is reached through: `a.bump` is the code of `bump`
-together with the address of `a`. A function value that is held in a package, in one of its variables or worked-out
-`const`s, keeps an address too. When a package value is copied or moved, each function in the
-new package that kept the address of the old one, or of a place inside it, keeps the same
-place in the new one instead. That is how "the copy it is called through" (11.3) holds for a
-function that is stored in a file's variable.
+together with the address of `a`. A function value that is held in a package, in one of its
+variables or worked-out `const`s, keeps an address too. When a package value is copied or
+moved, each function in the new package that kept the address of the old one, or of a place
+inside it, keeps the same place in the new one instead. That is how "the copy it is called
+through" (11.3) holds for a function that is stored in a file's variable.
 
 ### 11.6 Ownership and borrowing work on a package like on any variable
 
