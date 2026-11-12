@@ -1928,7 +1928,7 @@ compiler sees the function:
 |---|---|
 | the name of a `const` that was declared with a function value written out, as in `add(1, 2)`. Inside a function's body, its own name counts too | that function |
 | a built-in, or what a built-in gives back, as in `convert(float, int)(x)` and `wrap(int)(3)` | what the built-in does |
-| the name of a `const` that was declared with one of the two rows above: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);` | the same function |
+| the name of a `const` that was declared with a name from the first row, with a built-in or what a built-in gives back, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);` | the same function |
 | such a name reached through a package that can hold only one file (11.3), as in `geom.area(3, 4)` | that function |
 | a function field of a `const` struct that was declared with its block written out (9.3) | that function |
 | a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the rows above: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
