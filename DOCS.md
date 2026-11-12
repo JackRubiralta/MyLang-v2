@@ -4304,9 +4304,9 @@ fixed position in all these tables, so `shapes.area` reads the entry at that pos
 whichever file `shapes` holds. A `var` package has room for the biggest file its place can
 hold (11.3).
 
-**(filled in)** A function written at the top level of a file keeps the address of the
-package value it is reached through: `a.bump` is the code of `bump` together with the address
-of `a`. A function value that is held in a package, in one of its variables or worked-out
+**(filled in)** A function written at the top level of a file that needs its package (7.7)
+keeps the address of the package value it is reached through: `a.bump` is the code of `bump`
+together with the address of `a`. A function value that is held in a package, in one of its variables or worked-out
 `const`s, keeps an address too. When a package value is copied or moved, each function in the
 new package that kept the address of the old one, or of a place inside it, keeps the same
 place in the new one instead. That is how "the copy it is called through" (11.3) holds for a
