@@ -1544,6 +1544,104 @@ elements it borrows. Every `&[]T` is held this way, a borrower of a whole array 
 same function takes both. That is why `.length` works on it like on any unsized array, and why
 nothing is copied.
 
+### 5.10 Text
+
+**(filled in)** Text is an array of `char`s (5.1). There is no separate text type, so
+everything an array does, a text does.
+
+**Writing it.** `"Jack"`, between two `"`, is the array value `['J', 'a', 'c', 'k']` written
+shorter. Like every array value, it takes its type from its place (3.8):
+
+```go
+const word: [4]char = "Jack";          // the same as ['J', 'a', 'c', 'k']
+var name: []char = "Jack";             // unsized: length 4, from the first value
+const empty: []char = "";              // a text with no chars
+const wrong: [3]char = "Jack";         // ERROR: "Jack" has 4 chars
+```
+
+- A text holds exactly the `char`s that are written. Nothing is added at the end: its length
+  is in its type or stored with it, like every array's (5.7).
+- A text is written on one line. A line break inside it is written `\n` and a `"` inside it
+  is written `\"`, with the escapes from 3.2.
+- A character outside ASCII is held as its UTF-8 bytes, one `char` each: `"é".length` is 2.
+
+**Using it.** Every one of these is an array rule or a built-in function:
+
+| You want | You write |
+|---|---|
+| its length | `name.length` (5.5) |
+| one `char` of it | `name[0]` (5.2) |
+| to change one `char` | `name[0] = 'M';` when it is a `var` (5.2) |
+| a part of it | `name[1:3]` for a copy, `&name[1:3]` to borrow (5.9) |
+| to compare two texts | `name == "Jack"` (3.7) |
+| to compare two `char`s | `name[0] < 'a'` (3.2) |
+| to join two texts | `join(char)(name, "!")` (5.11) |
+| to print it | `print(name);` (11.8) |
+| a number as text, and back | `convert(int, []char)(42)`, `convert([]char, int)("42")` |
+
+**Numbers as text.** `convert` (4.4) goes between a number or a `bool` and the text type
+`[]char`:
+
+| Conversion | Gives |
+|---|---|
+| `convert(int, []char)(n)`, for any whole-number type | the number in base ten, with a `-` in front when it is negative: `"42"`, `"-7"`, `"0"` |
+| `convert(float, []char)(f)`, for either float type | the shortest text that reads back as the same float, always with a decimal point: `"9.5"`, `"3.0"`, `"-0.25"` |
+| `convert(bool, []char)(b)` | `"true"` or `"false"` |
+| `convert([]char, int)(t)`, for any whole-number type | the number written in `t`: digits in base ten, with or without a `-` in front |
+| `convert([]char, float)(t)`, for either float type | the float nearest to the number written in `t`: written like a float in the code (3.2), with or without a `-` in front, and the decimal point can be left out |
+| `convert([]char, bool)(t)` | `true` for `"true"` and `false` for `"false"` |
+
+A float whose size is `1.0e21` or more, or below `1.0e-6` and not zero, is written with a
+power of ten: `"1.5e21"`, `"2.0e-7"`.
+
+Going from text to a value is checked when the line runs, like every conversion that might
+not fit (4.4). It fails when the text isn't written as the table says, or when the number
+doesn't fit in the type:
+
+```go
+convert([]char, int)("12a")            // fails while running: "12a" isn't a whole number
+convert([]char, int)(" 12")            // fails while running: a space isn't a digit
+convert([]char, uint8)("300")          // fails while running: 300 doesn't fit in a uint8
+convert([]char, int)(word[:])          // 4 chars that aren't digits: fails while running too
+```
+
+A text held in a fixed array is converted through a slice, `word[:]`, because the conversion
+takes a `[]char` (5.3).
+
+### 5.11 Joining two arrays: `join`
+
+**(filled in)** An array never grows (5.3). `join` makes a new one. It is a built-in function
+that takes a type and gives back the function that joins two unsized arrays of that type: the
+result is a new unsized array holding the elements of the first, then the elements of the
+second.
+
+```go
+join(char)("Jack", "son")              // "Jackson"
+join(int)([1, 2], [3])                 // [1, 2, 3]
+
+var name: []char = "Jack";
+var hello: []char = join(char)("Hello, ", name);       // "Hello, Jack"
+```
+
+| You write | Its type | What it does |
+|---|---|---|
+| `join(char)` | `([]char, []char)[]char` | joins two texts |
+| `join(int)` | `([]int, []int)[]int` | joins two arrays of `int`s |
+
+- `join` itself has the type `(type)([]T, []T)[]T` (4.3). It works for every element type.
+- Both arrays are copied into the new one, like every argument (7.2). The two originals don't
+  change.
+- A fixed array is given as a slice: `join(int)(primes[:], [7])`.
+
+A `var` unsized array keeps its first length (5.3), so a longer result goes into a new
+declaration. A list that grows is a heap owner that is given a new, longer array each time:
+
+```go
+var all: ^[]int = ^[1, 2];
+all = ^join(int)(all^, [3]);           // a new heap array [1, 2, 3]: the old one is freed (8.8)
+all^.length                            // 3
+```
+
 ---
 
 ## 6. Maps
@@ -1557,6 +1655,22 @@ var seen: {int}bool = {1: true, 4: false};
 const pairs: {int}[2]int = {1: [1, 2], 2: [3, 4]};
 ```
 
+**(filled in) A key can have any type.** A lookup finds its key with `==`, and every type can
+be compared with `==` (3.7). So a `char`, a text, a struct or a `type` can be a key, as well
+as a number.
+
+**(filled in) The keys of a map value all differ.** The compiler checks keys that are written
+values. Keys that are worked out while the program runs are checked then, and two equal keys
+fail there (11.7):
+
+```go
+const doubled: {int}bool = {1: true, 1: false};    // ERROR: the key 1 is written twice
+const mixed: {int}bool = {a: true, b: false};      // checked while running: fails if a equals b
+```
+
+A map can be empty: `{}` is the map value with no entries. It needs a place that says what its
+key and value types are (3.8).
+
 ### 6.2 Reading and changing entries
 
 ```go
@@ -1568,6 +1682,16 @@ pairs[1] = [0, 0];     // ERROR: pairs is const
 
 An entry can be changed when the map is a `var`.
 
+**(filled in) A lookup is checked.** A map's keys never change (6.3). So when a map is a name
+that was declared with its keys written out, the compiler knows them, and it rejects a written
+key that isn't one of them. In every other case the check is made while the program runs, and
+a key that isn't in the map fails there (10.2, 11.7):
+
+```go
+seen[7]                // ERROR: 7 isn't a key of seen
+seen[k]                // checked while running: fails unless k is 1 or 4
+```
+
 ### 6.3 A map has a fixed size
 
 A map's keys are set by its first value and never change, just like an array's length:
@@ -1576,6 +1700,18 @@ A map's keys are set by its first value and never change, just like an array's l
 seen[1] = false;       // fine: 1 is a key
 seen[7] = true;        // ERROR: 7 isn't a key, and the map can't grow
 seen.length            // 2: the number of keys
+```
+
+**(filled in)** The length is an `int`, like an array's (5.5).
+
+**(filled in) A whole new value needs the same keys.** A `var` map can be given a new map
+value, and that value has to have exactly the keys the map already has, in any order. The
+compiler checks it when it can see both sets of keys. Otherwise the check is made while the
+program runs (11.7). It is the rule for an unsized array, which keeps its first length (5.3):
+
+```go
+seen = {4: true, 1: false};    // fine: the same two keys
+seen = {1: false};             // ERROR: seen has the keys 1 and 4
 ```
 
 ### 6.4 Underneath: a map is like a struct too
@@ -1597,6 +1733,9 @@ var seen: {int, bool, int, bool} = {
 
 The keys never change, and the values can when the map is a `var`. That's why
 `seen[4] = true;` works but `seen[7] = true;` doesn't: there's no field for key 7.
+
+**(filled in)** The entries are held in the order they were written. A lookup compares its
+key with the map's keys (3.7), and takes the value that sits beside the key that is equal.
 
 ---
 
