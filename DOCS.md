@@ -3389,6 +3389,16 @@ var p: Point = {
 A struct is declared with `const` or `var`, like any other value. The fields carry no
 `const` or `var` of their own (9.3).
 
+**(filled in)** The block has one field for each type in the shape, in the same order, and
+the type written in each field is the type at its position. A field's value can use the
+fields written above it, like the names above a declaration in any block (2.8):
+
+```go
+var q: Point = { x: int = 1; };                   // ERROR: a Point has two fields
+var r: Point = { x: int = 1; y: bool = true; };   // ERROR: the second field of a Point is an int
+var s: Point = { x: int = 2; y: int = x * 3; };   // fine: y uses x, so y is 6
+```
+
 This mirrors functions: the type lists only the types, and the value gives the names.
 
 | | Type (after `:`) | Value (after `=`) |
@@ -3433,6 +3443,25 @@ origin.x = 1;          // ERROR: origin is const
 ```
 
 Arrays and maps follow the same rule (5.2, 6.2).
+
+**(filled in) A function inside a `const` struct can't change its fields either** (9.6). When
+the struct is declared with its block, the compiler sees the function, and rejects the change
+where it is written. When the struct value comes from somewhere else, the compiler can't tell
+which function a field holds. Then calling that field through a `const` struct counts as a
+call that may change the fields, as in 8.12, and it is an error:
+
+```go
+const fixed: {int, (int)void} = {
+    count: int = 0;
+    add: (int)void = (const n: int){
+        count = count + n;     // ERROR: count is a field of a const struct
+    };
+};
+
+const frozen: {int, (int)void} = counter;   // a copy of the var struct counter from 9.6
+frozen.count                   // fine: reading a field
+frozen.add(1);                 // ERROR: frozen is const, and add may change its fields
+```
 
 ### 9.4 Setting a struct to another struct
 
@@ -3485,6 +3514,20 @@ other.add(1);                  // other.count is now 8, and counter.count is sti
 
 Files work the same way (11.3).
 
+**(filled in) A function read out of a struct uses the struct it was read from.** It borrows
+that struct's fields (7.8), so it can't outlive the struct, and a call to it counts as
+changing the struct (8.12):
+
+```go
+const addToCounter: (int)void = counter.add;
+addToCounter(3);               // counter.count goes up by 3
+```
+
+**(filled in) Underneath,** a function written in a struct value keeps the address of that
+struct value (7.7). When the struct is copied or moved, each function in the new struct that
+kept the address of the old struct keeps the address of the new one instead. That is how each
+copy's functions come to use its own fields.
+
 ### 9.7 A struct is copied, like every value
 
 Every declaration and every assignment copies the whole block:
@@ -3531,6 +3574,38 @@ lays its fields out on the stack one after another, and they're removed again. S
 block in a variable keeps it: the variable's own place on the stack holds the whole block,
 just as an `int` variable holds its number. A field is found from the start of that block
 and its position in the shape (`{int, int}`: `x` first, `y` second).
+
+### 9.9 Field names
+
+**(filled in)** A struct type lists only types (9.1), and the struct value gives the names
+(9.2). So the names are not part of the type: `{ x: int = 1; y: int = 2; }` and
+`{ w: int = 3; h: int = 4; }` both have the type `{int, int}`, and either one goes wherever
+that type is asked for (3.6).
+
+**A field name is a label for a position in a struct type.** Every struct value labels the
+positions of its type. `p.x` is the field at the position labelled `x`. The compiler gathers
+the labels of a struct type from every struct value of that type in the program: the file you
+run and every file it imports, directly or through other files.
+
+```go
+const sumOf: (Point)int = (const pt: Point){
+    return pt.x + pt.y;        // x and y: the labels that struct values of {int, int} give
+};
+```
+
+| Rule | Example |
+|---|---|
+| a name that no struct value of the type gives is an error | `p.z`, when no `{int, int}` value has a field `z` |
+| one name can't label two positions of the same type | `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` in one program are an error at both |
+| one position can have several names | with the two values at the top, `p.x` and `p.w` are the same field of any `{int, int}` |
+
+A `Point` and a size made of two `int`s are the same type, so a function that takes one takes
+the other, and reads its fields by either set of names. It is the picture from 5.7 again: the
+fields of a struct are reached by position, and their names are labels for the positions.
+
+Inside its own block, a field is also a plain name: for the fields below it (9.2) and for the
+functions written in the block (9.6). Like every name, it can't be spelled like a name that
+can already be seen there (2.8).
 
 ---
 
