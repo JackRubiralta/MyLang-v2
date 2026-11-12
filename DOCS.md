@@ -2164,7 +2164,9 @@ holds their address (7.7). They end when that block ends. Two rules follow.
 **A function given back can't outlive the block its call was written in.** It can't be given
 back from that block's function, and it can't be stored in something that lasts longer than
 the block. This comes on top of the rule about the arguments above. The top level of a file is
-a block as well, and it lasts as long as its package value (11.3):
+a block as well, and it lasts as long as its package value (11.3). A function that a built-in
+gives back, such as `convert(float, int)` or `wrap(int)`, keeps nothing, so this rule never
+holds it back.
 
 ```go
 var keep: (int)int = double;
@@ -3915,11 +3917,17 @@ worked out in order, from the top down, each value when its line is reached. For
 run, that happens when the program starts, together with its statements, in the order
 written. For every other file it happens each time an `import` of it runs (11.2).
 
+Two kinds of top-level name are ready from the start, because nothing has to run to make
+them: a `const` whose value is a function value written out, and a type. Every other
+top-level name is set up when its line is reached: every `var`, and every `const` whose value
+has to be worked out.
+
 A function's body can use top-level names declared below it, so a call could reach a name
 that isn't set up yet. The compiler rejects that call: **a call at the top level can run only
-when every top-level name its function uses is declared above the call.** The compiler reads
-the function for this, and the functions it calls, as in 8.12. A call through a variable, an
-array or a map counts as using every top-level name of the file.
+when every top-level name its function uses is ready, or is declared above the call.** The
+compiler reads the function for this, and the functions it calls, as in 8.12. A call through
+a variable, an array or a map could run any function of its type, so it counts as using what
+every function of that type in the file uses.
 
 ```go
 const readLate: ()int = (){ return late; };
@@ -3984,6 +3992,10 @@ a struct whose fields are the file's variables, field by field (8.8):
 | `var h: ^package = ^geom;` | a copy of `geom` on the heap (8.3) |
 | `var @mine: package = @geom;` | `mine` takes `geom`'s value over, field by field (8.9) |
 | `take(@geom)` | a parameter that asks for an ownership takes it at the call (8.13) |
+
+**(filled in)** The rules for `const` hold here too. A `var` borrower borrows only a `var`
+package (8.6), and only a `var` package has an ownership to give (8.9). So the second, fourth
+and fifth lines need `geom` to be a `var`.
 
 Borrowing is how two parts of a program share one copy:
 
@@ -4501,7 +4513,7 @@ program runs. The rules themselves are in the sections named.
 | a name declared where the same name can already be seen | a second `var count`, a parameter spelled like a top-level name, `const int: type = int8;` | 2.8 |
 | a name that isn't declared | `total = 1;` with no `total` | 2.8 |
 | a name used above its declaration | `var a: int = b;` and below it `var b: int = 1;` | 2.8 |
-| a top-level call that reaches a top-level name declared below the call | `const early: int = readLate();` | 11.4 |
+| a top-level call that reaches a top-level name that isn't set up yet | `const early: int = readLate();` | 11.4 |
 
 ### B.2 Declarations and statements
 
