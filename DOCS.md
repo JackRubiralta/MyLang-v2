@@ -2309,7 +2309,8 @@ lasts longer, by the two rules above.
 
 **Which results keep parameters.** Where the compiler sees the function that is called (7.2),
 it looks at what the function gives back. A function written in its body that uses its
-parameters keeps them, and so does a value that holds such a function. Any other result keeps
+parameters keeps them. So does a value that holds such a function, and so does a result that
+the function was given back itself and hands on, as `handOn` does. Any other result keeps
 nothing, whatever its type: `pick(double)` from 7.6 gives back `double` itself, and
 `wrap(int)(3)` gives back an `any` that holds only the 3. Where the call goes through a
 variable, a result whose type can hold a function counts as keeping every parameter: a
