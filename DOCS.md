@@ -1852,22 +1852,21 @@ rejects a function that can get to the end of its body without one. A function t
 nothing ends at the end of its body, or earlier at a `return;` (7.3).
 
 **(filled in) What "every path" comes down to.** No statement branches, so a body runs
-straight down, into each block inside it. A block *always returns* when its last statement is
-a `return`, or is a block that always returns. A function that returns a value needs a body
-that always returns. Nothing is written after a `return`, or after a block that always
-returns, because it could never run:
+straight down, into each block inside it, until it meets a `return`. A function that returns
+a value therefore needs a `return` among the statements of its body, or of a block inside
+the body. What is written after that `return` never runs. The compiler accepts it, as most
+languages do.
 
 ```go
 const one: ()int = (){
     {
-        return 1;
-    }                          // this block always returns, so the body does too
+        return 1;              // the body runs into this block and meets the return
+    }
 };
 
-const late: ()int = (){
-    return 1;
-    show(2);                   // ERROR: nothing after a return can run
-};
+const none: ()int = (){
+    show(1);
+};                             // ERROR: the body ends without a return
 ```
 
 **(filled in) A function value is checked against its type.** It has as many parameters as
@@ -1896,6 +1895,27 @@ arguments (2.9):
 add(1)                 // ERROR: add takes two ints
 add(1, true)           // ERROR: the second argument is a bool, and add takes an int
 ```
+
+**(filled in) Which function a call runs.** Several rules depend on whether the compiler can
+tell which function a call runs (7.8, 8.12, 9.3, 11.3, 11.4). Where the docs say that a
+function is *called by its own name*, they mean one of these cases, in which the compiler
+sees the function:
+
+| The value in front of the `(` | The compiler sees |
+|---|---|
+| the name of a `const` that was declared with a function value written out, as in `add(1, 2)`. Inside a function's body, its own name counts too | that function |
+| such a name reached through a package that can hold only one file (11.3), as in `geom.area(3, 4)` | that function |
+| a function field of a `const` struct that was declared with its block written out (9.3) | that function |
+| a built-in, or what a built-in gives back, as in `convert(float, int)(x)` and `wrap(int)(3)` | what the built-in does |
+| a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the first row: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
+
+In every other case the call goes *through a variable*: a `var`, a parameter, a field, a
+result of another call, or a `const` that was declared in any other way. Then the compiler
+knows only the type, and a rule that needs more counts the worst case.
+
+The last row matters because every choice is a lookup (section 10). A pair or a map of
+functions that is written out in a `const` is seen, so choosing this way costs nothing in what
+the compiler knows.
 
 ### 7.3 A function that returns nothing
 
@@ -2058,15 +2078,15 @@ steps[2](5)            // 10
 | The function | The address of what it keeps |
 |---|---|
 | uses nothing from outside itself | empty |
-| uses names of a block around it (7.8) | that block's place on the stack |
-| is written in a struct value and uses its fields (9.6) | the struct value |
-| is written at the top level of a file (11.3) | the package value that holds the file's variables |
+| uses only top-level names of its file (11.3) | the package value that holds the file's variables |
+| uses names of a function call around it (7.8) | that call's place on the stack |
 | was given back by a call and keeps parameters of it (7.8) | the place of that call's parameters |
-| was given back and keeps only a heap value (7.8) | the heap value |
 
-Each of these places holds the address of the place around it: a block leads to the block or
-the struct value around it, and in the end to the package value of its file. So a function
-inside a function inside a file reaches everything it can see through one address.
+Each of the last two places also holds the address of the place around it, and in the end
+the address of the package value of its file. So a function inside a function inside a file
+reaches everything it can see through one address. A function written in a struct value gets
+one thing more, the address of the struct it is called through, and it gets that at each
+call (9.6).
 
 ### 7.8 Using a variable from outside the function
 
@@ -2130,6 +2150,10 @@ before the function, the compiler raises an error. An argument handed over with 
 count: the call takes its value, and the caller's variable is left `null` (8.13), so nothing
 is left to die.
 
+**(adjusted)** What the handed-over value holds still counts. When a value given with `@`
+has a borrower or a function inside it, the function given back can't outlive what that part
+points at (8.5).
+
 ```go
 const makeAdder: (int)(int)int = (const step: int){
     return (const n: int){ return n + step; };   // fine: the function keeps step
@@ -2185,7 +2209,7 @@ tally.up();
 tally.get()                    // 2: up and get use the same total
 ```
 
-**(filled in) Copying a function doesn't copy what it keeps on the stack.** A function value
+**(filled in) Copying a function doesn't copy what it keeps.** A function value
 is two addresses (7.7), and `=` copies those two. So a copy uses the same variables and the
 same kept parameters as the original, the way a copy of a borrower borrows the same value
 (8.8). And like the original, the copy can't outlive them:
@@ -2235,26 +2259,36 @@ The rule is only for a function the call gives back with `return`. A local is ne
 using it in the body: returning a function that does that is an error, as above.
 
 **(adjusted) Where kept parameters live, and how far the function can go.** Nothing goes on
-the heap unless the code says `^` (2.6). So the parameters a function keeps stay where the
-call put them: on the stack, in the block the call was written in. The function given back
-holds their address (7.7). They end when that block ends. Two rules follow.
+the heap unless the code says `^` (2.6). So the parameters a function keeps stay on the
+stack, with the function call that made the call: the call whose body the line is in. For a
+line at the top level of a file, that place is the package value (11.5). The function given
+back holds their address (7.7). Four rules follow.
 
-**A function given back can't outlive the block its call was written in.** It can't be given
-back from that block's function, and it can't be stored in something that lasts longer than
-the block. This comes on top of the rule about the arguments above. The top level of a file is
-a block as well, and it lasts as long as its package value (11.3). **(filled in)** A function
-that a built-in gives back, such as `convert(float, int)` or `wrap(int)`, keeps nothing, so
-this rule never holds it back.
+**Kept parameters go along when the function is given back again.** When a function
+`return`s a function that it was given back, the kept parameters move to its own caller, like
+every value that is given back (8.8). This holds for a function on its own, and for one
+directly inside the struct, array, pair, map or `any` that is given back. It is how
+`newCounter` above hands on what `countFrom` gave it: the kept `count`, and the heap value it
+owns, move to whoever called `newCounter`.
+
+**A function given back can't leave its call in any other way.** Inside a function, it can't
+be stored in something that outlasts the call it is in: a top-level `var`, a `var` of a
+function around it, a place reached through a pointer, or a heap value that leaves the call.
+This comes on top of the rule about the arguments above.
 
 ```go
 var keep: (int)int = double;
 
 const install: ()void = (){
-    keep = makeAdder(five);    // ERROR: the step is kept in this call of install, and keep lasts longer
+    keep = makeAdder(five);    // ERROR: the step stays with this call of install, and keep lasts longer
+};
+
+const handOn: ()(int)int = (){
+    return makeAdder(five);    // fine: the step moves to the caller of handOn
 };
 
 const adderFor: (int)(int)int = (const by: int){
-    return makeAdder(by);      // ERROR: the step is kept in this call of adderFor, which ends here
+    return makeAdder(by);      // ERROR: the result comes from by, and by ends with this call
 };
 
 const adderFrom: (int)(int)int = (const by: int){
@@ -2262,15 +2296,19 @@ const adderFrom: (int)(int)int = (const by: int){
 };
 ```
 
-**A function that keeps only a heap value can go anywhere.** Sometimes the one thing a
-function given back uses from outside itself is a parameter that took a heap value over with
-`@`. Then nothing it keeps is on the stack: the function holds the address of that heap value,
-and owns it. It can go wherever a heap owner can: it can be given back again, stored, and
-moved. The heap value is freed when the function ends (8.11), and copying the function copies
-the heap value, as with every owner (8.8). `makeLookup` and `countFrom` above give back
-functions like this, which is why `newCounter` can hand on what `countFrom` gave it.
+(`five` is the top-level `var` from the example further up.)
 
-A function that needs more than one value in this way takes them as one struct on the heap.
+**Kept parameters end with the call that holds them.** They live until that function call
+ends, and a heap value that one of them owns is freed then (8.11). No function that uses them
+lasts longer, by the two rules above.
+
+**Which results keep parameters.** Where the compiler sees the function that is called (7.2),
+it looks at what the function gives back. A function written in its body that uses its
+parameters keeps them, and so does a value that holds such a function. Any other result keeps
+nothing, whatever its type: `pick(double)` from 7.6 gives back `double` itself, and
+`wrap(int)(3)` gives back an `any` that holds only the 3. Where the call goes through a
+variable, a result whose type can hold a function counts as keeping every parameter: a
+function type, a struct, array, pair or map with one inside, or an `any`.
 
 Inside its own body, a function's name is the function itself, so a function made inside
 another can call itself (10.3).
@@ -2931,11 +2969,9 @@ A heap value is freed at the moment it has no owner left:
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
 
-**(filled in)** For the last row of the table, "the function ends" means one of two moments
-(7.8). A function that keeps only a heap value owns it, so the value is freed when that
-function value ends, like the value of any owner. Every other kept parameter sits on the
-stack in the block the call was written in, and a heap value it owns is freed when that block
-ends.
+**(filled in)** For the last row of the table: a heap value owned by a kept parameter is
+freed when the kept parameters end, and they end when the function call that holds them ends
+(7.8).
 
 ### 8.12 Nothing is freed while something still points at it
 
