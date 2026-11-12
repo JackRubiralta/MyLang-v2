@@ -2465,6 +2465,9 @@ h^ = 5;                    // n is still 3
 A value written on the spot, like `^5` or `^[1, 2, 3]`, has no original, so it's simply
 built on the heap.
 
+**(filled in)** When the heap has no room left for a new value, the program fails while it
+runs (11.7). That can happen at a `^v`, and where `=` copies a heap owner (8.8).
+
 A heap value lives as long as its owner. When the owner ends, the value is freed:
 
 ```go
@@ -2603,7 +2606,7 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
 | a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
 | a variable a function uses from around it (7.8) | yes, while the variable lasts at least as long as the function. A function given back keeps the parameters it uses, and can't outlive the arguments of the call, except those handed over with `@`. **(adjusted)** Nor can it leave the call it is in, except by being given back again |
-| what a `&T` parameter borrows, put in a variable that outlasts the call **(filled in)** | no: what a parameter borrows is only known to last as long as the call |
+| what a parameter borrows or keeps, put in a variable that outlasts the call **(filled in)** | no: what comes in through a parameter is only known to last as long as the call |
 
 The check is made every time a borrower is given something to borrow: when it's declared,
 and again each time it's pointed at something else with `b = &…`.
@@ -2633,16 +2636,23 @@ The compiler can't see inside an `any` (4.5). So an `any` counts as holding ever
 the value wrapped into it held. A package counts as holding what its file's variables hold
 (11.5).
 
-**(filled in) What a parameter borrows lasts as long as the call, as far as the function
-knows.** Inside the function, a borrower that came in as a parameter can be put in something
-that ends with the call, and it can be given back (8.13). It can't be put in a variable that
-outlasts the call:
+**(filled in) What comes in through a parameter lasts as long as the call, as far as the
+function knows.** That goes for a parameter that is a borrower or an ownership, and for one
+that is or holds a function: a function type, an `any`, a `T`, a package, or a struct, array,
+pair or map with one of these inside. Inside the function, such a parameter can be put in
+something that ends with the call, and it can be given back (7.8, 8.13). It can't be put in a
+variable that outlasts the call:
 
 ```go
 var kept: &int = null;
+var keep: (int)int = double;
 
 const stash: (&int)void = (var b: &int){
     kept = b;                  // ERROR: kept outlasts this call, and what b borrows may not
+};
+
+const setKeep: ((int)int)void = (const f: (int)int){
+    keep = f;                  // ERROR: keep outlasts this call, and what f keeps may not
 };
 ```
 
@@ -2679,7 +2689,7 @@ A parameter works the same way: `(const v: &[]int)` borrows an array to read it,
 
 **(filled in) A `var` borrower is made only from something that may be changed.** That is a
 `var` name, with `&`, or another `var` borrower. A copy of a `const` borrower can only read,
-so it goes only into a `const` borrower or a `const` parameter:
+so it goes only into a `const` borrower or a `const` parameter, or it is given back (8.13):
 
 ```go
 const relay: (&int)void = (const x: &int){
@@ -2688,8 +2698,8 @@ const relay: (&int)void = (const x: &int){
 };
 ```
 
-At a call the compiler sees (7.2), it checks each `&` argument against the parameter it goes
-to. At a call through a variable only the type is known, and the type doesn't say whether a
+**(filled in)** At a call the compiler sees (7.2), it checks each `&` argument against the
+parameter it goes to. At a call through a variable only the type is known, and the type doesn't say whether a
 `&T` parameter is read or changed (7.4). That case is listed in 8.17.
 
 **(filled in)** An ownership is given only by a `var` (8.9), so there is never an ownership of
@@ -2784,6 +2794,10 @@ A field that is a borrower is copied as a borrower, so the copy borrows the same
 original borrows. For the list with a `prev` in 8.15, each copied node's `prev` therefore
 still borrows a node of the original list, and those links have to be set again after the
 copy.
+
+**(filled in)** A field that holds a function which uses its own struct's fields is the one
+place where copying a whole struct does more than copying its fields one by one: in the copy,
+that function uses the copy's fields (9.6).
 
 **An owner that is given a new value frees the one it had:**
 
@@ -3014,7 +3028,8 @@ Following it fails in the same way.
 
 **(filled in)** `null` is "no address" (8.18), so it fits all three pointer types: a `^T`, an
 `&T` and an `@T`. Following any of them when it is `null` fails while the program runs
-(11.7). Nothing else can be `null`:
+(11.7). So does a move or a call that takes a value through an ownership that is `null`, as in
+`var @q: ^int = h;`. Nothing else can be `null`:
 
 ```go
 var h: @^int = null;       // fine: an ownership of nothing yet
@@ -3064,9 +3079,14 @@ be changed.** The compiler raises the error at the line that would change it.
 | `@q = @p;` and `var @q: T = @p;` | moves it away (8.9) |
 | `take(@p)` | moves it into the function (8.13) |
 | a call to a function that can change `p` | may do any of these |
+| `g = import(…);`, for a `var` package `g` **(filled in)** | replaces its variables (11.6) |
 
 "Still used below" means written anywhere further down the function. There are no loops, so
 later in the text is later in time.
+
+**(filled in)** A `var` package counts as an owner in this rule. A borrower of one of its
+variables followed the package, and so did a function that was read out of it or given back
+by a call through it (11.6).
 
 **Which owners a pointer followed** is read off the line that made it:
 
@@ -3144,13 +3164,12 @@ it.
 
 A function's type doesn't say whether a `&T` parameter is read or changed (7.4). For a
 function called by its own name, the compiler looks at the function. For one called through
-a variable, an array or a map, every `&` argument counts as one that may change.
+a variable (7.2), every `&` argument counts as one that may change.
 
 **(adjusted)** "Called by its own name" and "through a variable" are the two cases of 7.2. A
 lookup in a `const` array, pair or map whose functions are written out is one the compiler
 sees: it looks at every function the lookup could give, and counts the worst of them. So a
-choice made with `cases[…](…)` (section 10) is not a call through a variable, here and in the
-rest of this section.
+choice made with `cases[…](…)` (section 10) is not a call through a variable.
 
 **A function that changes a variable from outside itself** (7.8) counts too. For a function
 called by its own name, the compiler reads which outside variables it changes or takes, and
@@ -3166,8 +3185,8 @@ reset();                         // ERROR: b is used below, and reset changes li
 b^.value
 ```
 
-A call through a variable, an array or a map counts as changing every outside variable,
-because the compiler can't tell which function runs.
+A call through a variable (7.2) counts as changing every outside variable, because the
+compiler can't tell which function runs.
 
 **(filled in) A call also counts as a use of the pointers its function uses.** A function that
 uses a pointer from around it (7.8) keeps that pointer in use: "still used below" includes
@@ -3331,10 +3350,15 @@ var gone: &int = firstValue(&makeNode(1)^);   // ERROR: the new node is freed at
                                               // this line, but gone would still be there
 ```
 
+**(filled in) A borrower that is given back always comes from a parameter.** It can't come
+from a variable outside the function either, such as a top-level `var`: the caller sees only
+the type, and couldn't tell what the result points at.
+
 **(filled in) An argument that holds borrowers lends what they borrow.** An array or a struct
 of borrowers, an `any` or a package that holds one, and a function that uses variables from
-around it all count this way. So a borrower that is taken out of such an argument and given
-back still has an origin:
+around it all count this way. When such an argument is a `const`, the result has to be a
+`const` borrower, as with a `const` that is lent. So a borrower that is taken out of such an
+argument and given back still has an origin:
 
 ```go
 const head: ([2]&int)&int = (const bs: [2]&int){
@@ -3516,7 +3540,8 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
-| `kept = b;` where `b` is a `&int` parameter and `kept` outlasts the call **(filled in)** | what a parameter borrows is only known to last as long as the call (8.5) |
+| `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
+| `return &list^;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
 | `p = ^6;` where a function called below uses a borrower made with `&p^` **(filled in)** | the call is a use of that borrower (8.12) |
 | `var @t: ^int = h;` where `h` is a `const` ownership **(filled in)** | a `const` ownership can only read (8.6) |
 | `var n: int = null;` **(filled in)** | `null` fits only a `^T`, an `&T` or an `@T` (8.10) |
@@ -3531,7 +3556,8 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
 | `^v` **(filled in)** | there is no room left on the heap (11.7) |
 
-Every check the compiler makes, and every check made while running, is listed in Appendix B.
+**(filled in)** Every check the compiler makes, and every check made while running, is listed
+in Appendix B.
 
 ### 8.17 What the compiler doesn't catch
 
@@ -3550,13 +3576,13 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
   original until they are set again.
 - **A borrower of a `const` given to a function that is held in a variable.** A function's
   type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
-  (7.4). When a function is called by its own name the compiler looks at the function. When
-  it is called through a variable, an array or a map, as in `fs[i](&limit)`, only the type is
-  known.
+  (7.4). When a function is called by its own name the compiler looks at the function.
+  **(adjusted)** When it is called through a variable (7.2), as in `f(&limit)` where `f` is a
+  parameter, only the type is known.
 - **(filled in) A function in a `const` struct that the compiler can't see.** A function
-  written in a struct value changes the fields of the struct it is called through (9.6). When
-  a struct value comes from somewhere else into a `const`, the compiler can't tell what its
-  function fields do, and a call through the `const` struct can change its fields (9.3).
+  written in a struct value can change the fields of its own struct (9.6). When a struct value
+  comes from somewhere else into a `const`, the compiler can't tell what its function fields
+  do, and a call of one can change the fields of the `const` struct (9.3).
 
 **(filled in) What happens in these cases.** In the first two, a borrower can be followed
 after what it borrowed is gone. That is not checked while the program runs either: it reads
@@ -3597,6 +3623,10 @@ owner: the holder it lives in.
   owner to `null`. The value itself doesn't move.
 - **A link to an unsized array** (`^[]int`, `&[]int`) holds two things: where the elements
   start, and how many there are. That is how `v^.length` works.
+- **(filled in) A link to a map or an `any`** holds one address, and the value there holds its
+  own size: a map the number of its entries (6.4), an `any` its type (4.5). An ownership of an
+  unsized array, `@[]T`, holds the address of the variable, like every ownership, and the
+  variable holds its length (5.7).
 
 ---
 
