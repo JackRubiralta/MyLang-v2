@@ -1920,31 +1920,35 @@ add(1, true)           // ERROR: the second argument is a bool, and add takes an
 ```
 
 **(filled in) Which function a call runs.** Several rules depend on whether the compiler can
-tell which function a call runs (4.4, 7.8, 8.6, 8.12, 9.3, 11.3, 11.4). Where the docs say
-that a function is *called by its own name*, they mean one of these cases, in which the
-compiler sees the function:
+tell which function a call runs (4.4, 7.8, 8.6, 8.12, 8.13, 9.3, 10.4, 11.3, 11.4). Where the
+docs say that a function is *called by its own name*, they mean one of these cases, in which
+the compiler sees the function:
 
 | The value in front of the `(` | The compiler sees |
 |---|---|
-| the name of a `const` that was declared with a function value written out, as in `add(1, 2)`. Inside a function's body, its own name counts too | that function |
+| the name of a `const` that was declared with a function value written out, as in `add(1, 2)`. Inside the body of such a function, its own name counts too | that function |
+| a function value written out and called on the spot: `(const n: int){ return n + 1; }(3)` | that function |
 | a built-in, or what a built-in gives back, as in `convert(float, int)(x)` and `wrap(int)(3)` | what the built-in does |
-| the name of a `const` that was declared with a name from the first row, with a built-in or what a built-in gives back, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);` | the same function |
-| such a name reached through a package that can hold only one file (11.3), as in `geom.area(3, 4)` | that function |
-| a function field of a `const` struct that was declared with its block written out (9.3) | that function |
+| what a call from this table gives back, when the function that is called gives back a function value written in its body: `first(int)(xs)`, `makeAdder(1)(2)` | that function value |
+| the name of a `const` that was declared with one of the rows above, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);`, `const firstInt: ([]int)int = first(int);` | the same function |
+| a name from these rows reached through a package that can hold only one file (11.3), as in `geom.area(3, 4)` | that function |
+| a function field of a `const` struct that was declared with its block written out, when the field's value is a function value written out (9.3) | that function |
 | a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the rows above: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
 
 **(filled in)** In every other case the call goes *through a variable*: a `var`, a parameter,
-a field, a result of another call, or a `const` that was declared in any other way. Then the
-compiler knows only the type, and a rule that needs more counts the worst case.
+a field, any other result of a call, or a `const` that was declared in any other way. Then
+the compiler knows only the type, and a rule that needs more counts the worst case.
 
 **(filled in)** One thing is not counted that way: whether a function the compiler can't see
 changes a `const`. A call through a variable that is handed a `const` with `&`, or that goes
 through a `const` struct, is accepted, and 8.17 lists both cases (8.6, 9.3). Counting the
-worst case there would turn away every such call, also the many that only read.
+worst case there would turn away every such call, also the many that only read. The
+exception stops at functions: a `const` that is or holds a function is never lent to a call
+through a variable (8.6), because the rows above rely on it.
 
-The last row of the table matters because every choice is a lookup (section 10). A pair or a
-map of functions that is written out in a `const` is seen, so choosing this way costs nothing
-in what the compiler knows.
+**(adjusted)** The last row of the table changes how 8.12 counts a choice, and it matters
+because every choice is a lookup (section 10). A pair or a map of functions that is written
+out in a `const` is seen, so choosing this way costs nothing in what the compiler knows.
 
 ### 7.3 A function that returns nothing
 
@@ -2177,7 +2181,8 @@ const makeBroken: ()()int = (){
 ```
 
 **A function given back keeps the parameters it uses.** The parameters are what the caller
-handed in, and the function given back is made from them, so they live as long as it does.
+handed in, and the function given back is made from them, so they live at least as long as it
+does **(adjusted: how long exactly is said further down)**.
 
 **It can't outlive what was passed in.** At the call, the function given back counts as coming
 from every argument, the same as a borrower that comes back (8.13). If an argument dies
@@ -2187,18 +2192,7 @@ is left to die.
 
 **(adjusted)** What the handed-over value holds still counts. When a value given with `@`
 has a borrower or a function inside it, the function given back can't outlive what that part
-points at (8.5). And this rule is for a result that keeps parameters: which results do is
-said further down, under "Which results keep parameters".
-
-**(filled in) A result that comes from a parameter can be given back.** A function can
-`return` a result that counts as coming from one of its own parameters. That parameter is
-then kept, as if the function given back used it, and one level up the result counts as
-coming from the arguments of this function. A result that comes from a name declared inside
-the function, or from a value made on the spot, can't be given back, because those end with
-the call. `adderFor` and `adderPlus` further down show both. This is for an argument that was
-handed on as it is. Where the function lent something with `&`, rule 8.13 decides: a result
-that holds a borrower of a copied parameter, or of a name declared in the function, can't be
-given back.
+points at (8.5).
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
@@ -2316,13 +2310,13 @@ every value that is given back (8.8). This holds for a function on its own, and 
 inside the struct, array, pair, map or `any` that is given back, at any depth, as long as no
 pointer lies in between. It is how
 `newCounter` above hands on what `countFrom` gave it: the kept `count`, and the heap value it
-owns, move to whoever called `newCounter`.
+owns, move to whoever called `newCounter`. When the kept parameters lead on to other kept
+parameters that this call holds (7.7), those move with them.
 
 **A function given back can't leave its call in any other way.** Inside a function, it can't
-be stored in something that outlasts the call it is in: a top-level `var`, a `var` of a
-function around it, a place reached through a pointer that outlasts the call, or a heap value
-that leaves the call.
-This comes on top of the rule about the arguments above.
+be put in a variable that outlasts the call it is in: a top-level `var`, or a `var` of a
+function around it. Stored through a pointer, it is one of the cases that 8.17 lists. This
+comes on top of the rule about the arguments above.
 
 ```go
 var keep: (int)int = double;
@@ -2336,7 +2330,7 @@ const handOn: ()(int)int = (){
 };
 
 const adderFor: (int)(int)int = (const by: int){
-    return makeAdder(by);      // fine: the result comes from by, a parameter, so by is kept
+    return makeAdder(by);      // fine: the result comes from by, a parameter of adderFor
 };
 
 const adderPlus: (int)(int)int = (const by: int){
@@ -2355,14 +2349,50 @@ const adderFrom: (int)(int)int = (const by: int){
 ends, and a heap value that one of them owns is freed then (8.11). No function that uses them
 lasts longer, by the two rules above.
 
-**(filled in) Which results keep parameters.** Where the compiler sees the function that is called (7.2),
-it looks at what the function gives back. A function written in its body that uses its
-parameters keeps them. So does a value that holds such a function, and so does a result that
-the function was given back itself and hands on, as `handOn` does. Any other result keeps
-nothing, whatever its type: `pick(double)` from 7.6 gives back `double` itself, and
-`wrap(int)(3)` gives back an `any` that holds only the 3. Where the call goes through a
-variable, a result whose type can hold a function counts as keeping every parameter: a
-function type, a struct, array, pair or map with one inside, an `any`, or a `T` (4.3).
+**(filled in) Which results keep parameters.** Where the compiler sees the function that is
+called (7.2), it looks at what the function gives back. A function written in its body that
+uses its parameters keeps them. So does a value that holds such a function, and so does a
+result that the function was given back itself and hands on, as `handOn` does. Any other
+result keeps nothing, whatever its type: `wrap(int)(3)` gives back an `any` that holds only
+the 3. Where the call goes through a variable, a result whose type can hold a function (8.5)
+counts as keeping every parameter.
+
+**(filled in) What a result comes from.** The rule about the arguments is one of three. At a
+call, a result that is or holds a function counts as coming from:
+
+| It comes from | Because |
+|---|---|
+| every argument, except one handed over with `@`, when the result keeps parameters | the rule above: the kept parameters are made from the arguments |
+| the function that was called | that function may keep parameters or use variables itself, and what it gives back can reach them through it (7.7). So everything that limits the called function limits the result |
+| what an argument came from, when the result is that argument or holds it | `pick(double)` in 7.6 gives back `double` itself. Such a result keeps nothing new, but it has every limit the argument had |
+
+**(filled in) When a result can be given back.** A function can `return` a result when
+everything the result comes from lasts beyond the call, or goes along with it:
+
+| The result comes from | Can it be given back? |
+|---|---|
+| a parameter of this function | yes. For the caller, the result then counts as coming from the arguments of this function |
+| a top-level name, or a name of a function around this one | yes. The result stays limited by that name |
+| kept parameters that this call holds, its own or those of the function that was called | yes: they go along, as said above |
+| a name declared in this function, or a function that uses one | no: it ends with the call |
+| a value made on the spot that was an argument | no: it ends with its statement |
+
+Where the function lent something with `&`, rule 8.13 decides instead: a result that holds a
+borrower of a copied parameter, or of a name declared in the function, can't be given back.
+
+```go
+const adder3: (int)(int)(int)int = (const a: int){
+    return (const b: int){
+        return (const c: int){ return a + b + c; };
+    };
+};
+
+const tenPlus: ()(int)int = (){
+    return adder3(five)(five);   // fine: the kept a and the kept b both move to the caller
+};
+
+tenPlus()(1)                     // 11
+```
 
 Inside its own body, a function's name is the function itself, so a function made inside
 another can call itself (10.3).
