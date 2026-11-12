@@ -4846,6 +4846,7 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | `^v`, and any call **(filled in)** | the heap or the stack is full (8.3, 10.4) |
 | `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.8) |
 | a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
+| a `var` package given another file **(filled in)** | the new package needs more room than the holder has (11.5) |
 
 ---
 
@@ -4998,6 +4999,7 @@ program runs. The rules themselves are in the sections named.
 | a value whose type isn't the type its place asks for | `var count: int = small;` | 3.2, 3.8 |
 | a written number that doesn't fit its type | `var big: uint8 = 300;`, `var below: uint8 = -1;` | 3.2 |
 | a whole number written where a float is asked for, or the other way round | `var rate: float = 3;`, `var half: int = 2.5;` | 3.2 |
+| a written float that is too big for its type | `var f: float32 = 1.0e39;` | 3.2 |
 | `+ - * /` on anything but two numbers of one type | `count + small`, `'a' + 'b'` | 3.2 |
 | `%` on anything but two whole numbers of one type | `2.5 % 1.0` | 3.2 |
 | `-` in front of anything but a signed whole number or a float | `-level` for a `uint8`, `-ready` | 3.2 |
@@ -5047,7 +5049,8 @@ program runs. The rules themselves are in the sections named.
 | a `return` whose value isn't the function's return type | `return true;` in an `(int)int` | 7.1 |
 | a function that uses a name declared inside the function around it, given back or stored where it lasts longer | `return (){ return x; };` | 7.8 |
 | a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);`, `return makeAdder(more);` for a local `more` | 7.8 |
-| a function given back that is stored where it outlasts the call it is in | `keep = makeAdder(five);` inside a function | 7.8 |
+| a function given back that is put in a variable that outlasts the call it is in | `keep = makeAdder(five);` inside a function | 7.8 |
+| a result given back that comes from a name declared in the function, or from a function that uses one | `return makeAdder(more);`, `return g();` where `g` uses a name of this function | 7.8 |
 
 ### B.6 Ownership
 
@@ -5059,8 +5062,9 @@ check these rules:
 | each of `T`, `^T`, `&T` and `@T` is used only as itself: `^5` for a `^int`, `p^` for the value, `&count` for a borrower, `@p` for an ownership | 8.3, 8.4, 8.7, 8.9 |
 | a borrower, an ownership, or a value that holds one, doesn't outlive what it points at | 8.5 |
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
-| a `var` borrower is made only from a `var` name or another `var` borrower, wherever the compiler sees both | 8.6 |
-| what comes in through a parameter (a borrower, an ownership, a function, or a value that holds one) isn't put in a variable that outlasts the call | 8.5 |
+| a `var` borrower is made only from a place that can be assigned, a value made on the spot or another `var` borrower, wherever the compiler sees both | 8.6 |
+| a `const` that is or holds a function isn't lent to a call through a variable | 8.6 |
+| what comes in through a parameter that holds a borrower, an ownership or a function isn't put in a variable that outlasts the call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
 | a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
 | a `var` package isn't given another file while a borrower of it, or a function read out of it, is used below | 8.12, 11.6 |
@@ -5068,7 +5072,6 @@ check these rules:
 | `null` is given only to a `^T`, an `&T` or an `@T` | 8.10 |
 | an owner isn't changed while a pointer made by following it is still used below, and a call to a function that uses the pointer is such a use | 8.12 |
 | a call doesn't change or take an owner that another pointer in use followed | 8.12 |
-| a borrower that is given back comes from a borrowed parameter | 8.13 |
 
 ### B.7 Structs
 
@@ -5078,10 +5081,12 @@ check these rules:
 | a field whose written type isn't the type at its position | `{ x: int = 1; y: bool = true; }` for a `Point` | 9.2 |
 | a field named like a name that can be seen where the struct value is written | a field `count` beside a `var count` | 2.8, 9.9 |
 | a function in a `const` struct that changes a field | `count = count + n;` in the block of a `const` struct | 9.3 |
+| a call in a field's value whose function uses a field written below the call | `first: int = peek();` where `peek` uses the field `last` below | 9.2 |
 | a function in a struct value that uses the struct's fields and also a name that needs another place | `total = total + n;` beside `count = count + n;` | 9.6 |
-| a field name that no struct value written for the type gives | `s.x` for a `Size` whose values name `w` and `h` | 9.9 |
-| a name that is given to two positions of one written type, used on that type | `p.x`, when `{ x: int = 1; y: int = 2; }` and `{ y: int = 1; x: int = 2; }` are both written for `Point` | 9.9 |
-| a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 9.9 |
+| a function that uses the fields but isn't a field's value, or inside an array, pair or map in one | a function written as an argument in a field's value | 9.6 |
+| a struct value whose field names differ from the other struct values written for the same written type | `var q: Point = { a: int = 0; b: int = 0; };` when a `Point` has `x` and `y` | 9.9 |
+| a field name that the type, as it was written, doesn't have | `s.x` for a `Size` whose fields are `w` and `h` | 9.9 |
+| a field name used on a `T`, on an `any`, or on a type name whose file writes no struct value for it | `v.x` for a `v` of type `T` | 9.9 |
 
 ### B.8 Files and packages
 
@@ -5089,7 +5094,7 @@ check these rules:
 |---|---|---|
 | an `import` whose text isn't written out, or whose file doesn't exist | `import(fileName)`, `import("missing")` | 11.2 |
 | `import` used in any way but a call by its own name | `const load: ([]char)package = import;` | 11.2 |
-| files that import each other, directly or through other files | `a` imports `b`, and `b` imports `a` | 11.2 |
+| files that import each other, directly or through other files, and a file that imports itself | `a` imports `b`, and `b` imports `a` | 11.2 |
 | a name that isn't a top-level name of every file a package can hold, with one type | `shapes.area` after `shapes = import("other");` when `other` has no `area` | 11.3, 11.5 |
 | a type reached through a package that can hold more than one file | `var b: shapes.Box = …;` when `shapes` is given two files | 3.6, 11.3 |
 | a new value for a `const` name of a file | `a.bump = a.bump;` | 11.3 |
@@ -5118,6 +5123,7 @@ error line.
 | `{k1: v1, k2: v2}` with keys worked out while running | two keys are equal | `key written twice` | 6.1 |
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
+| `g = h;` for a `var` package | the new package needs more room than the holder has | `package does not fit` | 11.5 |
 | `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
