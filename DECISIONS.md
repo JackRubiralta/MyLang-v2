@@ -240,5 +240,7 @@ What follows from it:
 | `const geom: package = import("geom");` | The import is an ordinary declaration in the one shape every name uses. `import` is a built-in like `convert`, and `package` is a built-in type like `type` and `any`. Zig works the same way |
 | Everything at a file's top level can be used from outside, for now | The simplest start |
 | Statements that run go only in the file you run; an imported file holds only declarations | Nothing runs because a file was imported, so the run order never depends on imports |
-| A package is always a `const`; importing the same file twice gives the same package; two files can't import each other | A package never changes, its variables exist once, and every file's names are ready before a file that imports it **(filled in)** |
+| A package can be a `const` or a `var` | Jack: underneath it is like a function pointer. A package value is the address of the file's names, so it is held like a function, and a `var` one can be given another file |
+| A `var` package can only be given a file with the same names and types the code uses | The same as a function in a `var` keeping its type, so the compiler still checks every name **(filled in)** |
+| Importing the same file twice gives the same package; two files can't import each other | A file's variables exist once, and every file's names are ready before a file that imports it **(filled in)** |
 | A function's body can use any top-level name of its own file, wherever it is declared | Two functions in one file can call each other **(filled in)** |

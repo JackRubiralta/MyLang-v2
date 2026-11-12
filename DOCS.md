@@ -2772,7 +2772,7 @@ geom.made = geom.made + 1;             // geom's variable changes
 
 - **`import` is a built-in, like `convert` and `wrap` (4.4, 4.5),** so the line is an ordinary
   declaration in the one shape every name uses (2.1).
-- **A package is always a `const`,** like a type (4.2): it never changes.
+- **A package can be a `const` or a `var`,** like a function (11.5).
 - **The name in `import` is the file's path from the importing file's folder:**
   `import("shapes/geom")`. A folder only organises files.
 - **Importing the same file twice gives the same package.** Its variables exist once, not once
@@ -2798,6 +2798,28 @@ any file can use it (7.8), and a call that changes it counts as changing it (8.1
 // the file geom
 area(1, 1);            // ERROR: main imports geom, so geom holds only declarations
 ```
+
+### 11.5 Underneath: a package value is an address
+
+A package value is the address of the file's names, the way a function value is the address of
+its code (7.7). Copying a package value copies the address. The file's variables are never
+copied: there is one of each, however many names lead to the file.
+
+So a package can be held like a function. It can be a `const` or a `var`, passed to a function
+or kept in an array, and a `var` one can be given another file, as a `var` function can be
+given another function (7.5):
+
+```go
+var shapes: package = import("geom");
+shapes.area(3, 4)              // 12, from geom
+
+shapes = import("geomFast");   // shapes now leads to the file geomFast
+shapes.area(3, 4)              // 12, from geomFast
+```
+
+The new file has to have the names the code uses through `shapes`, each with the same type, as
+a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
+nothing is looked up while the program runs.
 
 ---
 
@@ -2948,6 +2970,7 @@ passed.
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8) |
 | keeping a local in a function given back | declare it after a `;` in the function's brackets: `(const i: int; var @mine: ^[3]int = @table){ … }` (7.8) |
+| `var p: package = geom;` | `p` leads to the same file: the address is copied, never the file's variables (11.5) |
 
 ### What never changes
 
@@ -2976,7 +2999,7 @@ passed.
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `[bool]int` | a choice array is indexed with a `bool` |
 | `if (count) { … }` where `count` is an `int` | the condition has to be a `bool` |
-| `var geom: package = import("geom");` | a package is always a `const` (11.2) |
+| `shapes = import("other");` where `other` lacks a name the code uses from `shapes` | a package in a `var` can only be given a file with the same names and types (11.5) |
 | two files that import each other | imports can't go round in a circle (11.2) |
 | a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
