@@ -23,6 +23,11 @@ Why each rule is the way it is is in `DECISIONS.md`.
 - `//` starts a comment.
 - `// ERROR` marks a line the compiler rejects.
 - `...` stands for code that's left out.
+- **(filled in)** Each example is its own piece of code. An example can use names from the
+  examples before it, and it can also declare a name again that an earlier example declared.
+  In one real file that second declaration would be an error (2.8).
+- **(filled in)** marks a rule that Claude added, and **(adjusted)** marks one that Claude
+  changed. `FILLED_IN.md` lists them all.
 
 ## Contents
 
@@ -173,6 +178,180 @@ var a: int = 1;
 When a name ends, its value is removed from the stack. If the name owns a value on the
 heap, that value is freed too.
 
+### 2.7 Writing the source
+
+**(filled in)** A source file is plain text in UTF-8, and its file name ends in `.my`.
+
+**Characters.** Outside comments and text, a file uses only the letters, digits and symbols
+of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.1)
+can hold any character.
+
+**Spaces, tabs and line breaks only separate things.** They can go between any two words,
+numbers or symbols, and a statement can run over several lines. A statement ends at its `;`
+(2.5), never at a line break.
+
+**Comments.** `//` starts a comment, and the comment runs to the end of the line. There is
+no other kind of comment.
+
+**Names.** A name starts with a letter or `_`. After that come letters, digits and `_`.
+Case matters, so `point` and `Point` are two different names:
+
+```go
+count   total2   _spare   makePoint   Point      // five names
+2total                                           // ERROR: a name can't start with a digit
+```
+
+**Reserved words.** Seven words belong to the language and are never names:
+
+```
+const   var   return   void   true   false   null
+```
+
+**Built-in names.** The built-in types and functions are ordinary names that are already
+declared when a file starts:
+
+| Built-in names | What they are |
+|---|---|
+| `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64` `float32` `float64` `int` `uint` `float` `bool` `char` `type` `any` `package` | types (3.1) |
+| `convert` `wrap` `unwrap` `import` `print` `read` `join` `exit` | functions (13) |
+
+A name is declared only once (2.8), so a file can't declare any of them again:
+
+```go
+const int: type = int8;        // ERROR: int is already declared
+var print: int = 3;            // ERROR: print is already declared
+```
+
+**Symbols.** These are all the symbols:
+
+```
+=   ;   :   ,   .   (   )   [   ]   {   }
++   -   *   /   %   ==   !=   <   >   <=   >=   &&   ||   !
+^   &   @   ?   "   '   //
+```
+
+Where two symbols could be read as one longer symbol, the longer one is read: `<=` is one
+symbol, not `<` and then `=`. `&&` is always read as one symbol, and where it stands says
+whether it means *and* or two borrow marks (3.2).
+
+How numbers, `char`s and text are written is in 3.2 and 5.1.
+
+### 2.8 A name is declared once
+
+**(filled in)** A name can be seen from its declaration to the end of its block (2.6): in
+that block, and in every block and function body inside it (7.8).
+
+**A name can't be declared where the same name can already be seen.** So a name means one
+thing wherever it is read. This holds for every way of declaring a name: a `const`, a `var`,
+a parameter (7.4), a field in a struct value (9.2), and the built-in names (2.7).
+
+```go
+var count: int = 3;
+var count: int = 4;            // ERROR: count is already declared in this block
+{
+    var count: int = 5;        // ERROR: the count of the outer block can be seen here
+    var inner: int = 1;
+}
+var inner: int = 2;            // fine: the first inner ended at its }
+
+const twice: (int)int = (const count: int){ return count * 2; };   // ERROR: count can be seen here
+const triple: (int)int = (const n: int){ return n * 3; };          // fine
+const square: (int)int = (const n: int){ return n * n; };          // fine: triple's n ended with its body
+```
+
+Two names can be spelled the same when neither can be seen from the other, like the two
+`n`s above. A name behind a `.` (`p.x`, `geom.area`, `a.length`) is found inside the value in
+front of the `.`, so it never clashes with a name declared somewhere else.
+
+**A name is used only below its declaration.** The value of a declaration uses names declared
+above it. There are three exceptions, and each is safe because nothing runs too early:
+
+| Exception | Why it is safe |
+|---|---|
+| a function's body can use any top-level name of its own file (11.4) | the body runs only when the function is called |
+| a function's body can use the function's own name (7.8) | the same reason |
+| a type can use any top-level type of its own file, itself included (4.6) | a type is known before the program runs, so nothing runs at all |
+
+A top-level name can be seen in every function body of its file. So no parameter and no name
+inside a function can be spelled like a top-level name of the same file.
+
+**How a name is found.** The compiler looks for a name in the block where it is used, then
+in each block around it, out to the top level of the file, and last among the built-in names.
+The first rule above means it finds at most one. It never looks in another file: a name from
+another file is always reached through a package, as in `geom.area` (11.2).
+
+### 2.9 Statements
+
+**(filled in)** A block holds statements, and so does the top level of the file you run
+(11.4). There are five kinds:
+
+| Statement | Form | Example |
+|---|---|---|
+| a declaration | `kind name: Type = value;` | `var count: int = 3;` (2.1) |
+| an assignment | `place = value;` | `count = 4;` |
+| a value on its own | `value;` | `countUp();` |
+| a return | `return value;` or `return;` | `return x + y;` (7.1, 7.3) |
+| a block | `{ … }` | a smaller scope (2.6) |
+
+Every statement ends with `;` (2.5), except a block, which ends at its `}`.
+
+**Any value can stand on its own as a statement.** It is worked out, and then it is gone
+(2.6). A call is the usual case. `4;` is allowed too, and does nothing.
+
+**An assignment gives a place a new value.** A place is somewhere a value is held:
+
+| Place | Example | It can be assigned when |
+|---|---|---|
+| a name | `count = 4;` | the name is a `var` (2.3) |
+| an element | `scores[0] = 15;` | the array can be assigned (5.2) |
+| a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
+| a field | `p.x = 5;` | the struct can be assigned (9.3) |
+| what a pointer leads to | `p^ = 6;` | `p` is a `var` heap owner, a `var` borrower or a `var` ownership (8.3, 8.6, 8.9) |
+| an ownership | `@q = @p;` | `q` can be assigned. This is a move (8.9) |
+
+The forms combine, read from left to right: `list^.next^.value = 3;`, `table[0][1] = 12;`,
+`both[0]^ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
+changed through that name.** So the left side of an assignment starts at a `var` name, or at
+a value with no name that is then followed with `^`:
+
+```go
+second(&list^)^.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
+makePoint(1, 2).x = 5;         // ERROR: the struct has no name, so nothing could ever read the 5
+scores.length = 4;             // ERROR: a length never changes (5.5)
+```
+
+**An assignment is a statement, not a value.** It can't be written inside another value:
+
+```go
+a = b = 3;                     // ERROR: b = 3 is a statement, not a value
+```
+
+**An assignment works out its right side first.** Then it finds the place on the left, frees
+what the place owned (8.8), and puts the new value in. A call uses the same order: every
+argument is worked out before any parameter is set (7.2). Values come first, and places
+after.
+
+```go
+var scores: []int = [10, 20, 30];
+var i: int = 0;
+const next: ()int = (){
+    i = i + 1;
+    return i;
+};
+
+scores[i] = next();            // next() runs first and makes i 1, so this sets scores[1] to 1
+```
+
+**Everything else is worked out from left to right:**
+
+| In | The order |
+|---|---|
+| `a + b`, `a < b` and every operator with two sides | the left side, then the right side |
+| `a && b`, `a \|\| b` | the left side, then the right side only when it's needed (3.2) |
+| `[a, b, c]`, a struct value, a map value | the parts in the order they are written. In a map value, each key before its value |
+| `a[i]`, `a[i:j]` | `a`, then `i`, then `j` |
+| `f(a, b)` | `f`, then `a`, then `b`, and then the parameters are set (7.2) |
+
 ---
 
 ## 3. Types
@@ -231,6 +410,48 @@ const letter: char = 'a';
 | `true`, `false` | a `bool` |
 | `'a'` | a `char` |
 
+**(filled in)** The exact forms:
+
+| Kind | Written as | Examples |
+|---|---|---|
+| a whole number in base ten | digits | `42`, `0`, `1000` |
+| a whole number in base sixteen | `0x`, then digits and the letters `a` to `f`, in either case | `0xFF`, `0x1f` |
+| a whole number in base two | `0b`, then `0`s and `1`s | `0b1010` |
+| a number with a decimal point | digits, a point, digits, and then optionally `e` and a power of ten | `9.5`, `3.0`, `1.5e3`, `2.0e-3` |
+| a `char` | one character between two `'`, or one escape | `'a'`, `'\n'` |
+| a text | characters and escapes between two `"` (5.1) | `"Jack"` |
+
+- A number with a decimal point has a digit on both sides of the point: `0.5` and `3.0`,
+  never `.5` or `3.`.
+- `e` multiplies by a power of ten: `1.5e3` is `1500.0`. The `e` can be written `E`, and the
+  power can carry a `+` or a `-`.
+- A number can't run straight into a name: `2total` is an error (2.7).
+- `true` and `false` are the two `bool` values, and `null` is the pointer that points at
+  nothing (8.10). All three are reserved words (2.7).
+
+An escape writes a character that can't be typed between the quotes:
+
+| Escape | The character |
+|---|---|
+| `\n` | new line (number 10) |
+| `\t` | tab (number 9) |
+| `\r` | carriage return (number 13) |
+| `\0` | the character with number 0 |
+| `\\` | `\` |
+| `\'` | `'` |
+| `\"` | `"` |
+| `\x41` | the character whose number is written with two base-sixteen digits: here 65, `'A'` |
+
+A `\` followed by anything else is an error. A `char` is 8 bits (3.1): one byte, holding a
+number from 0 to 255. The characters of ASCII have the numbers 0 to 127. A character outside
+ASCII takes more than one byte in UTF-8, so it doesn't fit in a `char`:
+
+```go
+const e: char = 'é';           // ERROR: é is two bytes, and a char holds one
+```
+
+In a text it is simply two `char`s (5.1).
+
 **A number written in the code takes the type of the place it's written for.** A whole
 number fits any whole-number type it's in range for, and a number with a decimal point
 fits either float type:
@@ -245,6 +466,21 @@ var below: uint8 = -1;         // ERROR: a uint8 is never negative
 var half: int = 2.5;           // ERROR: 2.5 isn't a whole number
 var rate: float = 3;           // ERROR: write 3.0
 ```
+
+**(filled in)** The place a written number takes its type from is the nearest thing around it
+that has a type: the declaration or assignment it's the value of, the parameter it's passed
+to, the `return` it's given back by, the array, pair, map or struct value it's written in, or
+the other side of an operator. The type passes inwards through brackets, through a `-` in
+front and through `+`, `-`, `*`, `/` and `%`:
+
+```go
+var small: int8 = (2 + 3) * 4;     // 2, 3 and 4 are all int8s here
+const isFive: bool = small == 5;   // 5 takes the type of the other side: an int8
+```
+
+**(filled in)** A written number with no place to take a type from is an `int`, or a `float`
+when it has a decimal point: in `4;` the `4` is an `int`, and in `3 > 2` both numbers are
+`int`s.
 
 **A value never changes type by itself.** Once a value has a type, using it as another
 type takes a conversion that you write out (4.4):
@@ -262,6 +498,54 @@ var mixed: int = count + small;                       // ERROR: an int and an in
 var fixed: int = count + convert(int8, int)(small);   // fine
 ```
 
+**(filled in) `/` divides and `%` gives the remainder.** Like `*`, each works on two numbers
+of the same type and gives a number of that type:
+
+| You write | It gives | Examples |
+|---|---|---|
+| `a / b` on whole numbers | how many whole times `b` goes into `a`. The part after the decimal point is dropped, as in a conversion (4.4) | `7 / 2` is `3`, and `-7 / 2` is `-3` |
+| `a % b` on whole numbers | what is left over, `a - (a / b) * b`. It has the sign of `a` | `7 % 2` is `1`, and `-7 % 2` is `-1` |
+| `a / b` on floats | `a` divided by `b` | `7.0 / 2.0` is `3.5` |
+
+`%` works on whole numbers only.
+
+**(filled in) `-` in front of a number gives its negative.** It works on a signed whole
+number or a float, and never on an unsigned number. A `-` in front of a written number is
+part of that number when its type is checked, so `-128` fits in an `int8` although `128`
+doesn't:
+
+```go
+var low: int8 = -128;          // fine: -128 is in range for an int8
+var flipped: int = -count;     // the negative of count
+var up: int = -(count - 10);   // brackets first, then the -
+var off: uint8 = -level;       // ERROR: level is a uint8, and a uint8 is never negative
+```
+
+**(filled in) A result always fits its type.** `+`, `-`, `*`, `/`, `%` and a `-` in front
+give a number of the type that went in. When the true answer doesn't fit in that type, the
+program fails while it runs (11.7), the same as a conversion that doesn't fit (4.4). A number
+never wraps around, and it never turns into another type.
+
+| Line | Fails while running when |
+|---|---|
+| `a + b`, `a - b`, `a * b`, `-a` | the answer is outside the range of the type |
+| `a / b`, `a % b` on whole numbers | `b` is 0, or the answer is outside the range: `-128 / -1` in `int8`s |
+| any of them on floats | the answer is too big for the type, or isn't a number at all: `1.0 / 0.0`, `0.0 / 0.0` |
+
+So a float is always an ordinary number: there is no infinity and no "not a number" value,
+and dividing by `0.0` fails like dividing by `0`. Floats follow the IEEE 754 standard that
+processors use: a `float32` is its 32-bit format and a `float64` its 64-bit format. An answer
+that can't be held exactly is rounded to the nearest value that can, and one too small to
+tell from zero becomes zero.
+
+The compiler makes the check itself where it already knows the answer: when every number is
+written in the code, and when a whole number is divided by a written `0`:
+
+```go
+var over: int8 = 100 + 100;    // ERROR: 200 doesn't fit in an int8
+var none: int = count / 0;     // ERROR: division by zero
+```
+
 **Comparing two values of the same type gives a `bool`:**
 
 | Operator | `true` when |
@@ -277,6 +561,21 @@ var fixed: int = count + convert(int8, int)(small);   // fine
 const isBig: bool = count > 10;
 const isFive: bool = small == 5;       // 5 is an int8 here
 const wrong: bool = count == small;    // ERROR: an int and an int8
+```
+
+**(filled in)** Which types each comparison works on:
+
+| Operators | Work on |
+|---|---|
+| `==` `!=` | two values of the same type, whatever the type. What "equal" means for each type is in 3.7 |
+| `<` `>` `<=` `>=` | two numbers of the same type, or two `char`s, which compare by their numbers |
+
+A comparison gives a `bool`, and a `bool` has no order, so comparisons don't chain:
+
+```go
+const between: bool = 0 < count < 10;         // ERROR: 0 < count is a bool, and < doesn't work on a bool
+const inside: bool = 0 < count && count < 10; // fine
+const early: bool = 'a' < 'b';                // true: 97 is less than 98
 ```
 
 **`&&`, `||` and `!` work on `bool`s and give a `bool`:**
@@ -311,8 +610,8 @@ Each row of this table goes before the rows below it:
 | Step | What | Examples |
 |---|---|---|
 | 1 | what is behind a value: following, indexing, calling, a field (8.2) | `p^` `a[0]` `f(1)` `pt.x` |
-| 2 | what is in front of a value: `!` and the marks (8.2) | `!ready` `^v` `&x` `@x` |
-| 3 | `*` | `limit * 2` |
+| 2 | what is in front of a value: `!`, `-` and the marks (8.2) **(filled in: `-`)** | `!ready` `-count` `^v` `&x` `@x` |
+| 3 | `*` `/` `%` **(filled in: `/` and `%`)** | `limit * 2` `total / 2` |
 | 4 | `+` `-` | `count + 1` |
 | 5 | the comparisons | `==` `!=` `<` `>` `<=` `>=` |
 | 6 | `&&` | `a && b` |
@@ -328,6 +627,15 @@ count + 1 > limit * 2 && !ready
 a || b && c            // a, or both of b and c
 10 - 4 - 3             // 3: 10 - 4 goes first
 !seen[4]               // the opposite of seen[4]: the index goes first
+```
+
+**(filled in)** A `-` between two values subtracts. A `-` where a value starts is the minus in
+front:
+
+```go
+a - -b                 // a, minus the negative of b
+-a * b                 // the negative of a, times b: what is in front goes before *
+10 / 4 * 2             // 4: 10 / 4 is 2, then 2 * 2
 ```
 
 **Brackets change the order.** What is inside a pair of brackets is worked out first:
@@ -447,6 +755,125 @@ TypeList  = Type { "," Type }
 A function type always ends with its return type. A function that returns nothing ends
 with `void`: `(int)void` takes an int and returns nothing, and `()void` takes nothing and
 returns nothing.
+
+**(filled in)** Two more lines complete it:
+
+```
+BasicType = NAME { "." NAME }                 (a type's name, or one reached through a package: geom.Box)
+NUMBER    = a whole number written in the code (3.2)
+```
+
+A type is written with these forms wherever a type is expected: after the `:` of a
+declaration, a parameter or a field, and inside another type. The full grammar of the
+language is in Appendix A.
+
+**(filled in)** Two types are the same type when they are the same once every type name is
+replaced by what it names (4.1). Only the shape counts: the names of parameters and fields,
+and `const` and `var`, are not part of a type (7.4, 9.9).
+
+### 3.7 What "equal" means
+
+**(filled in) `==` compares exactly what `=` copies (8.8).** So a copy is always equal to the
+value it was copied from, and that one rule says what "equal" means for every type:
+
+| Type | `=` copies | So two values are equal when |
+|---|---|---|
+| a number, a `bool`, a `char` | the value | they are the same value |
+| an array `[n]T` or `[]T`, a text | every element | they have the same length, and every element is equal |
+| a pair `?T` | both values | both values are equal |
+| a struct | every field (8.8) | every field is equal, field by field |
+| a map | every key and its value | they have the same keys, and the values under each key are equal |
+| a heap owner `^T` | the value on the heap | the values they own are equal, or both are `null` |
+| a borrower `&T`, an ownership `@T` | the address | they point at the same place, or both are `null`. Two `&[]T` also need the same length |
+| a function | its code address, and what it keeps (7.7) | they are the same code and keep the same things |
+| a `type` | the type | they are the same type |
+| an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
+| a `package` | the file's variables (11.5) | they are the same file, and every variable is equal |
+
+`!=` is the opposite of `==`. Comparing copies nothing and changes nothing.
+
+```go
+var a: [3]int = [1, 2, 3];
+var b: [3]int = a;
+a == b                         // true: a copy equals its original
+b[0] = 9;
+a == b                         // false: the first elements differ
+
+var p: ^int = ^5;
+var q: ^int = p;               // q owns its own heap int, holding 5
+p == q                         // true: = copied the value, so == compares the values
+var r: &int = &p^;
+var s: &int = &q^;
+r == s                         // false: two different places
+r^ == s^                       // true: both places hold 5
+
+"Jack" == "Jack"               // true: two texts with the same chars
+p == null                      // false: p owns a value
+```
+
+- The two sides always have the same type (3.2). A `[3]int` and a `[4]int` are different
+  types, so comparing them is an error. Two `[]int` of different lengths are the same type,
+  and they are simply not equal.
+- A `null` takes the pointer type of the other side.
+- Two floats are equal when they are the same number. Every float is an ordinary number
+  (3.2), so a float always equals itself.
+- Comparing two big values looks at every part, the way `=` copies every part. To ask
+  whether two borrowers lead to equal values, compare what they lead to: `r^ == s^`.
+
+### 3.8 The type of every value
+
+**(filled in)** The compiler gives every value a type before the program runs. This table
+says how, form by form. "Its place" is where the value is written: what it is declared as,
+assigned to, passed to, returned as, or held in (3.2).
+
+| Form | What it needs | Its type |
+|---|---|---|
+| a written number | to fit the type | the number type of its place. With no place: `int`, or `float` with a decimal point (3.2) |
+| `true`, `false` | | `bool` |
+| `'a'` | | `char` |
+| `null` | a place | the `^T`, `&T` or `@T` of its place (8.10) |
+| `[a, b, c]`, `"abc"` | every element is a `T` | the `[n]T` or `[]T` of its place, or its `?T` when there are two elements. With no place: `[n]T`, a fixed array of what the elements are (5.1) |
+| `{ x: int = 1; y: int = 2; }` | each value has the type written in its field | the struct type with those field types, in order (9.2) |
+| `{k1: v1, k2: v2}` | every key is a `K`, every value a `V` | the `{K}V` of its place. With no place: `K` and `V` are what the keys and values are (6.1) |
+| `(const x: P1, var y: P2){ … }` | every `return` gives an `R` | `(P1, P2)R`, where `R` is the return type of its place. With no place: `R` is what its `return`s give, or `void` (7.1) |
+| a name | | the type it was declared with |
+| a type, such as `int`, `[3]int` or `Point` | | `type` (4.1) |
+| `(a)` | `a` isn't a type | the type of `a` |
+| `-a` | `a` is a signed whole number or a float | the type of `a` |
+| `!a` | `a` is a `bool` | `bool` |
+| `a + b`, `a - b`, `a * b`, `a / b` | two numbers of the same type | that type |
+| `a % b` | two whole numbers of the same type | that type |
+| `a == b`, `a != b` | two values of the same type | `bool` |
+| `a < b`, `a > b`, `a <= b`, `a >= b` | two numbers of the same type, or two `char`s | `bool` |
+| `a && b`, `a \|\| b` | two `bool`s | `bool` |
+| `a[i]` | `a` is an `[n]T` or `[]T`, and `i` is an `int` | `T` (5.2) |
+| `a[i]` | `a` is a `?T`, and `i` is a `bool` | `T` (5.8) |
+| `a[i]` | `a` is a `{K}V`, and `i` is a `K` | `V` (6.2) |
+| `a[i:j]` | `a` is an `[n]T` or `[]T`. `i` and `j` are `int`s, and either can be left out | `[]T`, a copy. With `&` in front: `&[]T`, a slice (5.9) |
+| `a.length` | `a` is an array or a map | `int` (5.5, 6.3) |
+| `s.x` | `s` is a struct, and `x` names one of its fields | the type of that field (9.9) |
+| `g.x` | `g` is a `package`, and `x` is a top-level name of its file | the type of that name (11.2) |
+| `x.T` | `x` is an `any` | `type` (4.5) |
+| `f(a, b)` | `f` is a `(P1, P2)R`, `a` is a `P1` and `b` is a `P2` | `R` (7.2) |
+| `^v` | `v` is a `T` | `^T` (8.3) |
+| `&x` | `x` is a `T` | `&T` (8.4) |
+| `@x` | `x` is a `T` | `@T` (8.9) |
+| `p^` | `p` is a `^T`, an `&T` or an `@T` | `T` (8.2) |
+
+Three rules go with the table:
+
+- **Only a value written on the spot takes its type from its place:** a number, a `null`, an
+  array or text value, a map value and a function value. Every other value already has a type,
+  and it has to be exactly the type its place asks for (3.2).
+- **A value with no place has to say enough by itself.** `[]` and `{}` hold nothing that says
+  what `T`, `K` or `V` is, and a `null` doesn't say what it points at, so each needs a place.
+- **A call to a function that returns nothing has no value.** It can only stand on its own as
+  a statement (2.9):
+
+```go
+show(5);                       // fine
+var x: int = show(5);          // ERROR: show returns nothing
+```
 
 ---
 
