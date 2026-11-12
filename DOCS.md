@@ -1549,6 +1549,10 @@ primes[true]                           // ERROR: a [3] array is indexed with a n
 
 A pair always has both values, so a lookup never fails.
 
+**(filled in)** The two values of a pair are held like the elements of an array (5.7). So a
+value of a `var` pair can be given a new value, `sizes[true] = 12;`, and it can be borrowed,
+`&sizes[big]`.
+
 **(filled in)** A pair value is written with exactly two values, and a pair has no `.length`,
 because the answer is always two:
 
@@ -4152,8 +4156,9 @@ const onTime: int = readLate();    // fine: late is set up by now
 
 A package value holds the address of the file's code, the way a function value is the address
 of its code (7.7), and its own copy of the file's variables. Copying a package value copies its
-variables (8.8), and the code stays one address. Functions and `const`s never change, so they
-are never really copied.
+variables (8.8), and the code stays one address. **(adjusted)** Function values written out
+and types never change and need nothing worked out, so they are never copied. A `const` whose
+value is worked out when the file is set up is held with the variables (see below).
 
 So a package can be held like a function. It can be a `const` or a `var`, passed to a function
 or kept in an array, and a `var` one can be given another file, as a `var` function can be
@@ -4171,7 +4176,7 @@ The new file has to have the names the code uses through `shapes`, each with the
 a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
 nothing is looked up while the program runs.
 
-**(adjusted)** This is how that works underneath. For each file the compiler writes a table
+**(filled in)** This is how that works underneath. For each file the compiler writes a table
 into the program, with one entry for each of the file's top-level names. A package value holds
 the address of its file's table, and then its own copy of everything in the file that has to
 be worked out: every `var`, every `const` that isn't ready from the start (11.4), and the kept
