@@ -2437,6 +2437,22 @@ var view: &[1000]int = &big^;      // fine: view ends no later than big
 
 An ownership (8.9) holds a variable's address too, so the same rule applies to it.
 
+**(filled in) A value that holds a borrower follows the rule for it.** A struct, an array, a
+pair, a map or an `any` that has a borrower, an ownership or a function inside it can't
+outlive what that part borrows or uses. It is the field-by-field rule again (8.8): the
+lifetime rules for a whole value are the rules for each of its parts.
+
+```go
+var both: [2]&int = [&left, &right];   // fine: both ends no later than left and right
+{
+    var inner: int = 5;
+    both[0] = &inner;                  // ERROR: inner ends at this }, but both is still there after it
+}
+```
+
+The compiler can't see inside an `any` (4.5). So an `any` counts as holding everything that
+the value wrapped into it held.
+
 A value on the heap can also be made to end before its owner's `}`. Rule 8.12 covers that.
 
 ### 8.6 `const`, `var` and borrowing
@@ -2464,6 +2480,25 @@ look = &limit;             // ERROR: look is const, so it always borrows count
 
 A parameter works the same way: `(const v: &[]int)` borrows an array to read it, and
 `(var x: &int)` borrows a value to change it.
+
+**(adjusted) A `const` is lent only where the compiler can see that it is only read.** That
+is a `const` borrower, or a `const` parameter of a function called by its own name. A function
+called through a variable, an array or a map shows only its type, and the type doesn't say
+whether a `&T` parameter is read or changed (7.4). There every `&` argument counts as one that
+may change (8.12), so lending a `const` is an error:
+
+```go
+const peek: (&int)int = (const x: &int){ return x^; };
+const fs: [1](&int)int = [peek];
+
+peek(&limit)               // fine: the compiler sees that peek only reads
+fs[0](&limit)              // ERROR: limit is const, and the compiler can't see which function runs
+fs[0](&count)              // fine: count is a var
+```
+
+**(filled in)** An ownership follows the same table: a `const` ownership can only read, and
+changing or taking through an ownership needs a `var` one (8.9). So one rule covers every
+`const`: what a `const` name reaches can't be changed through that name (2.9).
 
 ### 8.7 Converting between the three
 
@@ -2503,6 +2538,10 @@ never changed.
 | `^T` | its own copy, in a new place on the heap |
 | `&T` | a borrower of the same value: a borrower owns nothing, so there is nothing to copy |
 | `@T` | an ownership of the same variable: it holds an address, like a borrower, and nothing moves |
+| a function **(filled in)** | the same code, using the same variables and kept parameters (7.8). A heap value the function owns is copied |
+| a `type` **(filled in)** | the same type |
+| an `any` **(filled in)** | its own copy of the type and the value inside |
+| a `package` **(filled in)** | its own copy of the file's variables (11.5) |
 
 ```go
 var a: int = 3;
@@ -2605,6 +2644,9 @@ o^                         // x itself: 3
 
 @list^.next                // the ownership of a field: an @^Node (8.14)
 ```
+
+**(filled in)** A map entry is a holder like an array element (6.4), so `@` works on it too:
+`@seen[4]` is the ownership of that entry.
 
 `@` in front of a value made on the spot hands that value straight over. Nothing is left
 `null`, because nothing else held it:
@@ -2772,6 +2814,16 @@ A copy of a `null` owner is `null` as well, because there is nothing to copy.
 
 A borrower can be `null` too, meaning it borrows nothing yet: `var b: &int = null;`.
 Following it fails in the same way.
+
+**(filled in)** `null` is "no address" (8.18), so it fits all three pointer types: a `^T`, an
+`&T` and an `@T`. Following any of them when it is `null` fails while the program runs
+(11.7). Nothing else can be `null`:
+
+```go
+var h: @^int = null;       // fine: an ownership of nothing yet
+var n: int = null;         // ERROR: null is a pointer, and an int isn't one
+count == null              // ERROR: count is an int
+```
 
 ### 8.11 When a heap value is freed
 
@@ -3066,6 +3118,14 @@ var gone: &int = firstValue(&makeNode(1)^);   // ERROR: the new node is freed at
                                               // this line, but gone would still be there
 ```
 
+**(filled in) A result that can hold a pointer or a function counts like one.** The caller
+sees only the type of a result. When that type has a `&` or an `@` in it, or is an `any`, the
+result counts like a borrower that came back: it comes from everything that was lent to the
+call. When the type has a function type in it, or is an `any`, the result also counts like a
+function given back (7.8): it comes from every argument except those handed over with `@`,
+and it can't outlive the block of the call. A result with none of these in its type is a
+plain copy, and it lives as long as the holder it is put in.
+
 ### 8.14 A linked list, step by step
 
 A node can't hold another node directly, because it would have no fixed size. It holds a
@@ -3229,12 +3289,21 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var addTen: (int)int = makeAdder(10);` | the 10 dies at the end of the line, before the function made from it (7.8) |
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
+| `fs[0](&limit)` where `limit` is `const` **(adjusted)** | a `const` can't be lent to a function the compiler can't see (8.6) |
+| `var @t: ^int = h;` where `h` is a `const` ownership **(filled in)** | a `const` ownership can only read (8.6) |
+| `var n: int = null;` **(filled in)** | `null` fits only a `^T`, an `&T` or an `@T` (8.10) |
+| `both[0] = &inner;` where `both` outlives `inner` **(filled in)** | a value that holds a borrower can't outlive what the borrower borrows (8.5) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` **(adjusted)** | a function given back can't outlive the block its call was written in (7.8) |
 
 **Checked while the program runs:**
 
 | Line | Fails when |
 |---|---|
 | `p^`, for a heap owner or a borrower | `p` is `null` |
+| `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
+| `^v` **(filled in)** | there is no room left on the heap (11.7) |
+
+Every check the compiler makes, and every check made while running, is listed in Appendix B.
 
 ### 8.17 What the compiler doesn't catch, and what isn't settled
 
@@ -3243,22 +3312,24 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 - **A borrower kept inside a heap value** (the `prev` in 8.15) whose target is removed
   first. It isn't a variable, so the compiler can't see when it will be used. Removing or
   replacing a node that another node's `prev` still borrows is the programmer's job.
+  **(filled in)** Following such a borrower afterwards is not checked while running either.
+  It reads or changes whatever is at the old address, and what the program does then isn't
+  defined. This is the one mistake that neither the compiler nor a check while running
+  catches.
 - **A copy of a value whose borrowers point back into itself,** like the `prev` list in
   8.15. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
   original until they are set again.
-- **A borrower of a `const` given to a function that is held in a variable.** A function's
-  type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
-  (7.4). When a function is called by its own name the compiler looks at the function. When
-  it is called through a variable, an array or a map, as in `fs[i](&limit)`, only the type is
-  known.
+- **(adjusted)** A third case used to be listed here: a borrower of a `const` given to a
+  function that is held in a variable, as in `fs[i](&limit)`. The compiler now rejects that
+  line (8.6), by the rule 8.12 already uses for such calls: every `&` argument counts as one
+  that may change.
 
 Rule 8.12 also turns away some code that is safe, such as two borrowers returned from the
 same list when one of them is used to change the list. That code has to be reordered.
 
-Not settled yet:
-
-- **Two functions given back by one call that use the same `var` parameter,** for example in
-  a struct. Whether they share the kept parameter or each keep their own (7.8).
+**(filled in)** Nothing is left unsettled. The one open point was two functions given back by
+one call that use the same `var` parameter, for example in a struct. They share it: one call
+has one set of parameters (7.8).
 
 ### 8.18 Underneath: addresses
 
@@ -3268,7 +3339,7 @@ at:
 | | `^T` | `&T` | `@T` |
 |---|---|---|---|
 | holds | an address | an address | an address |
-| can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap | a variable, a field or an element |
+| can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap | a variable, a field, an element or a map entry **(filled in: a map entry)** |
 | frees what it points at | yes | never | never, but the value can be taken out through it |
 | made with | `^v` | `&x` | `@x` |
 | followed with | `p^` | `p^` | `p^` |
