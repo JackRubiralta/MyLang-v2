@@ -344,7 +344,7 @@ calls (7.2). Where a `(` stands tells them apart:
 | A `(` … | Starts | Example |
 |---|---|---|
 | right after a value | a call | `f(1)`, `first(bool)([true, false])` |
-| holding parameters, each with `const` or `var`, or empty, and maybe a `;` and kept names (7.8), then followed by `{` | a function value | `(const x: int){ … }` |
+| holding parameters, each with `const` or `var`, or empty and followed by `{` | a function value | `(const x: int){ … }` |
 | holding types, or nothing, then a return type | a function type | `(int, int)int`, `()void` |
 | holding one value that isn't a type | a group | `(count + 1) * 2` |
 
@@ -1211,50 +1211,31 @@ var look: (int)int = makeLookup(@^[10, 20, 30]);  // the array is made on the sp
 look(2)                // 30                       // straight over
 ```
 
-**To keep a local, declare what the function keeps after a `;` in its brackets.** After the
-parameters, a `;` starts the names the function keeps. Each is an ordinary declaration with a
-value (2.1). It runs once, when the function is made, not at each call:
-
-```go
-const makeLookup: ()(int)int = (){
-    var table: ^[3]int = ^[10, 20, 30];               // a local, on the heap (8.3)
-    return (const i: int; var @mine: ^[3]int = @table){
-        return mine^[i];                              // mine took table's array as the
-    };                                                // function was made; table is left null
-};
-
-var look: (int)int = makeLookup();
-look(0)                // 10
-look(2)                // 30
-```
-
-- **A kept name is like a parameter filled in when the function is made.** The `= value` is
-  what tells them apart: a parameter never has one, because the call gives it.
-- **The type doesn't show it.** The function above is still a `(int)int`, because a call
-  doesn't give the kept names. A function value is still two addresses (7.7).
-- **The declaration says how the value is kept.** `var k: int = step` keeps a copy, `const b:
-  &int = &x` keeps a borrow, and `var @mine: ^[3]int = @table` takes the value over. A kept
-  borrow ties the function to what it borrows (8.5): it can't outlive `x`.
-- **A kept name lives as long as the function.** A `var` one can change, and the change stays
-  for the next call. Copying the function copies its kept names (8.8), and a kept heap value is
-  freed when the function ends (8.11).
-- **The body still runs at each call, from the top.** Nothing in it runs early.
-
-A helper whose parameter takes the value does the same job without the `;`:
+**To keep a local, put it on the heap and hand it to a parameter.** A local is never kept, but
+a parameter is. So move the local into a parameter with `@` (8.13), through a function that
+gives back the function that uses it:
 
 ```go
 const countFrom: (@^int)()int = (var @count: ^int){
     return (){
         count^ = count^ + 1;
         return count^;
-    };
+    };                                 // the function given back keeps count
 };
 
 const newCounter: ()()int = (){
-    var total: ^int = ^0;
-    return countFrom(@total);          // total is handed over and left null
-};
+    var total: ^int = ^0;              // a local, declared on the heap (8.3)
+    return countFrom(@total);          // total is handed over and left null; its heap int goes
+};                                     // with the function
+
+var tally: ()int = newCounter();
+tally()                        // 1
+tally()                        // 2
 ```
+
+Nothing is copied: the heap int made in `newCounter` is the one `tally` counts with. Every
+piece is a rule from section 8: `^0` makes the heap value (8.3), and `@total` hands it to a
+parameter that asks for an ownership (8.13).
 
 A kept parameter is kept the way it was declared (7.4). A copy stays the function's own. A
 borrowed parameter (`&T`) is still a borrow, so the function can't outlive what the caller lent
@@ -1262,9 +1243,8 @@ borrowed parameter (`&T`) is still a borrow, so the function can't outlive what 
 value is freed when the function given back ends (8.11). `first` (4.3) keeps its `T` the same
 way.
 
-The rule is only for a function the call gives back with `return`. A local is never kept by
-using it in the body: returning a function that does that is an error, as above. It is kept only
-when it is declared after the `;`.
+The rule is only for a function the call gives back with `return`. A local is never kept:
+returning a function that uses one is an error, as above.
 
 Inside its own body, a function's name is the function itself, so a function made inside
 another can call itself (10.4).
@@ -2969,7 +2949,7 @@ passed.
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8) |
-| keeping a local in a function given back | declare it after a `;` in the function's brackets: `(const i: int; var @mine: ^[3]int = @table){ … }` (7.8) |
+| keeping a local in a function given back | put it on the heap and hand it to a parameter with `@`: `return countFrom(@total);` (7.8) |
 | `var p: package = geom;` | `p` leads to the same file: the address is copied, never the file's variables (11.5) |
 
 ### What never changes

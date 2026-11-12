@@ -205,7 +205,7 @@ What follows from it:
 | A function given back keeps the parameters it uses | `makeAdder(step)` "truly should work": the parameters are what the caller handed in |
 | It can't outlive the arguments of the call | "If the parameter that's put into makeAdder dies before what makeAdder returns, the compiler raises an error." It is the same rule as for a borrower that comes back |
 | An argument handed over with `@` doesn't count | The call took the value and the caller's variable is `null`, so nothing is left to die **(filled in)** |
-| A local is kept by declaring it after a `;` in the function's brackets: `(const i: int; var @mine: ^[3]int = @table){ … }` | It is an ordinary declaration that runs once, when the function is made. You can see exactly what the function keeps and how: a copy, a borrow, or a move. C++ (`[mine = std::move(table)]`) and Swift capture lists work the same way |
+| A local is kept by putting it on the heap and handing it with `@` to a parameter of a function that gives back the function using it | It needs nothing new: `^` puts the value on the heap (8.3), and a parameter that asks for an ownership takes it (8.13). A function given back keeps its parameters |
 | Every function value is two addresses: its code, and what it keeps | Every function of a type has the same size, so functions go in arrays and maps |
 
 ---
