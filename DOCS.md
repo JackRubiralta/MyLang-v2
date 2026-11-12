@@ -2311,9 +2311,6 @@ Not settled yet:
 
 - **Two functions given back by one call that use the same `var` parameter,** for example in
   a struct. Whether they share the kept parameter or each keep their own (7.8).
-- **A function inside a struct, after the struct is copied** (9.6). The function borrows the
-  fields of the struct it was made in, so the copy's function still changes the original's
-  fields.
 
 ### 8.18 Underneath: addresses
 
@@ -2458,6 +2455,16 @@ var counter: {int, (int)void} = {
 counter.add(5);                // counter.count is now 5
 counter.add(2);                // counter.count is now 7
 ```
+
+**A function inside a struct uses the fields of the copy it is called through.** After a copy,
+each copy's functions change its own fields:
+
+```go
+var other: {int, (int)void} = counter;     // a full copy, add included
+other.add(1);                  // other.count is now 8, and counter.count is still 7
+```
+
+Files work the same way (11.3).
 
 ### 9.7 A struct is copied, like every value
 
@@ -2745,17 +2752,41 @@ geom.made = geom.made + 1;             // geom's variable changes
 - **A package can be a `const` or a `var`,** like a function (11.5).
 - **The name in `import` is the file's path from the importing file's folder:**
   `import("shapes/geom")`. A folder only organises files.
-- **Importing the same file twice gives the same package.** Its variables exist once, not once
-  for each import.
-- **Two files can't import each other,** directly or through other files.
+- **Each import makes a new copy of the file's variables,** because every declaration makes a
+  new value (2.4). Importing the same file twice gives two packages with separate variables. To
+  share one copy, borrow it: `&geom` (8.4).
+- **Two files can't import each other,** directly or through other files: each import would
+  make a new copy, forever.
 
 ### 11.3 What a file can use from another
 
 Everything at the top level of an imported file can be used: its types, functions and
-variables. A top-level variable of any file lasts as long as the program (2.6), so a function in
-any file can use it (7.8), and a call that changes it counts as changing it (8.12).
+variables. A package's variables live as long as the package value that holds them, and a call
+that changes them counts as changing them (8.12).
 
-### 11.4 Order, and where statements go
+**A function in a file uses the variables of the copy it is called through,** the same rule as
+for a function inside a struct (9.6):
+
+```go
+// the file counter
+var count: int = 0;
+const bump: ()void = (){
+    count = count + 1;
+};
+```
+
+```go
+// the file you run
+const a: package = import("counter");
+const b: package = import("counter");
+
+a.bump();
+a.bump();
+a.count                // 2
+b.count                // 0: b has its own count
+```
+
+### 11.4 Order, where statements go, and `main`
 
 - **A function's body can use any top-level name of its own file,** wherever in the file it is
   declared. A body runs only when the function is called, so two functions can call each
@@ -2766,14 +2797,31 @@ any file can use it (7.8), and a call that changes it counts as changing it (8.1
 
 ```go
 // the file geom
-area(1, 1);            // ERROR: main imports geom, so geom holds only declarations
+area(1, 1);            // ERROR: geom is imported, so it holds only declarations
 ```
+
+**It is good practice to put what the program does in a `const main: ()int`.** It isn't required,
+and code can still go outside it:
+
+```go
+// the file you run
+const geom: package = import("geom");
+
+const main: ()int = (){
+    const size: int = geom.area(3, 4);
+    return 0;
+};
+```
+
+When the file you run declares `main`, the program runs that file's statements from the top,
+then calls `main`. The `int` it returns is the program's result, `0` when everything went well.
 
 ### 11.5 Underneath: a package value is an address
 
-A package value is the address of the file's names, the way a function value is the address of
-its code (7.7). Copying a package value copies the address. The file's variables are never
-copied: there is one of each, however many names lead to the file.
+A package value holds the address of the file's code, the way a function value is the address
+of its code (7.7), and its own copy of the file's variables. Copying a package value copies its
+variables (8.8), and the code stays one address. Functions and `const`s never change, so they
+are never really copied.
 
 So a package can be held like a function. It can be a `const` or a `var`, passed to a function
 or kept in an array, and a `var` one can be given another file, as a `var` function can be
@@ -2783,7 +2831,7 @@ given another function (7.5):
 var shapes: package = import("geom");
 shapes.area(3, 4)              // 12, from geom
 
-shapes = import("geomFast");   // shapes now leads to the file geomFast
+shapes = import("geomFast");   // shapes now holds a new copy of the file geomFast
 shapes.area(3, 4)              // 12, from geomFast
 ```
 
@@ -2940,7 +2988,8 @@ passed.
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8) |
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
-| `var p: package = geom;` | `p` leads to the same file: the address is copied, never the file's variables (11.5) |
+| `var p: package = geom;` | `p` gets its own copy of `geom`'s variables; the code isn't copied (11.5) |
+| `import("geom")` twice | two packages, each with its own variables (11.2) |
 
 ### What never changes
 

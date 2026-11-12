@@ -105,6 +105,7 @@ call, call, index.
 | Fields carry no `const` or `var` of their own; they follow the struct's | One word on the declaration says it for the whole block |
 | A struct variable holds its whole block | Copying it copies the block, so nothing can be left pointing at a removed block |
 | Functions inside a struct use its fields directly, with no `this` | The fields are in the struct's scope |
+| A function inside a struct or a file uses the copy it is called through | After `var other = counter;`, `other.add(1)` changes `other`, not `counter`: a copy is complete, functions included |
 
 ---
 
@@ -240,7 +241,9 @@ What follows from it:
 | `const geom: package = import("geom");` | The import is an ordinary declaration in the one shape every name uses. `import` is a built-in like `convert`, and `package` is a built-in type like `type` and `any`. Zig works the same way |
 | Everything at a file's top level can be used from outside, for now | The simplest start |
 | Statements that run go only in the file you run; an imported file holds only declarations | Nothing runs because a file was imported, so the run order never depends on imports |
+| Good practice, not required: a `const main: ()int` in the file you run, and code can still go outside it | Jack: "it's like good practice to have a const main function, which returns an int. But you can have code outside of that." When it is there, the program runs the file's statements from the top, then calls `main`, and its `int` is the program's result **(filled in)** |
 | A package can be a `const` or a `var` | Jack: underneath it is like a function pointer. A package value is the address of the file's names, so it is held like a function, and a `var` one can be given another file |
 | A `var` package can only be given a file with the same names and types the code uses | The same as a function in a `var` keeping its type, so the compiler still checks every name **(filled in)** |
-| Importing the same file twice gives the same package; two files can't import each other | A file's variables exist once, and every file's names are ready before a file that imports it **(filled in)** |
+| Each import makes a new copy of the file's variables | Jack: importing a file twice should make two copies. Every declaration makes a new value (2.4), and sharing happens only where `&` says so: to share one copy, borrow it |
+| Two files can't import each other | Each import would make a new copy, forever **(filled in)** |
 | A function's body can use any top-level name of its own file, wherever it is declared | Two functions in one file can call each other **(filled in)** |
