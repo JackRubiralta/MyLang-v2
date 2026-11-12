@@ -188,7 +188,7 @@ heap, that value is freed too.
 **(filled in)** A source file is plain text in UTF-8, and its file name ends in `.my`.
 
 **Characters.** Outside comments and text, a file uses only the letters, digits and symbols
-of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.1)
+of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.10)
 can hold any character.
 
 **Spaces, tabs and line breaks only separate things.** They can go between any two words,
@@ -239,7 +239,7 @@ Where two symbols could be read as one longer symbol, the longer one is read: `<
 symbol, not `<` and then `=`. `&&` is always read as one symbol, and where it stands says
 whether it means *and* or two borrow marks (3.2).
 
-How numbers, `char`s and text are written is in 3.2 and 5.1.
+How numbers, `char`s and text are written is in 3.2 and 5.10.
 
 ### 2.8 A name is declared once
 
@@ -428,7 +428,7 @@ const letter: char = 'a';
 | a whole number in base two | `0b`, then `0`s and `1`s | `0b1010` |
 | a number with a decimal point | digits, a point, digits, and then optionally `e` and a power of ten | `9.5`, `3.0`, `1.5e3`, `2.0e-3` |
 | a `char` | one character between two `'`, or one escape | `'a'`, `'\n'` |
-| a text | characters and escapes between two `"` (5.1) | `"Jack"` |
+| a text | characters and escapes between two `"` (5.10) | `"Jack"` |
 
 - A number with a decimal point has a digit on both sides of the point: `0.5` and `3.0`,
   never `.5` or `3.`.
@@ -459,7 +459,7 @@ ASCII takes more than one byte in UTF-8, so it doesn't fit in a `char`:
 const e: char = 'é';           // ERROR: é is two bytes, and a char holds one
 ```
 
-In a text it is simply two `char`s (5.1).
+In a text it is simply two `char`s (5.10).
 
 **A number written in the code takes the type of the place it's written for.** A whole
 number fits any whole-number type it's in range for, and a number with a decimal point
@@ -483,8 +483,8 @@ the other side of an operator. The type passes inwards through brackets, through
 front and through `+`, `-`, `*`, `/` and `%`:
 
 ```go
-var small: int8 = (2 + 3) * 4;     // 2, 3 and 4 are all int8s here
-const isFive: bool = small == 5;   // 5 takes the type of the other side: an int8
+var tiny: int8 = (2 + 3) * 4;      // 2, 3 and 4 are all int8s here
+const low: bool = tiny < 100;      // 100 takes the type of the other side: an int8
 ```
 
 **(filled in)** A written number with no place to take a type from is an `int`, or a `float`
