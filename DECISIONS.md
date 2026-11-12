@@ -101,6 +101,14 @@ call, call, index.
 | A function that returns nothing ends in `void` | Every function type ends with its return type, so in a type a `(` always starts a function type |
 | Two types are the same when they have the same shape. Names of parameters and fields, and `const` and `var`, are not part of a type | "A name for a type is the same type under another name" (DOCS 4.1), and a type lists only types (4.4). *Principle: one rule.* **(filled in)** |
 | Only a value written on the spot takes its type from its place: a number, `null`, an array or text, a map value, a function value. With no place a number is an `int` or a `float` | That is how `5` and `[3, 10]` already work (DOCS 3.2, 5.8). Every other value has its type already and never changes it. The everyday names are the defaults. *Principle: strict types.* **(filled in)** |
+| A function type names the types it is given with names that aren't declared: the first such name is its first `type` parameter, and so on. The name itself is not part of the type | Jack's own example writes `(type)([]T)T`, so the type has to stand without the value beside it: it can then be a parameter's type or a named type. Weighed: taking the names from the function value, which leaves a bare type with nothing to name; naming the parameter inside the type, which the rule "a type lists only types" (4.4) excludes; this rule. *Principles: reuse before adding; every value follows the same rules.* **(filled in)** |
+| A generic function is checked once, and a `T` can be used only in the ways every type allows | The function's type then says everything about it, so a generic function can be held in a variable and still be checked before the program runs. To add two `T`s, the caller passes the function that adds them. Weighed: checking again for each type handed in, which only works when the compiler can see which function is called. *Principles: every value follows the same rules; the compiler checks what it can.* **(filled in)** |
+| A type that decides the type of something is written out. A type worked out another way (`x.T`, `wholeTypes[1]`) can be compared, stored and passed | "Every value's type is known before the program runs" (this section). A type read out of an `any` is known only while running, so it can't declare anything. *Principle: strict types.* **(filled in)** |
+| A type lasts as long as the program | A type never changes (this section), so it is never an argument that ends too soon for a function given back. *Principle: one rule.* **(filled in)** |
+| Underneath, a `type` value is the address of a description: the size, and how to copy, free and compare | An `any` and a generic function both need exactly that, so one thing serves both. *Principle: say what happens underneath.* **(filled in)** |
+| `convert` also covers `bool` and whole numbers, `char` and every whole-number type, the two float types, and numbers or `bool`s to text and back | A `bool` and a `char` are numbers underneath (DOCS 3.1), and the docs say a `bool` is used as a number only through a conversion. Text conversion reuses `convert` instead of adding functions: both types are written, and a text that doesn't fit fails like any conversion that doesn't fit. *Principles: reuse before adding; explicit.* **(filled in)** |
+| An `any` keeps the type of its first value | Its size comes from the value inside, and a value on the stack keeps its size, like an unsized array's length (4.3). Weighed: letting a `var` `any` change type, which needs room nobody can know before the program runs. *Principle: one rule, no special cases.* **(filled in)** |
+| A top-level type can use any top-level type of its file, itself included, but it holds itself only through `^`, `&`, `@` or a function type | `Node` already names itself (DOCS 8.14). A type never runs, so the order can't matter, and a pointer has one size whatever it leads to. *Principle: the compiler checks what it can.* **(filled in)** |
 
 ### 4.3 Arrays and maps
 
@@ -111,6 +119,13 @@ call, call, index.
 | A pair `?T`: one value for `false` and one for `true`, looked up with a `bool`, written like an array of two: `const sizes: ?int = [3, 10];` | Jack: "we could have a type called pair". A pair always has both values, so a lookup never fails. `?` is used nowhere else in MyLang, and the values in `[ ]` can't be mistaken for comparisons |
 | Slices: `&a[i:j]` borrows part of an array as an `&[]T`; `a[i:j]` without `&` copies those elements | Jack: "add slices … I think they make sense". It reuses what exists: the borrow mark `&`, the type `&[]T` that already borrows a whole unsized array, and every borrowing rule in section 8. The `i:j` form, start included and end left out, is what most languages use. Underneath a slice is two numbers, so nothing is copied **(filled in: the form and the rules)** |
 | Underneath, a pair is an array of two, the way a `bool` is a number (`false` is 0, `true` is 1) | Jack: "this is just like an array under the hood, the same way a bool is basically just an int under the hood". An array's size is always a number, so no type goes between its brackets |
+| An index and a slice bound are `int`s, and an index out of range fails while running unless the compiler can already see it | The docs check a slice this way (DOCS 5.9), and an index is the same question. A length is an `int` too, so `i == values^.length` needs no conversion. *Principles: one rule; the compiler checks what it can.* **(filled in)** |
+| A size that isn't in the type comes from the first value and stays: for every holder of a `[]T`, a map or an `any`. When the compiler can't see the sizes, a new value of another size fails while running | It is the docs' rule for `var a: []int` (DOCS 5.3), said once for every type without a size and every holder: a name, a field, an element. *Principle: one rule, no special cases.* **(filled in)** |
+| A fixed array becomes an unsized one through a slice: `primes[:]`, `&primes[:]` | The two are different types, and a value never changes type by itself. The slice form already exists. *Principles: strict types; reuse before adding.* **(filled in)** |
+| A pair value has exactly two values, and a pair has no `.length` | A pair always has both values (this section), so there is nothing to ask. *Principle: strict types.* **(filled in)** |
+| Text is written `"Jack"`, and it is the array value `['J', 'a', 'c', 'k']`. There is no text type | The docs say text is an array of `char`s (DOCS 5.1). A shorter way to write the same value adds no type and no rule: length, indexing, slices, `==` and copying all come from arrays. *Principles: reuse before adding; every value follows the same rules.* **(filled in)** |
+| `join(T)` joins two unsized arrays into a new one | An array never grows, so making a longer one needs one built-in. It takes a type first, like `wrap`, and works for every element type, text included. A list that grows is a heap owner given a new, longer array: the `^` shows the heap use. *Principles: a type is never called, things that act are functions; explicit.* **(filled in)** |
+| A map key can have any type. The keys of a map value all differ, a lookup is checked, and a whole new value needs the same keys | A lookup needs only `==`, and every type has it (section 8). The checks are the array rules again: the compiler makes them when it can see the keys, and otherwise they are made while running. *Principle: one rule, no special cases.* **(filled in)** |
 
 ### 4.4 Structs
 
@@ -123,6 +138,10 @@ call, call, index.
 | A struct variable holds its whole block | Copying it copies the block, so nothing can be left pointing at a removed block |
 | Functions inside a struct use its fields directly, with no `this` | The fields are in the struct's scope |
 | A function inside a struct or a file uses the copy it is called through | After `var other = counter;`, `other.add(1)` changes `other`, not `counter`: a copy is complete, functions included |
+| A struct value is checked against its type: one field for each type, in order, with that type written. A field's value can use the fields above it | The block is a block of declarations, so the rule for names in any block applies. *Principle: one rule.* **(filled in)** |
+| A field name is a label for a position in a struct type. The compiler gathers the labels from every struct value of the type in the program | The type lists only types and the value gives the names (this section), so the names can't be part of the type: a function that takes a `Point` takes any `{int, int}`. A struct on the heap or in a parameter has no block in view, so its names can only come from the type's values. The docs already picture an array as a struct "reached by position", with names as labels (DOCS 5.7). Weighed: names written in the type, which turns Jack's rule round; following each struct from its block, as for a package, which can't see through the heap; every value of a type using the same names, which stops two unrelated singletons having the same shape; this rule. *Principles: one rule, no special cases; say what happens underneath.* **(filled in)** |
+| A function can't change the fields of a `const` struct. Where the compiler can't see which function a field holds, calling it through a `const` struct is an error | A `const` never changes (DOCS 13). The worst case for a function the compiler can't see is the docs' own rule for calls (5.6). *Principle: the compiler checks what it can.* **(filled in)** |
+| A function read out of a struct uses the struct it was read from. Underneath it keeps the struct's address, and a copy of the struct re-aims it at the copy | It is the borrower rule for a function that uses names around it (6.1), and it is how "a copy is complete, functions included" comes out in memory. *Principle: say what happens underneath.* **(filled in)** |
 
 ---
 
@@ -202,6 +221,13 @@ What follows from it:
 | `@` on a value made on the spot hands it straight over: `take(@makeBig(1))` | There is no variable to leave `null` |
 | A call works out every argument first, then sets the parameters, left to right | `both(@x, x^)` works: reading `x` and handing `x` over don't get in each other's way |
 | A value made on the spot can be borrowed as an argument, `look(&makeBig(1)^)`, but not kept in a variable | It lives until the end of its statement, and the call is over by then |
+| A struct, array, pair, map or `any` that holds a borrower, an ownership or a function can't outlive what that part points at | Field by field (5.4): the lifetime rules for a whole value are the rules for each part. *Principle: one rule, no special cases.* **(filled in)** |
+| A result whose type can hold a pointer or a function counts like one at the call | The caller sees only the type, as with a borrower that comes back (5.6). *Principle: one rule.* **(filled in)** |
+| A `const` is lent only where the compiler sees it is only read. Lending one to a function called through a variable is an error | It closes a gap the docs listed as not caught, with the rule 5.6 already has: through a variable every `&` argument counts as one that may change. A `const` then never changes. *Principle: the compiler checks what it can.* **(adjusted)**, see section 13 |
+| A `const` ownership can only read | One rule for every `const`: what a `const` name reaches can't be changed through that name. It is the borrower table (DOCS 8.6) applied to the third mark. *Principle: one rule, no special cases.* **(filled in)** |
+| `null` fits a `^T`, an `&T` and an `@T`, and following any of them when `null` fails | `null` is "no address" and all three hold an address (DOCS 8.18). *Principle: every value follows the same rules.* **(filled in)** |
+| `@` works on a map entry | A map entry is a holder like an array element, and it can already be borrowed (DOCS 8.4). *Principle: no special cases.* **(filled in)** |
+| Following a borrower kept in a heap value, after its target is gone, is not checked while running. What happens isn't defined | The docs leave this to the programmer (DOCS 8.17). A check would need something to run that the code doesn't show. It is the only mistake neither the compiler nor a check catches. *Principle: explicit.* **(filled in)** |
 
 ---
 
@@ -213,6 +239,9 @@ What follows from it:
 | A function that returns a value has to reach a `return` on every path | Otherwise it could end with nothing to give back |
 | `return;` on its own stops a `void` function early | Jack: "that's allowed", as in most languages |
 | A function's body is a block, so it sees the names around it and can change a `var` from outside | Jack: "just variables in a broader scope" |
+| "Every path reaches a `return`" means the body always returns: its last statement is a `return`, or a block that always returns. Nothing is written after a `return` | No statement branches, so a body is one straight line. Code after a `return` could never run, so the compiler says so. *Principle: the compiler checks what it can.* **(filled in)** |
+| A function value is checked against its type, and takes its return type from its place | The value lists parameters and the type lists the return type (DOCS 7.1), so the place supplies the one thing the value doesn't write. *Principle: strict types.* **(filled in)** |
+| A call gives one argument of the right type for each parameter. A call to a function that returns nothing has no value | The usual rule, and `void` means there is nothing to use. *Principles: strict types; do what most languages do.* **(filled in)** |
 
 ### 6.1 Functions that use variables from around them
 
@@ -225,6 +254,9 @@ What follows from it:
 | An argument handed over with `@` doesn't count | The call took the value and the caller's variable is `null`, so nothing is left to die **(filled in)** |
 | A local is kept by putting it on the heap and handing it with `@` to a parameter of a function that gives back the function using it | It needs nothing new: `^` puts the value on the heap (8.3), and a parameter that asks for an ownership takes it (8.13). A function given back keeps its parameters |
 | Every function value is two addresses: its code, and what it keeps | Every function of a type has the same size, so functions go in arrays and maps |
+| One call has one set of parameters: every function that a call gives back uses the same ones | This settles the point the docs left open (DOCS 8.17). A function borrows the variables it uses (this section), and a kept parameter is such a variable, so two functions that use it share it. Weighed: each function keeping its own copy, which would make a counter and its reader disagree. *Principles: one rule, no special cases; reuse before adding.* **(filled in)** |
+| Copying a function copies its two addresses, so the copy uses the same variables and kept parameters. A heap value the function owns is copied | "Copying a function value copies the address" (DOCS 7.7). What it keeps on the stack is a borrow, and a copy of a borrower borrows the same thing. An owner's value is copied, as always. *Principle: every value follows the same rules.* **(filled in)** |
+| Kept parameters stay on the stack, in the block the call was written in. So a function given back can't outlive that block. The exception is a function that keeps only a heap value it took with `@`: it owns that value and can go anywhere | A function value is two addresses (this section), and nothing goes on the heap unless the code says `^` (section 1). Together they leave only the stack of the caller for kept parameters, and only one heap address that a function can carry. Jack's `newCounter` works because of the exception. Weighed: a hidden heap block for kept parameters, which is heap use the code doesn't show; function values of different sizes, which undoes the row above; this rule. *Principles: explicit; say what happens underneath.* **(adjusted)**, see section 13 |
 
 ---
 
@@ -234,6 +266,8 @@ What follows from it:
 |---|---|
 | Repeating is a function that calls itself | The language is declarative |
 | Choosing is a lookup: pairs `?T` and maps of functions | A `bool` picks a slot, and a map of functions does the job of a `switch`. Recursion uses a lookup to stop |
+| A program that calls deeper than the stack allows fails like any other check | The stack is fixed by the system, so it is one more check at something the code shows: a call. *Principle: one rule.* **(filled in)** |
+| The last call takes over the stack of the function that makes it, when nothing in the call needs that function's names | Repeating is a function calling itself (this section), so repeating without end has to be possible: a program that reads lines until the input ends can't have a limit. The condition is the borrower rule: names that something still points at can't end. Weighed: no promise, which leaves every repeat with a limit nobody can see in the code; this rule, which Scheme also has for the same reason. *Principles: declarative; say what happens underneath.* **(filled in)** |
 
 ---
 
@@ -274,6 +308,13 @@ What follows from it:
 | Each import makes a new copy of the file's variables | Jack: importing a file twice should make two copies. Every declaration makes a new value (2.4), and sharing happens only where `&` says so: to share one copy, borrow it |
 | Two files can't import each other | Each import would make a new copy, forever **(filled in)** |
 | A function's body can use any top-level name of its own file, wherever it is declared | Two functions in one file can call each other **(filled in)** |
+| `import` takes one text written out in the code, and is always called by its own name. The text is the file's path without `.my` | The compiler has to know every file before the program runs, or it couldn't check a single name. This is the one built-in that can't be passed around. *Principle: the compiler checks what it can.* **(filled in)** |
+| An import runs where it is written, and all it runs is the file's top-level declarations, from the top down | An import is a call that makes a new value (this section). The run order is still what the code shows. *Principle: explicit.* **(filled in)** |
+| A file's top-level names keep their own `const` and `var`. The word on the package says only whether the whole package can be replaced or moved | Jack's examples change `geom.made` and `a.count` through a `const` package, so the word on the package can't freeze them. Fields follow their struct because they have no word of their own; a file's names each have one. *Principle: explicit.* **(filled in)** |
+| The compiler follows every package from its `import`, so it knows which files a place can hold. A name has to exist with one type in all of them. Through a function it can't see, the worst case counts | This is how the two filled-in rows above about a `var` package and a function that takes a package are checked. The worst case is the rule from 5.6. *Principle: the compiler checks what it can.* **(filled in)** |
+| A file's names are set up from the top down, and a top-level call can't reach a name declared below it | A body can use any top-level name (the row above), so without this a call could read a name before it has a value. *Principle: the compiler checks what it can.* **(filled in)** |
+| A top-level `main` in the file you run has to be a `const` of type `()int`. The status is from 0 to 255, converted like `convert(int, uint8)`. With no `main` the status is 0 | It completes the `main` row above. The status reuses the rule for a conversion that has to fit. *Principle: reuse before adding.* **(filled in)** |
+| Underneath, a package value is the address of its file's table of names, then its variables. A `var` package has room for the biggest file it is given | It is what makes `shapes.area` work for any file with nothing looked up while running. *Principle: say what happens underneath.* **(filled in)** |
 
 ---
 
@@ -293,4 +334,46 @@ All of this section is **(filled in)**.
 | The escapes `\n \t \r \0 \\ \' \" \xHH` | The usual ones. `\xHH` reaches every value a `char` can hold. *Principle: do what most languages do.* **(filled in)** |
 | A character outside ASCII doesn't fit in a `char`; in a text it is several `char`s | A `char` is one byte and UTF-8 needs more. Nothing changes size out of sight. *Principles: strict types; say what happens underneath.* **(filled in)** |
 | A source file's name ends in `.my` | `import("geom")` has to lead to exactly one file. *Principle: explicit.* **(filled in)** |
+
+---
+
+## 11. While the program runs
+
+All of this section is **(filled in)**.
+
+| Choice | Why |
+|---|---|
+| A failed check stops the program at once, writes `error: FILE:LINE: REASON` to the error output, and ends with status 1 | One behaviour for every check. `0` is "everything went well" (section 9), so a failure is not 0, and 1 is the usual status for it. The line names the place, because every check sits at something written in the code. *Principles: one rule, no special cases; do what most languages do.* **(filled in)** |
+| A failure can't be caught. A program that isn't sure tests first | Catching would be a new kind of statement. The tests already exist (`p != null`, `i < a.length`, `x.T == int`), and they are in the code where they happen. *Principles: reuse before adding; explicit.* **(filled in)** |
+| One list of checks, in DOCS Appendix B: a value that doesn't fit its type, a size that doesn't match, a lookup that misses, a `null` that is followed, and no room left | Each comes from one of two rules: a value always fits its type, and a size that isn't in the type stays what the first value made it. *Principle: one rule.* **(filled in)** |
+
+---
+
+## 12. Built-in functions for every program
+
+All of this section is **(filled in)**.
+
+| Choice | Why |
+|---|---|
+| `print: ([]char)void` writes exactly the `char`s it is given | Nothing is added out of sight, not even a line break. A number is turned into text first, with `convert`, so the code shows it. *Principle: explicit.* **(filled in)** |
+| `read: ()[]char` gives the next line with its `\n`, and an empty text at the end of the input | Keeping the `\n` means an empty result can only be the end, so no second function and no special value is needed. *Principle: keep the language small.* **(filled in)** |
+| `exit: (int)void` ends the program with a status | The same status rule as for `main` (section 9). *Principle: reuse before adding.* **(filled in)** |
+| Each of them is an ordinary function value | Like `convert` (4.2): things that act are functions. *Principle: a type is never called; built-ins are first-class.* **(filled in)** |
+| Nothing else was added: no files, no program arguments, no bit operations | The language is complete without them, and each can be added later as one more built-in function. *Principle: keep the language small.* **(filled in)** |
+
+---
+
+## 13. Rules that were adjusted
+
+Rules of Jack's that changed while the gaps were filled. Each is marked **(adjusted)** in
+`DOCS.md`.
+
+| Where | Old wording | New wording | Why |
+|---|---|---|---|
+| DOCS 7.8, function given back | "It can't outlive what was passed in… An argument handed over with `@` doesn't count" | The same, and also: it can't outlive the block its call was written in, unless it keeps only a heap value it took with `@` | Kept parameters need a place to live, and the stack of the caller is the only one that isn't hidden heap use. This is the bigger change: see `FILLED_IN.md` section 4 |
+| DOCS 8.17 and 8.6, a `const` lent to a function held in a variable | Listed under "What the compiler doesn't catch": "only the type is known" | The compiler rejects the line: a `const` is lent only where the compiler sees it is only read | Otherwise a `const` could change. The rule is the one 8.12 already uses for calls through a variable |
+| DOCS 8.17, "Not settled yet" | "Two functions given back by one call that use the same `var` parameter… Whether they share the kept parameter or each keep their own" | Settled: they share it (7.8) | It was the docs' own open point |
+| DOCS 5.9, the row for `&a[:]` | "the whole array, the same as `&a`" | The same for an unsized array. For a fixed array, `&a` is an `&[3]T` and `&a[:]` is the `&[]T` | Strict types: an `&[3]T` and an `&[]T` are different types |
+| DOCS 13, the checks while running | "Four checks happen while the program runs" | "These checks happen while the program runs", with the new checks added | The table already had five rows, and the filled-in rules add more |
+| DOCS 3.2 and 13, the order of operations | step 2: "`!` and the marks"; step 3: "`*`" | step 2: "`!`, `-` and the marks"; step 3: "`*` `/` `%`" | The new operators had to be placed in the order |
 
