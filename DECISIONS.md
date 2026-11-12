@@ -6,6 +6,12 @@ while designing it (6 to 11 November 2026), and the reason behind each one.
 Lines in quotes are Jack's own words from the design chat. A few rules were filled in by
 Claude to make a choice complete and then accepted. They are marked **(filled in)**.
 
+On 12 November 2026 Claude filled in every rule that was still missing, so that a compiler
+can be written from `DOCS.md` alone. Those rows are marked **(filled in)** too, and each one
+names the principle it follows (*Principle: …*). Jack has not reviewed them yet. A rule of
+Jack's that had to change is marked **(adjusted)**, and section 13 gives its old wording.
+`FILLED_IN.md` lists all of them.
+
 ---
 
 ## 1. The philosophy
@@ -58,6 +64,13 @@ and `^5` is a `^int`, so turning one into the other is always written out.
 | Two kinds of name: `const` and `var` | Where a value lives and who owns it belongs to its type (`^T`, `&T`), not to the name |
 | No `fn` keyword | It isn't needed, so the language stays short and clean |
 | A declared name can carry `@` (`var @q: ^int = @p;`) | The `@` marks the name that takes a value over, so a move is visible where it happens |
+| A name can't be declared where the same name can already be seen. That rules out a second declaration and all shadowing, for names, parameters, struct fields and the built-in names | A name then means one thing wherever it is read: "one name means one thing" (4.4). The examples in `DOCS.md` already work this way: the inner functions use `o`, `k` and `back` beside `owner`, `n` and `before`. One rule settles three gaps: declaring twice, shadowing, and why a built-in name can't be declared again. Weighed: shadowing in inner blocks, as most languages allow; no shadowing. The philosophy decides here, so the convention doesn't. *Principles: explicit; one rule, no special cases.* **(filled in)** |
+| A name is used only below its declaration. A function's body can use any top-level name of its file and its own name, and a type can use any top-level type of its file | Nothing may run before its names are set up. A body runs only when it is called and a type never runs, so only those two are free of the order. *Principle: the compiler checks what it can.* **(filled in)** |
+| Five kinds of statement: a declaration, an assignment, a value on its own, a `return`, a block | They are the forms the examples already use. Any value can stand on its own, so there is no list of values that may and may not. *Principle: one rule, no special cases.* **(filled in)** |
+| An assignment is a statement, not a value | Every change then starts its own line, where it is easy to see. *Principle: explicit.* **(filled in)** |
+| The left side of `=` starts at a `var` name, or at a value with no name that is followed with `^` | It is the `const` rule said once: what a `const` name reaches can't be changed through that name. A struct with no name can't be assigned, because nothing could ever read the change. *Principles: one rule; the compiler checks what it can.* **(filled in)** |
+| An assignment works out its right side first, then finds its place | A call already works out every argument before it sets a parameter (5.7). "Values first, places after" is one order for both, and the right side can't make the place stale. Weighed: the left side first, as in Java and Go; the right side first, as in Rust and Python. *Principle: reuse before adding.* **(filled in)** |
+| Everything else is worked out from left to right | It is the order the code is read in, and what most languages do. *Principles: explicit; do what most languages do.* **(filled in)** |
 
 ---
 
@@ -86,6 +99,8 @@ call, call, index.
 | Generics are functions that take a type, `first(int)` | No new feature is needed, because a type is already a value |
 | Real basic types: `int8` to `int64`, `uint8` to `uint64`, `float32`, `float64`, `bool`, `char`; `int`, `uint`, `float` as everyday names | Jack asked for real sized types |
 | A function that returns nothing ends in `void` | Every function type ends with its return type, so in a type a `(` always starts a function type |
+| Two types are the same when they have the same shape. Names of parameters and fields, and `const` and `var`, are not part of a type | "A name for a type is the same type under another name" (DOCS 4.1), and a type lists only types (4.4). *Principle: one rule.* **(filled in)** |
+| Only a value written on the spot takes its type from its place: a number, `null`, an array or text, a map value, a function value. With no place a number is an `int` or a `float` | That is how `5` and `[3, 10]` already work (DOCS 3.2, 5.8). Every other value has its type already and never changes it. The everyday names are the defaults. *Principle: strict types.* **(filled in)** |
 
 ### 4.3 Arrays and maps
 
@@ -231,6 +246,15 @@ What follows from it:
 | The usual order of operations, and brackets that group | "Do whatever the conventions are for most programming languages." What is behind a value goes first, then what is in front, then `*`, then `+ -`, then comparisons, then `&&`, then `\|\|` |
 | A type is never grouped: in a type, `(` always starts a function type | It keeps the rule from section 4.1. `(a)` is a function type when `a` is a type, and a group when it isn't |
 | `&&` in front of a value or inside a type is two borrow marks | Where it stands tells the two apart: `&&int` is a borrower of a borrower |
+| `/` divides and `%` gives the remainder, in the same step as `*` | "Use symbols." The same step as `*`, from left to right, is the convention. *Principles: symbols for operators; do what most languages do.* **(filled in)** |
+| Whole-number division drops the part after the decimal point, and `%` has the sign of the left side | `convert(float, int)` already drops that part (DOCS 4.4), so dividing and converting agree, and `a` is always `(a / b) * b + a % b`. Most languages do the same. *Principle: reuse before adding.* **(filled in)** |
+| `%` works on whole numbers only | The smaller choice: a remainder of floats is rarely needed. *Principle: keep the language small.* **(filled in)** |
+| `-` in front of a signed whole number or a float | The docs already write `-7`. A minus that worked only on written numbers would be a special case. Weighed: only written numbers, with `0 - x` for the rest; a minus for every number. *Principle: one rule, no special cases.* **(filled in)** |
+| A result that doesn't fit its type fails while running. Nothing wraps around | A conversion already fails when its value doesn't fit (DOCS 4.4). The same rule for `+ - * / %` means a value always fits its type, and it covers overflow and division by zero together. Weighed: wrapping, as in C, Go and Java; failing, as in Swift and Zig; leaving it open. A wrapped number is a wrong value the code doesn't show. *Principles: explicit; one rule.* **(filled in)** |
+| No infinity and no "not a number": a float answer that isn't an ordinary number fails | It is the same rule again. It also keeps `==` simple: a float always equals itself, so a copy equals its original for every type. Weighed: the special IEEE values, as in most languages; failing. Here the philosophy decides. *Principles: one rule; explicit.* **(filled in)** |
+| The compiler makes these checks itself when every number is written in the code | The docs do the same for a slice whose bounds are written numbers (DOCS 5.9). *Principle: the compiler checks what it can.* **(filled in)** |
+| `<` `>` `<=` `>=` work on numbers and `char`s only | A `char` is a number underneath. Ordering text or structs can be written as a function, so nothing more is needed. *Principle: keep the language small.* **(filled in)** |
+| `==` compares exactly what `=` copies, for every type | One rule for every type, and a copy always equals its original. A `^T` compares the values, because `=` copies the value. An `&T` compares the addresses, because `=` copies the address. Structs and arrays go part by part (5.4). Weighed: `==` only for basic types; heap owners compared by address; this rule. *Principles: one rule, no special cases; every value follows the same rules.* **(filled in)** |
 
 ---
 
@@ -250,3 +274,23 @@ What follows from it:
 | Each import makes a new copy of the file's variables | Jack: importing a file twice should make two copies. Every declaration makes a new value (2.4), and sharing happens only where `&` says so: to share one copy, borrow it |
 | Two files can't import each other | Each import would make a new copy, forever **(filled in)** |
 | A function's body can use any top-level name of its own file, wherever it is declared | Two functions in one file can call each other **(filled in)** |
+
+---
+
+## 10. Writing the source
+
+All of this section is **(filled in)**.
+
+| Choice | Why |
+|---|---|
+| A source file is UTF-8, and only ASCII is used outside comments and text | A `char` is 8 bits, one of the sized types Jack asked for (4.2), so names and symbols stay at one byte for one character. Comments and text can hold anything. *Principle: say what happens underneath.* **(filled in)** |
+| A name is letters, digits and `_`, and case matters | What most languages do. *Principle: do what most languages do.* **(filled in)** |
+| Seven reserved words: `const var return void true false null`. The built-in types and functions are ordinary names, declared before every file starts | `int` is already "an ordinary name" for `int64` (DOCS 3.1), and a built-in is an ordinary function value (DOCS 4.4). Because a name is declared only once (section 3), they can't be declared again, and no second list of reserved words is needed. *Principles: everything is a first-class value; reuse before adding.* **(filled in)** |
+| Only `//` comments | One form does the job. *Principle: reuse before adding.* **(filled in)** |
+| A line break never ends a statement | Every statement already ends with `;` (DOCS 2.5), so nothing else has to. *Principle: explicit.* **(filled in)** |
+| Whole numbers in base ten, base sixteen (`0x`) and base two (`0b`) | Bit patterns need the other two bases: the docs name a type `bitboard` (DOCS 4.1). They are written the way most languages write them. Base eight and separators inside a number were left out. *Principles: do what most languages do; keep the language small.* **(filled in)** |
+| A float is `digits.digits`, with an optional `e` and a power of ten | The docs already ask for `3.0` instead of `3` (DOCS 3.2), so a digit stands on both sides of the point. The power of ten writes very big and very small numbers. *Principle: do what most languages do.* **(filled in)** |
+| The escapes `\n \t \r \0 \\ \' \" \xHH` | The usual ones. `\xHH` reaches every value a `char` can hold. *Principle: do what most languages do.* **(filled in)** |
+| A character outside ASCII doesn't fit in a `char`; in a text it is several `char`s | A `char` is one byte and UTF-8 needs more. Nothing changes size out of sight. *Principles: strict types; say what happens underneath.* **(filled in)** |
+| A source file's name ends in `.my` | `import("geom")` has to lead to exactly one file. *Principle: explicit.* **(filled in)** |
+

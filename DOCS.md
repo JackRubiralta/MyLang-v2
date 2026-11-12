@@ -943,6 +943,21 @@ A type can still be held as a value: in an array or a map (4.1), as a function's
 A value's type is the one it was declared with. The type inside an `any` is read with
 `x.T` (4.5).
 
+**(filled in) A type that decides the type of something is written out.** After a `:`,
+inside another type, and as an argument that a function's type uses (4.3), a type is written
+as a type: a name, or one of the forms in 3.6. A type that is worked out any other way, such
+as `wholeTypes[1]` or `x.T`, is a value like any other. It can be compared, stored and
+passed, but it can't declare anything:
+
+```go
+var n: wholeTypes[1] = 5;      // ERROR: write the type itself: int
+x.T == int                     // fine: comparing two types gives a bool (3.7)
+```
+
+**(filled in) A type lasts as long as the program.** It is fixed before the program runs,
+wherever it is written. So a type that is handed to a function is never an argument that ends
+too soon (7.8): `first([3]int)` is as good as `first(int)`.
+
 ### 4.3 Generics: functions that take a type
 
 A type is a value, so it can be passed to a function like any other value. A generic
@@ -971,6 +986,66 @@ The function `first` gives back uses `T`, a parameter of `first`, so it keeps `T
 
 `first(int)` gives back a function made for `int`, so what each call works with is written
 right there in the code.
+
+**(filled in) How a function type names the type it is given.** In `(type)([]T)T` the name
+`T` isn't declared anywhere. Inside a function type, a name that isn't declared stands for a
+type the function is given. The first such name is the function's first `type` parameter,
+the second such name is its second, and so on:
+
+```go
+(type)([]T)T                   // T is the type handed to the type parameter
+(type, type)(A)B               // A is the first type handed in, and B is the second
+```
+
+- The name is used only to the right of the `type` it stands for, up to the end of that
+  function type.
+- The name itself is not part of the type: `(type)([]T)T` and `(type)([]E)E` are the same
+  type (3.6).
+- The function value names its `type` parameters itself, `(const T: type)`, and they match
+  the type by position, like every parameter (7.1). The code reads best when the two names
+  agree, as in `first`.
+
+**(filled in) Calling it.** At a call, the compiler puts the type that was handed in wherever
+its name stands in the function's type: `first(int)` is a `([]int)int`. So the type handed in
+is written out as a type (4.2) whenever the function's type uses it. Where the function's type
+doesn't use it, any value of type `type` will do:
+
+```go
+const sameType: (type, type)bool = (const a: type, const b: type){
+    return a == b;
+};
+
+sameType(x.T, int)             // fine: sameType's type doesn't use a or b
+first(x.T)                     // ERROR: the type of first(x.T) would only be known while running
+```
+
+**(filled in) What a generic function can do with a `T`.** The compiler checks the function
+once, for every type at the same time. Inside it, `T` is the name of a type, so it goes
+wherever a type is written: `var x: T = v[0];`. A value of type `T` can be used in the ways
+every type allows: it can be declared, copied, moved, borrowed, put on the heap, passed,
+returned, wrapped (4.5), compared with `==` and `!=` (3.7), and held in arrays, structs and
+maps. What only some types allow is an error. To add two `T`s, the caller passes the function
+that adds them:
+
+```go
+const sumBad: (type)(T, T)T = (const T: type){
+    return (const a: T, const b: T){ return a + b; };   // ERROR: + doesn't work on every type
+};
+
+const sumWith: (type)(T, T, (T, T)T)T = (const T: type){
+    return (const a: T, const b: T, const plus: (T, T)T){
+        return plus(a, b);     // fine: plus is a function for this T
+    };
+};
+
+sumWith(int)(2, 3, add)        // 5: add is the (int, int)int from 7.1
+```
+
+**(filled in) Underneath, a `type` value is an address.** For every type the program uses,
+the compiler writes a small description into the program: the type's size, and how to copy,
+free and compare a value of it. A `type` value is the address of that description. An `any`
+carries one (4.5), and a generic function reads one to handle a `T` whose size it learns only
+when it is called.
 
 ### 4.4 Converting a value: `convert`
 
@@ -1004,6 +1079,30 @@ What a conversion between the basic types gives:
 | a bigger type to a smaller one | `convert(int, int8)(100)` | `100`: checked when the line runs that it fits |
 | between signed and unsigned | `convert(int8, uint8)(5)` | `5`: checked when the line runs that it fits |
 | a `char` to its number, and back | `convert(char, uint8)('a')`, `convert(uint8, char)(97)` | `97`, `'a'` |
+
+**(filled in)** The rest of the table:
+
+| Conversion | Example | Result |
+|---|---|---|
+| a whole number to a float that can't hold it exactly | `convert(int, float32)(16777217)` | the nearest float: `16777216.0` |
+| a float to a whole number it is out of range for | `convert(float, int8)(300.0)` | fails while running: checked that it fits, like the rows above |
+| a `float32` to a `float64` | `convert(float32, float)(ratio)` | the same number: it always fits |
+| a `float64` to a `float32` | `convert(float, float32)(0.1)` | the nearest `float32`, checked when the line runs that it isn't too big |
+| a `char` to any whole-number type, and back | `convert(char, int)('a')`, `convert(int, char)(97)` | `97`, `'a'`: a `char` converts as the `uint8` it is underneath |
+| a `bool` to any whole-number type, and back | `convert(bool, int)(true)`, `convert(int, bool)(0)` | `1`, `false`: a `bool` converts as the number it is underneath (3.1). Going back, only 0 and 1 fit |
+| a number or a `bool` to text, and back | `convert(int, []char)(42)`, `convert([]char, int)("42")` | `"42"`, `42` (5.10) |
+| a type to itself | `convert(int, int)(3)` | `3` |
+
+`convert` works between the number types, `bool` and `char`, and between those and the text
+type `[]char`, as the two tables list. Any other pair of types is an error:
+
+```go
+convert([3]int, int)                   // ERROR: there is no conversion from an array to an int
+convert(bool, float)                   // ERROR: a bool converts to a whole number only
+```
+
+`convert` itself is a function that takes two types, so its own type is `(type, type)(A)B`
+(4.3).
 
 A conversion whose value doesn't fit fails while the program runs:
 
@@ -1046,6 +1145,22 @@ var z: any = wrapInt(7);           // holds the type int and the value 7
 ```
 
 `x` itself has the type `any`. The type inside it is `x.T`.
+
+**(filled in)** `wrap` and `unwrap` are functions that take a type, so their own types are
+`(type)(T)any` and `(type)(any)T` (4.3). Any type can be wrapped, an `any` included.
+
+**(filled in) An `any` keeps the type of its first value.** Its size comes from the value
+inside (see "Underneath" below), and a value on the stack keeps its size (2.6). So a `var`
+`any` can be given a new value of the same type, and giving it a value of another type fails
+while the program runs (11.7). It is the rule for an unsized array, which keeps its first
+length (5.3):
+
+```go
+var x: any = wrap(int)(3);
+x = wrap(int)(4);                  // fine: x still holds an int
+x = wrap(bool)(true);              // fails while running: x holds an int
+var y: any = wrap(bool)(true);     // fine: a new declaration, with its own first value
+```
 
 #### Passing an `any`
 
@@ -1122,6 +1237,31 @@ Both let one function work with many types:
 | mistakes show up | before the program runs | when an unwrap like `unwrap(int)(x)` runs |
 | best for | the same code for many types | values whose type you only learn while running |
 
+### 4.6 A type that names itself
+
+**(filled in)** A type declared at the top level of a file can use any top-level type of that
+file, wherever it is declared, itself included (2.8). That is how a list node names the next
+node (8.14):
+
+```go
+const Node: type = {int, ^Node};       // fine: the next node is behind a ^
+const Even: type = {int, ^Odd};        // fine: Odd is declared below, and both are top-level types
+const Odd: type = {int, ^Even};
+```
+
+A value has a fixed size (2.6), so a type can't hold itself directly. It reaches itself
+through a pointer (`^`, `&` or `@`) or a function type. Each of those has the same size
+whatever it leads to:
+
+```go
+const Bad: type = {int, Bad};          // ERROR: a Bad would hold a Bad, which holds a Bad, without end
+const Rows: type = [2]Rows;            // ERROR: the same
+const Step: type = (int)Step;          // fine: a function that returns a function of its own type
+```
+
+A type declared inside a function can name itself in the same way. Like every other name
+there, it is used only below its declaration (2.8).
+
 ---
 
 ## 5. Arrays
@@ -1151,6 +1291,13 @@ const word: [4]char = ['J', 'a', 'c', 'k'];     // text is an array of chars
 const flags: [2]bool = [true, false];
 ```
 
+**(filled in)** The size is a whole number written in the code (3.2), 0 or more. An array can
+be empty: `[]` is the array value with no elements, and it needs a place that says what its
+element type is (3.8).
+
+**(filled in)** Text has a shorter way to be written: `"Jack"` is the same array value as
+`['J', 'a', 'c', 'k']` (5.10).
+
 ### 5.2 Reading and changing elements
 
 Elements are numbered from 0:
@@ -1163,6 +1310,17 @@ primes[0] = 7;         // ERROR: primes is const
 ```
 
 An element can be changed when the array is a `var`.
+
+**(filled in) An index is an `int`, and it is checked.** The first element is at 0 and the
+last is at `length - 1`. When the index is a written number and the length is in the type, the
+compiler checks it. Otherwise the check is made while the program runs, and an index out of
+range fails there (11.7):
+
+```go
+primes[3]              // ERROR: primes has length 3, so its last index is 2
+scores[i]              // checked while running: fails if i is below 0 or above 2
+scores[small]          // ERROR: small is an int8, and an index is an int (3.2)
+```
 
 ### 5.3 An unsized array keeps its first length
 
@@ -1185,6 +1343,30 @@ firstOf([7, 8])        // 7
 firstOf([1, 2, 3, 4])  // 1
 ```
 
+**(filled in) When a length is only known while running, the check is made while running.**
+The compiler rejects `a = [1, 2, 4, 5];` above because it can see both lengths. When it can't,
+giving an unsized array a value of another length fails while the program runs (11.7):
+
+```go
+var part: []int = a[0:2];      // length 2
+part = a[1:n];                 // checked while running: fails unless n is 3
+```
+
+**(filled in) Every holder of an unsized array has its own first value.** A name, a field, an
+element and a value on the heap each take their length from the first value they hold, and
+keep it. A parameter and a result get a new first value at every call. The same holds for
+every type whose size isn't in the type: a map (6.3) and an `any` (4.5).
+
+```go
+var rows: [2][]int = [[1, 2, 3], [4]];     // two rows: one of length 3, one of length 1
+rows[1] = [9];                             // fine: still 1 long
+rows[1] = [9, 9];                          // ERROR: rows[1] has length 1
+```
+
+A fixed array and an unsized array are different types, and a value never changes type by
+itself (3.2). A fixed array becomes an unsized one through a slice (5.9): `primes[:]` is a
+copy of `primes` as a `[]int`, and `&primes[:]` borrows it as an `&[]int`.
+
 ### 5.4 Arrays inside arrays
 
 ```go
@@ -1205,6 +1387,8 @@ primes.length          // 3: from the type [3]int
 scores.length          // 3: from the first value
 scores.length = 4;     // ERROR: a length never changes
 ```
+
+**(filled in)** A length is an `int`.
 
 ### 5.6 Passing an array to a function
 
@@ -1283,6 +1467,14 @@ primes[true]                           // ERROR: a [3] array is indexed with a n
 
 A pair always has both values, so a lookup never fails.
 
+**(filled in)** A pair value is written with exactly two values, and a pair has no `.length`,
+because the answer is always two:
+
+```go
+const three: ?int = [1, 2, 3];         // ERROR: a pair has two values
+sizes.length                           // ERROR: a pair has no length
+```
+
 Underneath, a pair is just an array of two, a `[2]T`, the same way a `bool` is just a number
 underneath (3.1). Looking it up with `false` takes the first value and with `true` the second,
 because `false` is 0 and `true` is 1. The types keep the two apart in the code.
@@ -1310,7 +1502,7 @@ sumBorrow(&scores[1:3])                // 50: no copy (5.6)
 | `&a[1:3]` | elements 1 and 2 |
 | `&a[1:]` | from element 1 to the end |
 | `&a[:2]` | elements 0 and 1 |
-| `&a[:]` | the whole array, the same as `&a` |
+| `&a[:]` | the whole array. When `a` is unsized it is the same as `&a`. When `a` is fixed, `&a` is an `&[3]T` and `&a[:]` is the `&[]T` **(adjusted)** |
 
 A slice is a borrower, so everything in section 8 holds for it. A `var` slice can change the
 elements it borrows, a slice of a `const` array is a `const` borrower (8.6), it can't outlive
@@ -1323,6 +1515,9 @@ front^[0] = 99;                        // scores is now [99, 20, 30, 40]
 ```
 
 A slice of a slice borrows from the same array: `&middle^[1:]` borrows `30`.
+
+**(filled in)** The two bounds are `int`s, like an index (5.2). A bound that is left out is
+0 at the start and the length at the end.
 
 **Without the `&`, it is a copy.** `a[1:3]` on its own gives the elements as a new unsized
 array, the same way every `=` copies (8.8):
