@@ -3617,6 +3617,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
+| `f(&quiet)` where `quiet` is a `const` function and `f` is a parameter **(filled in)** | a `const` that is or holds a function isn't lent to a call through a variable (8.6) |
 | `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `return &list^;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
 | `p = ^6;` where a function called below uses a borrower made with `&p^` **(filled in)** | the call is a use of that borrower (8.12) |

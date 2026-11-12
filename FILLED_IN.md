@@ -52,6 +52,24 @@ choice. Each one has the options I weighed in its row of `DECISIONS.md`:
 | 101 (11.3) | a file's names keep their own `const` and `var` under a `const` package |
 | 72, 90, 118 (7.2, 8.17, 8.6) | a `const` that a function the compiler can't see might change stays on the list of what isn't caught, as Jack left it, and a function in a `const` struct from elsewhere joins that list. The one exception: a `const` that is or holds a function is never lent to such a call |
 
+### 1.0b How this was checked
+
+Three fresh reviewers, one after another, read only `DOCS.md`, `DECISIONS.md`, `UNDECIDED.md`
+and this file, with the same reading limits I had. Each looked for contradictions, rules
+against the philosophy, gaps a compiler writer would hit, wrong examples, anything taken from
+`UNDECIDED.md`, missing marks, and adjustments that went too far.
+
+| Round | Findings | What changed most afterwards |
+|---|---|---|
+| 1 | 52 | where kept parameters live (7.8), which calls the compiler sees (7.2), field names (9.9), functions in structs (9.6) |
+| 2 | 33, 4 of them serious | field names by written type (9.9), functions in structs like functions in files (9.6), what a result can be given back from (7.8), the last call (10.4) |
+| 3 | 46, 4 of them serious | a result also comes from the function that was called (7.8), a `const` function is never lent to a call the compiler can't see (8.6), what "holds" means (8.5), one set of field names for each written type (9.9) |
+
+No round came back clean, and three rounds was the limit. Every finding of the third round was
+answered in the files, but nobody has reviewed those last fixes. The rules that moved in every
+round are the ones to read most carefully: 7.2, 7.8, 8.5, 8.6, 8.13, 9.6, 9.9 and 11.3. None
+of the three reviewers found anything that was decided from `UNDECIDED.md`.
+
 ### 1.1 The philosophy, as the two files show it
 
 These are the principles `DOCS.md` and `DECISIONS.md` show, in my own words. Every gap below
