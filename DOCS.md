@@ -1995,12 +1995,9 @@ the compiler sees the function:
 a field, any other result of a call, or a `const` that was declared in any other way. Then
 the compiler knows only the type, and a rule that needs more counts the worst case.
 
-**(filled in)** One thing is not counted that way: whether a function the compiler can't see
-changes a `const`. A call through a variable that is handed a `const` with `&`, or that goes
-through a `const` struct, is accepted, and 8.17 lists both cases (8.6, 9.3). Counting the
-worst case there would turn away every such call, also the many that only read. The
-exception stops at functions: a `const` that is or holds a function is never lent to a call
-through a variable (8.6), because the rows above rely on it.
+**(filled in)** One rule doesn't count the worst case: the rule that a `const` never changes
+(8.6). Counting it would turn away every call through a variable that is lent a `const`, also
+the many that only read. There the check is made while the program runs instead (8.6, 9.3).
 
 **(adjusted)** The last row of the table changes how 8.12 counts a choice, and it matters
 because every choice is a lookup (section 10). A pair or a map of functions that is written
@@ -2183,6 +2180,12 @@ everything it can see through one address. A block at the top level of a file is
 package value, so a function that uses a name of such a block keeps the package value. A struct
 value holds only its fields (9.8), and that is why a function that uses a struct's fields can
 use nothing else that needs a place (9.6).
+
+**(filled in) A note beside the code.** For every function, the compiler writes a short note
+into the program, beside the function's code. It says which of the function's parameters are
+`var`, and whether the function can change a field of the struct it keeps. A call through a
+variable reads the note where a `const` is at stake (8.6, 9.3). The note belongs to the code,
+so a function value is still two addresses.
 
 ### 7.8 Using a variable from outside the function
 
@@ -2778,10 +2781,13 @@ look = &limit;             // ERROR: look is const, so it always borrows count
 A parameter works the same way: `(const v: &[]int)` borrows an array to read it, and
 `(var x: &int)` borrows a value to change it.
 
-**(filled in) A `var` borrower is made only from something that may be changed.** That is a
-place that can be assigned (2.9), with `&` in front, a value made on the spot (8.4), or
-another `var` borrower. A copy of a `const` borrower can only read, so it goes only into a
-`const` borrower or a `const` parameter, or it is given back (8.13):
+**(filled in) A borrower that can only read stays that way.** A borrower can only read when it
+is held in a `const`, when it was made from something that can't be assigned (2.9), or when it
+is a copy of such a borrower. A value that holds one (8.5) counts the same. A read-only
+borrower goes only where it stays read-only: into a `const` borrower, into a `const`
+parameter, or back to the caller as a result (8.13). So a `var` borrower is made only from a
+place that can be assigned, with `&` in front, from a value made on the spot (8.4), or from
+another `var` borrower:
 
 ```go
 const relay: (&int)void = (const x: &int){
@@ -2790,21 +2796,40 @@ const relay: (&int)void = (const x: &int){
 };
 ```
 
-**(filled in)** At a call the compiler sees (7.2), it checks each `&` argument against the
-parameter it goes to. At a call through a variable only the type is known, and the type
-doesn't say whether a `&T` parameter is read or changed (7.4). That case is listed in 8.17.
-
-**(filled in) A `const` that is or holds a function is never lent to a call through a
-variable.** The compiler relies on knowing which function such a `const` holds (7.2), so
-nothing may be able to replace it. The rule covers `&` in front of the `const`, and handing
-on a borrower that can only read it:
+**(adjusted) A `const` never changes.** The compiler checks the rule above wherever it sees
+where a read-only borrower goes: a declaration, an assignment, and a call it sees (7.2). At a
+call through a variable it knows only the type, and the type doesn't say whether a `&T`
+parameter is read or changed (7.4). There the check is made while the program runs. Beside the
+code of every function, the compiler writes a note that says which of its parameters are `var`
+(7.7). A call through a variable that hands over a read-only borrower looks at the note of the
+function it runs. When that parameter is a `var`, the program fails (11.7):
 
 ```go
-const quiet: ()void = (){ };
+var f: (&int)void = bump;      // bump's parameter is var x: &int (8.4)
 
-const run: ((&()void)void)void = (const f: (&()void)void){
-    f(&quiet);                 // ERROR: quiet is a const function, and the compiler can't see what f does
-};
+f(&count);                     // fine: count is a var
+f(&limit);                     // fails while running: limit is const, and bump's parameter is a var borrower
+bump(&limit);                  // ERROR: the same mistake, where the compiler sees the function
+```
+
+- The call fails when the function could change the `const`, whether or not it would on this
+  run. That is the rule for a call by name as well.
+- It is the pattern of an index (5.2), a map key (6.2) and `convert` (4.4): the compiler checks
+  when it can see, and otherwise the check is made while the program runs.
+- The note sits with the code, so a function value is still two addresses (7.7).
+
+**(filled in) A read-only borrower doesn't go where the compiler can't follow it.** Where a
+type parameter stands for a type that holds a borrower (4.3, 8.5), a parameter whose type is
+written with that type parameter counts as a `var` parameter for this rule. So does the
+parameter of `wrap` (4.5). So nothing inside a `T` or an `any` is ever read-only, and a
+generic function needs no check of its own:
+
+```go
+const c: &int = &limit;
+
+wrap(&int)(c)                  // ERROR: c can only read, and what goes into an any may be changed through later
+first(&int)([c])               // ERROR: the same for a T that stands for &int
+first(int)([limit])            // fine: an int holds no borrower. The result is 10
 ```
 
 **(filled in)** An ownership is given only by a `var` (8.9), so there is never an ownership of
@@ -3652,7 +3677,7 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
-| `f(&quiet)` where `quiet` is a `const` function and `f` is a parameter **(filled in)** | a `const` that is or holds a function isn't lent to a call through a variable (8.6) |
+| `wrap(&int)(c)` and `first(&int)([c])` where `c` is a `const` borrower **(filled in)** | a read-only borrower doesn't go into an `any` or a `T` (8.6) |
 | `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `return &list^;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
 | `p = ^6;` where a function called below uses a borrower made with `&p^` **(filled in)** | the call is a use of that borrower (8.12) |
@@ -3669,6 +3694,8 @@ var b: ^Link = copyLinks(&a);                 // b is a separate list, with its 
 | `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
 | `var @q: ^int = h;`, `@q = h;`, `take(h)`: taking a value through an ownership **(filled in)** | `h` is `null` (8.10) |
 | `^v`, and `=` where it copies a heap owner **(filled in)** | there is no room left on the heap (8.3) |
+| `f(&limit)`, a call through a variable that hands over a read-only borrower **(adjusted)** | the parameter it goes to is a `var` in the function that runs (8.6) |
+| `frozen.add(1)`, a function field reached through a `const`, where the compiler can't see the function **(filled in)** | the function keeps that struct and can change its fields (9.3) |
 
 **(filled in)** Every check the compiler makes, and every check made while running, is listed
 in Appendix B.
@@ -3688,25 +3715,16 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 - **A copy of a value whose borrowers point back into itself,** like the `prev` list in
   8.15. Copying is field by field (8.8), so the copy's `prev` links borrow nodes of the
   original until they are set again.
-- **A borrower of a `const` given to a function that is held in a variable.** A function's
-  type doesn't say whether a `&T` parameter is read or changed: `(&int)void` covers both
-  (7.4). When a function is called by its own name the compiler looks at the function.
-  **(adjusted)** When it is called through a variable (7.2), as in `f(&limit)` where `f` is a
-  parameter, only the type is known. **(filled in)** One kind of `const` is turned away even
-  there: a `const` that is or holds a function (8.6).
-- **(filled in) A function in a `const` struct that the compiler can't see.** A function
-  written in a struct value can change the fields of its own struct (9.6). When a struct value
-  comes from somewhere else into a `const`, the compiler can't tell what its function fields
-  do, and a call of one can change the fields of the `const` struct (9.3).
 
-**(filled in) What happens in these cases.** In the first two, a pointer can be followed, or
-a function called, after what it points at or keeps is gone. That is not checked while the
-program runs either: it reads or changes whatever is at the old address, and what the program
-does then isn't defined. These are the only mistakes that reach memory that is gone. In the
-last two, a `const` is changed. It is never a `const` that tells the compiler which function
-a call runs (8.6), so nothing else goes wrong: the memory is there and every type still
-holds. A `const` that is lent with `&` sits in ordinary memory, and the compiler doesn't
-assume that it kept its value across a call through a variable.
+**(filled in) What happens in these cases.** A pointer can then be followed, or a function
+called, after what it points at or keeps is gone. That is not checked while the program runs
+either: it reads or changes whatever is at the old address, and what the program does then
+isn't defined. These are the only mistakes that neither the compiler nor a check while running
+catches.
+
+**(adjusted)** A `const` is not on this list. A borrower of a `const` given to a function
+that is held in a variable is checked while the program runs (8.6), and so is a function in a
+`const` struct that the compiler can't see (9.3). So a `const` never changes.
 
 Rule 8.12 also turns away some code that is safe, such as two borrowers returned from the
 same list when one of them is used to change the list. That code has to be reordered.
@@ -3764,8 +3782,8 @@ same fields: the same names, with the same types, in the same order (3.6).
 
 ### 9.2 Making a struct value
 
-A struct value is a block of fields, one for each field of the type and in the same order.
-Each field is written with its name, its type and its starting value:
+**(adjusted)** A struct value is a block of fields, one for each field of the type and in the
+same order. Each field is written with its name, its type and its starting value:
 
 ```go
 var p: Point = {
@@ -3871,14 +3889,22 @@ const fixed: {count: int, add: (int)void} = {
 ```
 
 **(filled in)** A struct value that comes into a `const` from somewhere else brings its
-functions with it, and the compiler can't see what they do. A call through that `const` struct
-can then change its fields. It is one of the cases the compiler doesn't catch (8.17):
+functions with it, and the compiler can't see what they do. Then the check is made while the
+program runs, with the note beside each function's code (7.7). Reaching a function field
+through a `const` name or a read-only borrower (8.6) fails (11.7) when the function keeps
+that struct and can change its fields. It makes no difference whether the function is called
+or read out:
 
 ```go
 const frozen: {count: int, add: (int)void} = counter;   // a copy of the var struct counter from 9.6
 frozen.count = 9;              // ERROR: frozen is const
-frozen.add(1);                 // not caught: add changes frozen.count
+frozen.add(1);                 // fails while running: add can change the fields of frozen, and frozen is const
 ```
+
+A function can change a field of the struct it keeps when it gives a field a new value, takes
+a field's value, lends a field where it may be changed, or makes a call through a variable
+(7.2), which counts as changing every outside variable (8.12). A call to another function
+field of the same struct is such a call, unless the compiler sees that function (7.2).
 
 ### 9.4 Setting a struct to another struct
 
@@ -3975,6 +4001,9 @@ outlive it, and a call to it counts as changing `counter` (8.12):
 const addToCounter: (int)void = counter.add;
 addToCounter(3);               // counter.count goes up by 3
 ```
+
+Through a `const`, a function that can change the struct's fields can be neither called nor
+read out (9.3).
 
 ### 9.7 A struct is copied, like every value
 
@@ -4845,6 +4874,8 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.8) |
 | a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
 | a `var` package given another file **(filled in)** | the new package needs more room than the holder has (11.5) |
+| `f(&limit)`, a call through a variable that hands over a read-only borrower **(adjusted)** | the parameter it goes to is a `var` in the function that runs (8.6) |
+| a function field reached through a `const`, where the compiler can't see the function **(filled in)** | the function keeps that struct and can change its fields (9.3) |
 
 ---
 
@@ -5062,7 +5093,8 @@ check these rules:
 | a borrower, an ownership, or a value that holds one, doesn't outlive what it points at | 8.5 |
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
 | a `var` borrower is made only from a place that can be assigned, a value made on the spot or another `var` borrower, wherever the compiler sees both | 8.6 |
-| a `const` that is or holds a function isn't lent to a call through a variable | 8.6 |
+| a read-only borrower goes only into a `const` borrower, a `const` parameter or back as a result, wherever the compiler sees both ends | 8.6 |
+| a read-only borrower isn't wrapped into an `any`, or handed to a parameter written with a type parameter that stands for a type that holds a borrower | 8.6 |
 | what comes in through a parameter that holds a borrower, an ownership or a function isn't put in a variable that outlasts the call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
 | a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
@@ -5122,6 +5154,8 @@ error line.
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
 | `g = h;` for a `var` package | the new package needs more room than the holder has | `package does not fit` | 11.5 |
+| `f(&limit)`, a call through a variable that hands over a read-only borrower | the parameter it goes to is a `var` in the function that runs | `const lent to a var parameter` | 8.6 |
+| `frozen.add(1)`, a function field reached through a `const` name or a read-only borrower, where the compiler can't see the function | the function keeps that struct and can change its fields | `function can change a const struct` | 9.3 |
 | `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
@@ -5135,6 +5169,6 @@ when the values involved are written values, as those sections say. Every other 
 table is always made while the program runs: `convert(int, int8)(300)` is accepted, and fails
 when it runs (4.4).
 
-Two kinds of mistake are caught neither by the compiler nor by a check while running. Both
-are listed in 8.17: following a borrower after what it borrowed is gone, and changing a
-`const` through a function the compiler can't see.
+One kind of mistake is caught neither by the compiler nor by a check while running, and 8.17
+lists it: following a pointer, or calling a function, that was stored through a pointer,
+after what it points at or keeps is gone.
