@@ -702,10 +702,11 @@ a group: in a type, `(` always starts a function type, and no type needs groupin
 as a `var` of type `type` or `x.T` (4.2, 4.5), is an ordinary value, so `(x.T)` is a group.
 
 **(filled in)** After an empty `()`, a `{` could start the body of a function value or a
-struct type that a function type returns. The compiler looks inside the braces. Types
-separated by commas, or a single type, make a function type: `(){int, int}` takes nothing and
-returns a struct, and `(){int}bool` returns a map. Anything else is the body of a function
-value: `(){ return 1; }`, and `(){ }` with nothing inside.
+struct type that a function type returns. The compiler looks inside the braces. Fields
+written `name: Type` with commas between them make a struct type, and a single type is the
+key of a map type: `(){x: int, y: int}` takes nothing and returns a struct, and `(){int}bool`
+returns a map. Anything else is the body of a function value: `(){ return 1; }`, and `(){ }`
+with nothing inside.
 
 ### 3.3 Every modifier goes in front
 
@@ -720,7 +721,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | map | `{K}V` | `{int}bool` | map from int keys to bool values |
 | function | `(P1, P2)R` | `(int, int)int` | takes two ints, returns an int |
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
-| struct | `{T1, T2}` | `{bool, int}` | a struct with a bool field and an int field |
+| struct | `{a: T1, b: T2}` | `{debug: bool, size: int}` | a struct with a bool field `debug` and an int field `size` **(adjusted)** |
 | on the heap | `^T` | `^int` | an int on the heap, owned by this holder (section 8) |
 | borrowed | `&T` | `&int` | an int that another holder owns (section 8) |
 | ownership | `@T` | `@int` | the ownership of an int variable (8.9) |
@@ -787,14 +788,17 @@ Type      = BasicType
           | "[" [ NUMBER ] "]" Type           (array: fixed or unsized)
           | "?" Type                          (pair: one Type for false, one for true)
           | "{" Type "}" Type                 (map: {key}value)
-          | "{" TypeList "}"                  (struct: its field types, section 9)
+          | "{" FieldList "}"                 (struct: its fields, section 9)
           | "^" Type                          (a value on the heap, section 8)
           | "&" Type                          (a borrowed value, section 8)
           | "@" Type                          (the ownership of a variable, section 8)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "void"                     (void = returns nothing)
 TypeList  = Type { "," Type }
+FieldList = NAME ":" Type { "," NAME ":" Type }
 ```
+
+**(adjusted)** A struct type writes each field as `name: Type` (9.1).
 
 A function type always ends with its return type. A function that returns nothing ends
 with `void`: `(int)void` takes an int and returns nothing, and `()void` takes nothing and
@@ -814,11 +818,13 @@ file (11.3), so that the compiler knows which type it is. The full grammar of th
 in Appendix A.
 
 **(filled in)** Two types are the same type when they are the same once every type name is
-replaced by what it names (4.1). Only the shape counts: the names of parameters and fields,
-and `const` and `var`, are not part of a type (7.4, 9.9). For a type that names itself (4.6)
-the replacing never ends, so the rule there is: two types are the same when no difference
-shows up however far the names are followed. `const A: type = {int, ^A};` and
-`const B: type = {int, ^B};` are the same type. To check it, the compiler follows both types
+replaced by what it names (4.1). Only the shape counts: the names of parameters,
+and `const` and `var`, are not part of a type (7.4). The names of a struct's fields are part
+of it (9.1): `{x: int, y: int}` and `{w: int, h: int}` are two different types. For a type
+that names itself (4.6) the replacing never ends, so the rule there is: two types are the same
+when no difference shows up however far the names are followed.
+`const A: type = {value: int, next: ^A};` and `const B: type = {value: int, next: ^B};` are
+the same type. To check it, the compiler follows both types
 side by side, and counts a pair of names it has already met as the same.
 
 ### 3.7 What "equal" means **(filled in)**
@@ -883,7 +889,7 @@ to, returned as, held in or used as, or the other side of an operator (3.2).
 | `'a'` | | `char` |
 | `null` | a place | the `^T`, `&T` or `@T` of its place (8.10) |
 | `[a, b, c]`, `"abc"` | every element is a `T` | the `[n]T` or `[]T` of its place, or its `?T` when there are two elements. With no place: `[n]T`, a fixed array of what the elements are. Written numbers among them take the type of the other elements (3.2) |
-| `{ x: int = 1; y: int = 2; }` | each value has the type written in its field | the struct type with those field types, in order (9.2) |
+| `{ x: int = 1; y: int = 2; }` | each value has the type written in its field | the struct type with those fields: `{x: int, y: int}`. It has to be the type of its place, when it has one (9.2) |
 | `{k1: v1, k2: v2}` | every key is a `K`, every value a `V` | the `{K}V` of its place. With no place: `K` and `V` are what the keys and values are (6.1) |
 | `(const x: P1, var y: P2){ … }` | every `return` gives an `R` | `(P1, P2)R`, where `R` is the return type of its place. With no place: `R` is what its `return`s give, or `void` (7.1) |
 | a name | | the type it was declared with |
@@ -901,7 +907,7 @@ to, returned as, held in or used as, or the other side of an operator (3.2).
 | `a[i]` | `a` is a `{K}V`, and `i` is a `K` | `V` (6.2) |
 | `a[i:j]` | `a` is an `[n]T` or `[]T`. `i` and `j` are `int`s, and either can be left out | `[]T`, a copy. With `&` in front: `&[]T`, a slice (5.9) |
 | `a.length` | `a` is an array or a map | `int` (5.5, 6.3) |
-| `s.x` | `s` is a struct, and `x` names one of its fields | the type of that field (9.9) |
+| `s.x` | `s` is a struct, and `x` is one of the fields of its type | the type of that field (9.1) |
 | `g.x` | `g` is a `package`, and `x` is a top-level name of its file | the type of that name (11.2) |
 | `x.T` | `x` is an `any` | `type` (4.5) |
 | `f(a, b)` | `f` is a `(P1, P2)R`, `a` is a `P1` and `b` is a `P2` | `R` (7.2) |
@@ -948,7 +954,7 @@ const ops: [2]Op = [add, add];       // an array of Op
 var board: bitboard = 0;
 ```
 
-A struct type is named the same way: `const Point: type = {int, int};` (9.1).
+A struct type is named the same way: `const Point: type = {x: int, y: int};` (9.1).
 
 A named type can be used anywhere a type can, including inside other types (`[2]Op`). A
 name for a type is the same type under another name, so a `bitboard` can be used wherever
@@ -1339,14 +1345,14 @@ An `any` is a struct of two things: the value's type and the value. Pictured as 
 ```go
 var x: any = wrap(int)(3);
 // pictured as a struct: the type, then a value of that type
-var x: {type, int} = {
+var x: {T: type, value: int} = {
     T: type = int;                // x.T
     value: int = 3;
 };
 
 var y: any = wrap(bool)(true);
 // a different shape inside, because the value is a bool
-var y: {type, bool} = {
+var y: {T: type, value: bool} = {
     T: type = bool;
     value: bool = true;
 };
@@ -1375,9 +1381,9 @@ file, wherever it is declared, itself included (2.8). That is how a list node na
 node (8.14):
 
 ```go
-const Node: type = {int, ^Node};       // fine: the next node is behind a ^
-const Even: type = {int, ^Odd};        // fine: Odd is declared below, and both are top-level types
-const Odd: type = {int, ^Even};
+const Node: type = {value: int, next: ^Node};   // fine: the next node is behind a ^
+const Even: type = {value: int, next: ^Odd};    // fine: Odd is declared below, and both are top-level types
+const Odd: type = {value: int, next: ^Even};
 ```
 
 A value has a fixed size (2.6), so a type can't hold itself directly. It reaches itself
@@ -1385,7 +1391,7 @@ through a pointer (`^`, `&` or `@`) or a function type. Each of those has the sa
 whatever it leads to:
 
 ```go
-const Bad: type = {int, Bad};          // ERROR: a Bad would hold a Bad, which holds a Bad, without end
+const Bad: type = {value: int, next: Bad};      // ERROR: a Bad would hold a Bad, which holds a Bad, without end
 const Rows: type = [2]Rows;            // ERROR: a Rows would hold two Rows, each holding two more
 const Step: type = (int)Step;          // fine: a function that returns a function of its own type
 ```
@@ -1549,7 +1555,7 @@ An array is like a struct whose fields all have the same type and are reached by
 instead of by name:
 
 ```go
-var a: [3]int = [10, 20, 30];     // like a struct {int, int, int}
+var a: [3]int = [10, 20, 30];     // like a struct with three int fields
 a[1]                              // the second field, by position
 ```
 
@@ -1565,7 +1571,7 @@ picture them (you never write arrays this way, and the field names are only labe
 ```go
 var a: [3]int = [10, 20, 30];
 // pictured as a struct: three int fields; the length 3 is fixed by the type [3]int
-var a: {int, int, int} = {
+var a: {at0: int, at1: int, at2: int} = {
     at0: int = 10;                // a[0]
     at1: int = 20;                // a[1]
     at2: int = 30;                // a[2]
@@ -1573,7 +1579,7 @@ var a: {int, int, int} = {
 
 var b: []int = [7, 8];
 // pictured as a struct: the length is stored, then the elements
-var b: {int, [2]int} = {
+var b: {length: int, elements: [2]int} = {
     length: int = 2;              // b.length: set by the first value, and it never changes
     elements: [2]int = [7, 8];
 };
@@ -1884,7 +1890,7 @@ Pictured as a struct (field names only as labels):
 ```go
 var seen: {int}bool = {1: true, 4: false};
 // pictured as a struct: each key, then its value
-var seen: {int, bool, int, bool} = {
+var seen: {key0: int, value0: bool, key1: int, value1: bool} = {
     key0: int = 1;   value0: bool = true;     // seen[1]
     key1: int = 4;   value1: bool = false;    // seen[4]
 };
@@ -2285,8 +2291,8 @@ rule from the top of this section again: a function borrows the variables it use
 the variable is the call's parameter. Every new call has parameters of its own.
 
 ```go
-const makeTally: (int){()void, ()int} = (var total: int){
-    var both: {()void, ()int} = {
+const makeTally: (int){up: ()void, get: ()int} = (var total: int){
+    var both: {up: ()void, get: ()int} = {
         up: ()void = (){ total = total + 1; };
         get: ()int = (){ return total; };
     };
@@ -2294,7 +2300,7 @@ const makeTally: (int){()void, ()int} = (var total: int){
 };
 
 var zero: int = 0;
-var tally: {()void, ()int} = makeTally(zero);
+var tally: {up: ()void, get: ()int} = makeTally(zero);
 tally.up();
 tally.up();
 tally.get()                    // 2: up and get use the same total
@@ -3488,7 +3494,7 @@ A node can't hold another node directly, because it would have no fixed size. It
 heap owner of the next node (struct types are in section 9):
 
 ```go
-const Node: type = {int, ^Node};       // value, next
+const Node: type = {value: int, next: ^Node};
 
 const makeNode: (int)^Node = (const v: int){
     var n: ^Node = ^{ value: int = v; next: ^Node = null; };
@@ -3573,7 +3579,7 @@ That makes a second link possible: a list that can be walked backwards, or a tre
 points back at its parent.
 
 ```go
-const Link: type = {int, ^Link, &Link};        // value, next (owned), prev (borrowed)
+const Link: type = {value: int, next: ^Link, prev: &Link};    // next is owned, prev is borrowed
 
 var a: ^Link = ^{ value: int = 1; next: ^Link = null; prev: &Link = null; };
 a^.next = ^{ value: int = 2; next: ^Link = null; prev: &Link = &a^; };
@@ -3744,18 +3750,22 @@ owner: the holder it lives in.
 
 ### 9.1 A struct type
 
-A struct's type is its shape: the field types in braces. Like every type, it is named with
-`const` (4.1):
+**(adjusted)** A struct's type is its shape: its fields in braces, each with a name and a
+type. Like every type, it is named with `const` (4.1):
 
 ```go
-const Point: type = {int, int};
-const Settings: type = {bool, int};
+const Point: type = {x: int, y: int};
+const Settings: type = {debug: bool, size: int};
 ```
+
+The names belong to the type. `.` reaches a field by its name, and the compiler finds the
+name in the type: `p.x` for a `Point`. Two struct types are the same type when they have the
+same fields: the same names, with the same types, in the same order (3.6).
 
 ### 9.2 Making a struct value
 
-A struct value is a block of fields, one per type in the shape and in the same order. Each
-field is a name, a type and a starting value:
+A struct value is a block of fields, one for each field of the type and in the same order.
+Each field is written with its name, its type and its starting value:
 
 ```go
 var p: Point = {
@@ -3767,30 +3777,47 @@ var p: Point = {
 A struct is declared with `const` or `var`, like any other value. The fields carry no
 `const` or `var` of their own (9.3).
 
-**(filled in)** The block has one field for each type in the shape, in the same order, and
-the type written in each field is the type at its position. A field's value can use the
-fields written above it, like the names above a declaration in any block (2.8). A call in a
-field's value follows the rule for a call at the top level of a file (11.4): it can run only
-when every field that its function uses is written above the call.
+**(filled in)** The block is checked against the type. It has the type's fields, in the
+type's order, and each field is written with the name and the type that the type gives it. A
+field's value can use the fields written above it, like the names above a declaration in any
+block (2.8). A call in a field's value follows the rule for a call at the top level of a file
+(11.4): it can run only when every field that its function uses is written above the call.
 
 ```go
 var q: Point = { x: int = 1; };                   // ERROR: a Point has two fields
-var r: Point = { x: int = 1; y: bool = true; };   // ERROR: the second field of a Point is an int
+var r: Point = { x: int = 1; y: bool = true; };   // ERROR: the field y of a Point is an int
+var u: Point = { a: int = 1; b: int = 2; };       // ERROR: the fields of a Point are x and y
 var s: Point = { x: int = 2; y: int = x * 3; };   // fine: y uses x, so y is 6
 
-var early: {()int, int, ^int} = {
+var early: {peek: ()int, first: int, last: ^int} = {
     peek: ()int = (){ return last^; };            // fine by itself: a body can use a field below it (9.6)
     first: int = peek();                          // ERROR: peek uses last, which is written below this line
     last: ^int = ^5;
 };
 ```
 
-This mirrors functions: the type lists only the types, and the value gives the names.
+**(filled in)** Inside its own block, a field is also a plain name: for the fields below it
+and for the functions written in the block (9.6). Like every name, it can't be spelled like a
+name that can already be seen where the block is written (2.8).
+
+**(adjusted)** The type says what the fields are, and the value says what each one starts
+with. A field in the value is written like every declaration (2.1), with its name, its type
+and its value, so a block can be read on its own:
 
 | | Type (after `:`) | Value (after `=`) |
 |---|---|---|
 | function | `(int, int)int` | `(const x: int, const y: int){ … }` |
-| struct | `{int, int}` | `{ x: int = 1; y: int = 2; }` |
+| struct | `{x: int, y: int}` | `{ x: int = 1; y: int = 2; }` |
+
+A function's type leaves the parameter names out, because only the function itself uses
+them. A struct's type has the field names, because everything that holds the struct reaches
+its fields by name.
+
+```go
+const Size: type = {w: int, h: int};
+
+var box: Size = p;                 // ERROR: p is a Point, and a Size has the fields w and h
+```
 
 `Point` is a type. It is not a value of that type, and it is never called:
 
@@ -3835,7 +3862,7 @@ a struct is declared `const` with its block written out, its fields are `const` 
 block too, and the compiler rejects the change where it is written:
 
 ```go
-const fixed: {int, (int)void} = {
+const fixed: {count: int, add: (int)void} = {
     count: int = 0;
     add: (int)void = (const n: int){
         count = count + n;     // ERROR: count is a field of a const struct
@@ -3848,7 +3875,7 @@ functions with it, and the compiler can't see what they do. A call through that 
 can then change its fields. It is one of the cases the compiler doesn't catch (8.17):
 
 ```go
-const frozen: {int, (int)void} = counter;   // a copy of the var struct counter from 9.6
+const frozen: {count: int, add: (int)void} = counter;   // a copy of the var struct counter from 9.6
 frozen.count = 9;              // ERROR: frozen is const
 frozen.add(1);                 // not caught: add changes frozen.count
 ```
@@ -3869,7 +3896,7 @@ A singleton is a value whose struct type has no name. It's declared directly, li
 other value:
 
 ```go
-var settings: {bool, int} = {
+var settings: {debug: bool, size: int} = {
     debug: bool = false;
     size: int = 3;
 };
@@ -3883,7 +3910,7 @@ A function declared inside a struct is in the struct's scope, so it uses the str
 fields directly. There is no `this`:
 
 ```go
-var counter: {int, (int)void} = {
+var counter: {count: int, add: (int)void} = {
     count: int = 0;
     add: (int)void = (const n: int){
         count = count + n;     // count is the struct's own field
@@ -3898,7 +3925,7 @@ counter.add(2);                // counter.count is now 7
 each copy's functions change its own fields:
 
 ```go
-var other: {int, (int)void} = counter;     // a full copy, add included
+var other: {count: int, add: (int)void} = counter;     // a full copy, add included
 other.add(1);                  // other.count is now 8, and counter.count is still 7
 ```
 
@@ -3931,7 +3958,7 @@ pointer.
 ```go
 var total: int = 0;
 
-var tally: {int, (int)void} = {
+var tally: {count: int, add: (int)void} = {
     count: int = 0;
     add: (int)void = (const n: int){
         count = count + n;     // fine: a field
@@ -3994,70 +4021,7 @@ Writing
 lays its fields out on the stack one after another, and they're removed again. Saving the
 block in a variable keeps it: the variable's own place on the stack holds the whole block,
 just as an `int` variable holds its number. A field is found from the start of that block
-and its position in the shape (`{int, int}`: `x` first, `y` second).
-
-### 9.9 Field names **(filled in)**
-
-A struct type lists only types (9.1), and the struct value gives the names (9.2). So the
-names are not part of the type: `{ x: int = 1; y: int = 2; }` and
-`{ w: int = 3; h: int = 4; }` both have the type `{int, int}`, and either one goes wherever
-that type is asked for (3.6).
-
-**A field name is a label for a position, and it belongs to the type as it is written.** For
-every value, the compiler knows how its type was written where the value was declared: as a
-type name such as `Point`, or as a struct type written out, such as `{bool, int}`. `p.x` is
-looked up by that:
-
-| The type of `p` was written as | Its field names are the ones given by |
-|---|---|
-| a type name, such as `Point` or `geom.Box` | the struct values written for that type name in the file that declares it |
-| a struct type written out, such as `{bool, int}` | the struct values written for that type, with no type name, in the file where it was written |
-
-A struct value is *written for* the type that its place asks for (3.8): the block in
-`var p: Point = { … };` is written for `Point`. The written form goes with a type through
-every step: an element of a `[3]Point` is a `Point`, what a `^Node` leads to is a `Node`, a
-call of an `(int)Point` gives a `Point`, and `first(Point)` works on `Point`s (4.3).
-
-```go
-const Point: type = {int, int};
-const Size: type = {int, int};
-
-var p: Point = { x: int = 1; y: int = 2; };
-var s: Size = { w: int = 3; h: int = 4; };
-
-p.x                    // 1
-s.w                    // 3
-s = p;                 // fine: a Point and a Size are the same type (3.6)
-s.w                    // 1: the first field, under the name that Size gives it
-s.x                    // ERROR: the fields of a Size are w and h
-var q: Point = { a: int = 0; b: int = 0; };    // ERROR: the fields of a Point are x and y
-```
-
-| Rule | Example |
-|---|---|
-| every struct value written for one written type gives the same names, in the same order | `q` above |
-| a name that those struct values don't give is an error | `s.x` above |
-| a type name whose own file writes no struct value for it has no field names | struct values can be written for it anywhere, but `.x` can't be used on it |
-| a type name declared as another type name has that name's field names | `const Box: type = geom.Box;` |
-| a `T` and an `any` have no field names | a generic function can't read a field of a `T` (4.3) |
-
-Some finer points:
-
-- Two struct types written out are the same written type when they are the same type (3.6).
-  So two unnamed structs of one shape in one file share their field names. To give them
-  different names, give one of the types a name.
-- The same file imported under two names gives the same field names: `a.Box` and `b.Box`.
-- Where a value could have two written forms, as an element of `[p, s]` that has no place of
-  its own, the first one counts.
-
-It is the picture from 5.7 again: the fields of a struct are reached by position, and their
-names are labels for the positions. The labels come from struct values in the file itself, or
-from a file that is reached through a package. So a field name comes from where every other
-name comes from (11.1).
-
-Inside its own block, a field is also a plain name: for the fields below it (9.2) and for the
-functions written in the block (9.6). Like every name, it can't be spelled like a name that
-can already be seen there (2.8).
+and its position in the shape (`{x: int, y: int}`: `x` first, `y` second).
 
 ---
 
@@ -4220,7 +4184,7 @@ A file brings in another file with an ordinary declaration:
 
 ```go
 // the file geom
-const Box: type = {int, int};
+const Box: type = {w: int, h: int};
 const area: (int, int)int = (const w: int, const h: int){
     return w * h;
 };
@@ -4621,7 +4585,7 @@ applyTo(ops[1], &table[0][1], 10);  // table[0][1] is now 12
 applyTo(ops[2], &table[1][0], 2);   // table[1][0] is now 6
 
 // a struct type, a function that makes one, and a borrower to share it
-const Point: type = {int, int};
+const Point: type = {x: int, y: int};
 
 const makePoint: (int, int)Point = (const a: int, const b: int){
     var p: Point = { x: int = a; y: int = b; };
@@ -4669,7 +4633,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
 | `(P1)void` | function returning nothing |
-| `{T1, T2}` | struct with fields of types `T1` and `T2` |
+| `{a: T1, b: T2}` | struct with a field `a` of type `T1` and a field `b` of type `T2` |
 | `^T` | a `T` on the heap, owned by this holder |
 | `&T` | a `T` borrowed from another holder |
 | `@T` | the ownership of a `T` variable |
@@ -4848,14 +4812,14 @@ the place they are written for (3.8).
 | `first(x.T)` | a type that decides a type is written out (4.3) |
 | `a + b` where both are a `T` in a generic function | `+` doesn't work on every type (4.3) |
 | `wrapMore([1]T)` inside the generic function `wrapMore` | a function can't hand itself ever bigger types: every type has to be known before the program runs (4.3) |
-| `const Bad: type = {int, Bad};` | a type can't hold itself directly (4.6) |
+| `const Bad: type = {value: int, next: Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
 | `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` **(adjusted)** | a function given back can't be stored where it outlasts the call it is in (7.8) |
 | `var y: &int = x;` where `x` is a `const` borrower | a copy of a `const` borrower can only read (8.6) |
 | `kept = b;` where `b` is a parameter and `kept` outlasts the call | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `total = total + n;` in a function of a struct value that also uses the struct's fields | such a function keeps its struct, and can use nothing else that needs a place (9.6) |
-| `s.x` where no struct value written for the type of `s` has a field `x` | a field name comes from the struct values written for the type (9.9) |
+| `p.z` where `p` is a `Point` | a `Point` has the fields `x` and `y`: a field name comes from the struct's type (9.1) |
 | `import(fileName)` | the file is written out in the code (11.2) |
 | `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
 
@@ -4977,12 +4941,13 @@ always decide:
 | `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2. So a mark never puts a type on the heap or borrows one: `^int` is always a type |
 | `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
 | `(` | a call, a function value, a function type or a group, by the table in 3.2 |
-| `()` followed by `{` | a function type when the braces hold types, as in `(){int, int}`. Otherwise a function value with no parameters (3.2) |
+| `()` followed by `{` | a function type when the braces hold fields written `name: Type`, or one type: `(){x: int, y: int}`, `(){int}bool`. Otherwise a function value with no parameters (3.2) |
 | `{` followed by `NAME : Type =` | a struct value |
 | `{` followed by a value and then a `:`, when it isn't the row above | a map value |
-| `{` holding types, as in `{int, int}` or `{int}bool` | a struct type or a map type (3.6) |
+| `{` followed by `NAME : Type` and then a `,` or the `}` | a struct type (3.6). Where a map of types is asked for, it is a map value instead: the place decides (3.8) |
+| `{` holding one type, with a type straight after the `}` | a map type, as in `{int}bool` (3.6) |
 | `{ }` with nothing inside, where a value is expected | a map value with no entries. Where a statement starts, it is an empty block |
-| `{` where a statement starts, when it isn't one of the four above | a block. The `{` after a function value's parameters always starts its body |
+| `{` where a statement starts, when it isn't one of the rows above | a block. The `{` after a function value's parameters always starts its body |
 | a statement that starts with a value followed by `=` | an assignment. Without the `=` it is a value on its own |
 
 ---
@@ -5049,7 +5014,7 @@ program runs. The rules themselves are in the sections named.
 | a generic function that uses a `T` in a way not every type allows | `a + b` for two `T`s | 4.3 |
 | a conversion between two types that have none, where the compiler sees that the call runs `convert` | `convert([3]int, int)`, `convert(bool, float)` | 4.4 |
 | a plain value where an `any` is asked for, or an `any` where another type is | `describe(3);`, `double(x);` | 4.5 |
-| a type that holds itself without a pointer or a function type between | `const Bad: type = {int, Bad};` | 4.6 |
+| a type that holds itself without a pointer or a function type between | `const Bad: type = {value: int, next: Bad};` | 4.6 |
 | following something that isn't a pointer | `x^` for a plain `int` | 8.7 |
 | a `.name` on a value that has none | `count.length`, `sizes.length` for a pair | 3.8, 5.8 |
 
@@ -5111,16 +5076,15 @@ check these rules:
 
 | The compiler rejects | Example | Rule |
 |---|---|---|
-| a struct value with the wrong number of fields for its type | `var q: Point = { x: int = 1; };` | 9.2 |
-| a field whose written type isn't the type at its position | `{ x: int = 1; y: bool = true; }` for a `Point` | 9.2 |
-| a field named like a name that can be seen where the struct value is written | a field `count` beside a `var count` | 2.8, 9.9 |
+| a struct value that doesn't have the fields of its type: their number, their order, their names and their types | `var q: Point = { x: int = 1; };`, `var u: Point = { a: int = 1; b: int = 2; };` | 9.2 |
+| a struct of one type where another is asked for | `var box: Size = p;` for a `p` that is a `Point` | 9.1, 9.2 |
+| a field named like a name that can be seen where the struct value is written | a field `count` beside a `var count` | 2.8, 9.2 |
 | a function in a `const` struct that changes a field | `count = count + n;` in the block of a `const` struct | 9.3 |
 | a call in a field's value whose function uses a field written below the call | `first: int = peek();` where `peek` uses the field `last` below | 9.2 |
 | a function in a struct value that uses the struct's fields and also a name that needs another place | `total = total + n;` beside `count = count + n;` | 9.6 |
 | a function that uses the fields but isn't a field's value, or inside an array, pair or map in one | a function written as an argument in a field's value | 9.6 |
-| a struct value whose field names differ from the other struct values written for the same written type | `var q: Point = { a: int = 0; b: int = 0; };` when a `Point` has `x` and `y` | 9.9 |
-| a field name that the type, as it was written, doesn't have | `s.x` for a `Size` whose fields are `w` and `h` | 9.9 |
-| a field name used on a `T`, on an `any`, or on a type name whose file writes no struct value for it | `v.x` for a `v` of type `T` | 9.9 |
+| a field name that the struct's type doesn't have | `p.z` for a `Point` | 9.1 |
+| a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 4.3 |
 
 ### B.8 Files and packages
 
