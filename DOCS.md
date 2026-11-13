@@ -250,7 +250,8 @@ that block, and in every block and function body inside it (7.8).
 
 **A name can't be declared where the same name can already be seen.** So a name means one
 thing wherever it is read. This holds for every way of declaring a name: a `const`, a `var`,
-a parameter (7.4), a field in a struct value (9.2), and the built-in names (2.7).
+a parameter (7.4), a field in a struct value (9.2), the name of a type parameter in a function
+type (4.3), and the built-in names (2.7).
 
 ```go
 var count: int = 3;
@@ -2214,9 +2215,10 @@ of the package value, so a function that uses a name of such a block keeps the p
 struct value holds only its fields (9.8), and that is why a function that uses a struct's
 fields can use nothing else that needs a place (9.6).
 
-**(filled in)** The struct value or the package value at the end of that chain is the one the
-function *belongs to*: the struct whose fields it uses, or the package whose names it uses. A
-function that keeps nothing belongs to nothing.
+**(filled in)** A function *belongs to* the struct value or the package value that this ends
+at: the one it keeps itself, in the second and third rows of the table, or the one at the end
+of the chain, in the last two. It is the struct whose fields the function can use, or the
+package whose names it can use. A function that keeps nothing belongs to nothing.
 
 **A note beside the code.** For every function, the compiler stores a short note in the
 program, beside the function's code. It says which of the function's parameters are `var`. A
@@ -2823,13 +2825,14 @@ look = &limit;             // ERROR: look is const, so it always borrows count
 A parameter works the same way: `(const v: &[]int)` borrows an array to read it, and
 `(var x: &int)` borrows a value to change it.
 
-**(filled in) A borrower that can only read stays that way.** A borrower can only read when it
-is made from a place that can't be assigned (2.9), when it is read from such a place, or when
-it is a copy of such a borrower. So `&limit`, a borrower held in a `const` and a `const`
-parameter can all only read. A read-only borrower goes only where it stays read-only: into a
-`const`, into a `const` parameter, or back to the caller as a result (8.13). So a `var`
-borrower is made only from a place that can be assigned, with `&` in front, from a value made
-on the spot (8.4), or from another `var` borrower:
+**(filled in) A borrower that can only read stays that way.** A borrower is *read-only* when it
+is made from a place that can't be assigned (2.9), when it is read from such a place, when it
+is a copy of a read-only borrower, or when it is the result of a call that was lent one (8.13).
+So `&limit`, a borrower held in a `const` and a `const` parameter are all read-only. A
+read-only borrower goes only where it stays read-only: into a `const`, into a `const`
+parameter, or back to the caller as a result (8.13). So a `var` borrower is made only from a
+place that can be assigned, with `&` in front, from a value made on the spot (8.4), or from
+another `var` borrower:
 
 ```go
 const relay: (&int)void = (const x: &int){
@@ -2839,10 +2842,10 @@ const relay: (&int)void = (const x: &int){
 ```
 
 **(filled in) A value with a borrower inside it follows the same rule.** That is a value with a
-borrower anywhere in what `=` copies (8.8): in a field, an element or an entry, or in a heap
-value it owns. When it is read from a place that can't be assigned, or made on the spot with a
-read-only borrower in it, it also goes only into a `const`, into a `const` parameter, or back
-as a result:
+borrower anywhere in what `=` copies (8.8): in a field, an element or an entry, in a variable
+of a package, or in a heap value it owns. When it is read from a place that can't be assigned,
+or made on the spot with a read-only borrower in it, it also goes only into a `const`, into a
+`const` parameter, or back as a result:
 
 ```go
 const views: [2]&int = [&left, &right];    // left and right are the vars from 8.4
@@ -3561,8 +3564,8 @@ the type, and couldn't tell what the result points at.
 
 **(filled in) An argument that holds borrowers lends what they borrow.** An array or a struct
 of borrowers, an `any` or a package that holds one, and a function that uses variables from
-around it all count this way. When such an argument is a `const`, the result has to be a
-`const` borrower, as with a `const` that is lent. So a borrower that is taken out of such an
+around it all count this way. When such an argument is read-only (8.6), the result is
+read-only as well, as with a `const` that is lent. So a borrower that is taken out of such an
 argument and given back still has an origin:
 
 ```go
@@ -3578,8 +3581,10 @@ caller sees only the type of a result. When that type holds a borrower or an own
 the result comes from everything that was lent to the call. A pointer that lies behind a `^`
 in the type doesn't count: `copyLinks` in 8.15 gives back a `^Link` whose `prev` borrowers
 sit inside heap values, where the compiler doesn't follow them (8.17), so the copy is a value
-of its own. A result that holds a function follows 7.8. A result that holds none of these is
-a plain copy, and it lives as long as the holder it is put in.
+of its own. Whether a result can only read is another question, and there every borrower that
+`=` copies counts, also one behind a `^`: such a result is read-only when something read-only
+was lent to the call (8.6). A result that holds a function follows 7.8. A result that holds
+none of these is a plain copy, and it lives as long as the holder it is put in.
 
 ### 8.14 A linked list, step by step
 
