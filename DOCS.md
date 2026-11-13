@@ -4847,6 +4847,7 @@ the place they are written for (3.8).
 | `0 < count < 10` | `0 < count` is a `bool`, and `<` doesn't work on a `bool` (3.2) |
 | `first(x.T)` | a type that decides a type is written out (4.3) |
 | `a + b` where both are a `T` in a generic function | `+` doesn't work on every type (4.3) |
+| `wrapMore([1]T)` inside the generic function `wrapMore` | a function can't hand itself ever bigger types: every type has to be known before the program runs (4.3) |
 | `const Bad: type = {int, Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
