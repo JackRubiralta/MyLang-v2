@@ -16,9 +16,10 @@ files. It did not yet say how the source is written, what most operators do at t
 what several rules mean for the compiler, or what happens when something goes wrong while the
 program runs. Those gaps are filled now:
 
-- **120 rules were filled in.** They are listed in section 2, each with its reason and the
+- **121 rules were filled in.** They are listed in section 2, each with its reason and the
   principle that decided it.
-- **13 rules of Jack's were adjusted.** They are listed in section 3.
+- **12 rules of Jack's were adjusted.** They are listed in section 3. (A10 is withdrawn: see
+  the note on 13 November below.)
 - **2 of those are bigger changes,** and they are the first things to review. They are in
   section 4: where the parameters that a function keeps live, and which calls the compiler
   can see into.
@@ -33,6 +34,20 @@ rules a package's names follow; the set-up order and `main`; what a failed check
 (Appendix B).
 
 The philosophy (1.3 and 1.4) and the gap list (1.5) were written first, before any decision.
+
+**13 November: a `var` can hold a type.** Jack decided this after the work above was pushed.
+`var t: type = int;` is now allowed (DOCS 4.2). Such a `var` is a value that holds a type, not
+a type name, so it still can't declare anything. To make it work without breaking anything,
+three of my filled-in rules changed, and one adjustment went away:
+
+| What | Before | Now | Why |
+|---|---|---|---|
+| what a `type` value is underneath (rule 47) | a description held by value, bigger for a bigger type | the address of a description the compiler writes into the program: one size for every type | a `var` has a fixed place on the stack, so it can only be given any other type if every type value is the same size |
+| every type is known before the program runs (new rule 121) | a type built from a type parameter, such as `[]T`, was put together while the program ran | the compiler finds every type before the program runs, and a function that would hand itself ever bigger types is an error | a description that is written into the program has to exist before the program starts |
+| which names are type names (rule 40) | every `type` parameter was a type name | only a `const` `type` parameter that the function's type names. A parameter that can be handed any type value only holds a type | it is the same case as `const U: type = x.T;`, which already wasn't a type name. Without this, rule 121 couldn't find every type |
+| A10 | the "always held as a `const`" rule was narrowed to where a type shows | withdrawn | the rule it adjusted is gone |
+
+Nothing that the docs' examples do is rejected by these changes.
 
 ### 1.1 Where to look first
 
@@ -315,14 +330,15 @@ happens underneath.
 
 | DOCS | # | The rule | Why | Principle |
 |---|---|---|---|---|
-| 4.2 | 40 | A type name is a built-in type, a `const` declared with a type written out, or a `type` parameter | The compiler has to know which names are types before the program runs | 8 |
-| 4.2 | 41 | A type that decides the type of something is written out with type names. A type worked out another way (`x.T`, `wholeTypes[1]`) can only be compared, stored and passed | Every value's type is known before the program runs (4.2) | 4, 8 |
+| 4.2, 4.3 | 40 | A type name is a built-in type, a `const` declared with a type written out, or a `const` `type` parameter that its function's type names. Every other name of type `type` only holds a type: a `var`, a `const` whose value is worked out, a `type` parameter the function's type doesn't name | The compiler has to know which names are types before the program runs. A name that can be handed a type while the program runs can't be one of them | 8, 7 |
+| 4.2 | 41 | A type that decides the type of something is written out with type names. A type that is held or worked out another way (a `var`, `x.T`, `wholeTypes[1]`) can only be compared, stored and passed | Every value's type is known before the program runs (4.2) | 4, 8 |
 | 4.2 | 42 | A top-level type name can be used anywhere in its file. The compiler collects those names first, imported files before the files that import them | A type never runs, so the order can't matter | 8 |
-| 4.2 | 43 | A type never ends too soon: it points at nothing, and it is copied into a parameter like every value | A type never changes, so it is never an argument that a function given back could outlive | 7 |
+| 4.2 | 43 | A type never ends too soon: a `type` value is the address of something that is part of the program | A type never changes, so it is never an argument that a function given back could outlive | 7 |
 | 4.3 | 44 | In a function type, a name that isn't declared stands for a type the function is given. Each `type` parameter opens a slot, and each new name takes the first free slot to its left. A name with no slot is an error, and the name is not part of the type | Jack's `(type)([]T)T` has to stand without a value beside it | 6, 1 |
 | 4.3 | 45 | The type handed in is written out whenever the function's type uses it | The result's type has to be known before the program runs | 8 |
 | 4.3 | 46 | A generic function is checked once. A `T` can be used only in the ways every type allows, and for lifetimes it counts as possibly holding a borrower and a function | The type then says everything, so a generic function can be held in a variable and still be checked | 1, 8 |
-| 4.3 | 47 | Underneath, a `type` value is a description of the type's shape. Size, copying, moving, freeing, comparing and finding the pointers inside come from it. Types built from a type parameter are put together while running, and two type values are equal when they describe the same type | An `any` and a generic function need exactly that | 12 |
+| 4.3 | 47 | Underneath, a `type` value is the address of a description that the compiler writes into the program, one for each type. Size, copying, moving, freeing, comparing and finding the pointers inside come from it. Two type values are equal when they are the same address, and a type value has one size | An `any` and a generic function need exactly that. One size is what lets a `var` be given any other type | 12 |
+| 4.3 | 121 | Every type is known before the program runs: the compiler follows each written type through the calls that hand it on. A function that would be reached again with a type that has its earlier type inside it is an error | A type parameter that is a type name is always handed a written type, so every type can be found. Types that never end can't be known before the program runs | 8, 4 |
 | 4.4 | 48 | All the pairs `convert` has: two number types; a `char` or a `bool` and a whole-number type; a number or a `bool` and text; each of these types to itself. Every other pair is an error, and so is a pair with a type parameter | A `bool` and a `char` are numbers underneath (3.1). Text reuses `convert` instead of new functions | 6, 2 |
 | 4.4, 4.5, 5.11 | 49 | The built-ins' own types: `convert` is `(type, type)(A)B`, `wrap` is `(type)(T)any`, `unwrap` is `(type)(any)T`, `join` is `(type)([]T, []T)[]T`. `convert` reached through a variable with a pair it has no conversion for fails while running | They are ordinary function values, so they have a type. A check the compiler can't make moves to the running program | 1, 11, 8 |
 | 4.5 | 50 | An `any` keeps the type of its first value, and the value inside keeps its own size. Another type fails while running | Its size comes from the value inside, and a value on the stack keeps its size, like an unsized array's length | 7 |
@@ -444,7 +460,7 @@ Every existing rule that changed. Each is marked **(adjusted)** in `DOCS.md`, an
 | A7 | 3.2, 13 | The order of operations, step 2: "`!` and the marks". Step 3: "`*`" | Step 2: "`!`, `-` and the marks". Step 3: "`*` `/` `%`" | The new operators needed a place in the order. Nothing that was there moved |
 | A8 | 11.4 | "Nothing runs because a file was imported, so the order the program runs in never depends on imports." | "All that runs when a file is imported is the working out of those declarations' values, at the line where the `import` is written. So the order the program runs in is always the order the code shows." | A declaration's value can be a call, so importing does run something. No statement runs, and the order is still the one the code shows |
 | A9 | 11.5 | "Functions and `const`s never change, so they are never really copied." | "A name that is ready from the start never changes and needs nothing worked out, so it is never copied: a function value written out, a written value, a type. A `const` whose value is worked out when the file is set up is held with the variables." | A worked-out `const` can differ between two imports of one file, and it can hold a function that keeps its own package |
-| A10 | 4.2 | "A type can still be held as a value: … inside an `any` (4.5). It is always held as a `const`." | The rule is checked where a type shows it: a name, a parameter or a field whose type is `type`, or an array, pair, map or struct with `type` inside. A type inside an `any` or under a `T` is not covered | The compiler can't see inside an `any` or a `T`, and such a type can never declare anything |
+| A10 | 4.2 | withdrawn | withdrawn | This adjusted "It is always held as a `const`". On 13 November Jack decided that a `var` can hold a type, so that sentence is gone and nothing is left to adjust |
 | A11 | 5.9 | "When both are written as numbers and the length is in the type, the compiler checks them." | "When both are written values and the compiler knows the length (5.2), the compiler checks them, and a bound that is left out counts as written." | The docs already reject `a = [1, 2, 4, 5];` for an unsized `a` declared with three elements. The compiler knows that length, so an index and a slice use the same knowledge |
 | A12 | 9.6, 7.8 | 7.8: "a block sees the names of the blocks around it". 9.6: "A function declared inside a struct is in the struct's scope, so it uses the struct's fields directly." | The same, but a function that uses its struct's fields can use nothing else that needs a place: no name of a function around the struct value, and nothing that needs the package | A function value has one address for what it keeps, and a struct holds only its fields (9.8). A function that keeps its struct has no second address for the place around it |
 | A13 | 13 | "Built-ins are first-class values like everything else: they can be named, stored and passed." | The same, with one exception: `import` is always called by its own name with its text written out | The compiler has to know every file of a program before it runs |

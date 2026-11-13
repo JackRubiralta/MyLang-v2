@@ -698,8 +698,8 @@ starts a function type when `a` is a type, and a group when it isn't. A type is 
 a group: in a type, `(` always starts a function type, and no type needs grouping (3.4).
 
 **(filled in)** In these rules, "a type" means a type that is written out: a type name
-(4.2), or one of the forms of 3.6 made from type names. A value of type `type` that has to be
-worked out, such as `x.T` (4.5), is an ordinary value, so `(x.T)` is a group.
+(4.2), or one of the forms of 3.6 made from type names. A value that only holds a type, such
+as a `var` of type `type` or `x.T` (4.2, 4.5), is an ordinary value, so `(x.T)` is a group.
 
 **(filled in)** After an empty `()`, a `{` could start the body of a function value or a
 struct type that a function type returns. The compiler looks inside the braces. Types
@@ -979,35 +979,46 @@ int(3.0)                     // ERROR: int is a type, not a function; use conver
 
 ### 4.2 Types never change
 
-A named type is always a `const`, so it can't be given a new value. Every
-value declared with it has a type that's known before the program runs:
+A type name is always a `const`, so it can't be given a new value. Every value declared with
+it has a type that's known before the program runs.
+
+A `var` can hold a type too. Then it is a value like any other: it can be given another type,
+compared, stored and passed. It is not a type name, so it can't declare anything:
 
 ```go
-var T: type = int;                   // ERROR: a type can't be a var
-var kinds: [2]type = [int, bool];    // ERROR: an array of types can't be a var either
+var t: type = int;                   // fine: t holds the type int
+t = bool;                            // fine: t is a var
+t == bool                            // true
+var n: t = 5;                        // ERROR: t holds a type, but it is not a type name
+
+var kinds: [2]type = [int, bool];    // fine: an array of types can be a var as well
+kinds[0] = float;                    // fine
 ```
 
-A type can still be held as a value: in an array or a map (4.1), as a function's parameter
-(4.3) or inside an `any` (4.5). It is always held as a `const`.
+A type can be held as a value wherever a value can: in an array or a map (4.1), in a struct,
+as a function's parameter (4.3) or inside an `any` (4.5).
 
 A value's type is the one it was declared with. The type inside an `any` is read with
 `x.T` (4.5).
 
 **(filled in) A type name is a name whose value, a type, the compiler knows before the program
 runs.** There are three kinds: a built-in type (2.7), a `const` of type `type` whose value is a
-type written out, such as `Pair` and `Point`, and a `type` parameter of a function (4.3). A
-`const` of type `type` whose value has to be worked out, as in `const U: type = x.T;`, holds a
-type but is not a type name.
+type written out, such as `Pair` and `Point`, and a `const` `type` parameter that its
+function's type names (4.3). Every other name of type `type` only holds a type: a `var`, a
+`const` whose value has to be worked out, as in `const U: type = x.T;`, and a `type` parameter
+that the function's type doesn't name.
 
 **(filled in) A type that decides the type of something is written out.** After a `:`,
 inside another type, and as an argument that a function's type uses (4.3), a type is written
-with type names and the forms of 3.6. A type that is worked out any other way, such as
-`wholeTypes[1]`, `x.T` or `U` above, is a value like any other. It can be compared, stored and
-passed, but it can't declare anything:
+with type names and the forms of 3.6. A type that is held or worked out any other way, such as
+`t`, `kinds[0]`, `wholeTypes[1]`, `x.T` or `U` above, is a value like any other. It can be
+compared, stored and passed, but it can't declare anything:
 
 ```go
-var n: wholeTypes[1] = 5;      // ERROR: write the type itself: int
+var m: wholeTypes[1] = 5;      // ERROR: write the type itself: int
 x.T == int                     // fine: comparing two types gives a bool (3.7)
+x.T == t                       // fine: t holds a type, and so does x.T
+first(t)                       // ERROR: first's type uses the type it is handed, so write it out (4.3)
 ```
 
 **(filled in) A top-level type name can be used anywhere in its file,** above its declaration
@@ -1016,19 +1027,10 @@ else, so it always knows which names are types (3.2). It does this for the impor
 first, and it goes on until it finds no new one, because a type name can be declared with
 another type name.
 
-**(adjusted)** The rule that a type is held as a `const` is checked where a type shows it: a
-name, a parameter or a field has to be a `const` when its written type has `type` in it
-anywhere outside a function type: `type`, `[2]type`, `{int}type`, `^type`. A type name for such
-a type counts the same. A function type that takes a `type` holds no type, so a function of
-type `(type)([]T)T` can be a `var`. An `any` can hold a type (4.5) and a `T` can stand for
-`type` (4.3) without their types showing it. A type held that way is only known while the
-program runs. By the rule above it can never declare anything, so nothing that is checked
-before the program runs depends on it.
-
-**(filled in) A type never ends too soon.** A type points at nothing, and a type that is
-handed to a function is copied into the parameter like every value. So a type is never an
-argument that a function given back could outlive (7.8): `first([3]int)` is as good as
-`first(int)`.
+**(filled in) A type never ends too soon.** Every type is known before the program runs, and a
+`type` value is the address of something that is part of the program itself (4.3). So a type is
+never an argument that a function given back could outlive (7.8): `first([3]int)` is as good
+as `first(int)`.
 
 ### 4.3 Generics: functions that take a type
 
@@ -1084,6 +1086,13 @@ a slot, and each new name takes the first slot to its left that has no name yet.
   the type by position, like every parameter (7.1). The code reads best when the two names
   agree, as in `first`.
 
+**(filled in) Which `type` parameters are type names.** A `const` parameter of type `type`
+that the function's type names is a type name inside the function (4.2): `T` in `first`. The
+type handed to it is always written out, so the compiler knows it before the program runs. A
+`type` parameter that the function's type doesn't name can be handed any value that holds a
+type. So inside the function it only holds a type, like a `var`: `a` and `b` in `sameType`
+below can be compared and passed on, but they can't be written after a `:`.
+
 **(filled in) Calling it.** At a call, the compiler puts the type that was handed in wherever
 its name stands in the function's type: `first(int)` is a `([]int)int`. So the type handed in
 is written out as a type (4.2) whenever the function's type uses it. Where the function's type
@@ -1095,6 +1104,7 @@ const sameType: (type, type)bool = (const a: type, const b: type){
 };
 
 sameType(x.T, int)             // fine: sameType's type doesn't use a or b
+sameType(t, kinds[0])          // fine: any two values that hold a type (4.2)
 first(x.T)                     // ERROR: the type of first(x.T) would only be known while running
 ```
 
@@ -1121,18 +1131,39 @@ const sumWith: (type)(T, T, (T, T)T)T = (const T: type){
 sumWith(int)(2, 3, add)        // 5: add is the (int, int)int from 7.1
 ```
 
-**(filled in) Underneath, a `type` value is a description of the type.** It holds the type's
-shape, in the forms of 3.6. Everything that is done to a value whose type is only learned
-while the program runs comes from that description: its size, how to copy it, move it, free
-it and compare it, and where the pointers and functions in it are. An `any` carries one
-(4.5), and a generic function reads one to handle a `T`.
+**(filled in) Every type is known before the program runs.** A type written with no type
+parameter in it is one type. A type written with a type parameter in it, such as `[]T`, is one
+type for each type the parameter is ever handed. The compiler finds them all. It starts at the
+calls that hand a function a type with no type parameter in it, puts that type in the place of
+the parameter, and follows the calls inside the function in the same way. A call through a
+variable (7.2) counts as a call of every function of that type. It can do this because a type
+parameter that is a type name is always handed a type that is written out.
 
-- For a type that is written out with no type parameter in it, the compiler writes the
-  description into the program once.
-- A type that is built from a type parameter, such as `[]T` inside a generic function, is put
-  together from the description of `T` when the line runs.
-- A `type` value is copied like every value. Two of them are equal when they describe the
-  same type (3.6), wherever each was made.
+This has to come to an end. A function that would be reached again, through its own calls,
+with a type that has the earlier type inside it is an error:
+
+```go
+const wrapMore: (type)(T)any = (const T: type){
+    return (const v: T){
+        return wrapMore([1]T)([v]);    // ERROR: wrapMore hands itself [1]T, then [1][1]T, and so on without end
+    };
+};
+```
+
+**(filled in) Underneath, a `type` value is the address of a description of the type.** The
+compiler writes one description into the program for every type the program has. It holds the
+type's shape, in the forms of 3.6. Everything that is done to a value whose type is only
+learned while the program runs comes from that description: its size, how to copy it, move
+it, free it and compare it, and where the pointers and functions in it are. An `any` carries
+the address (4.5), and a generic function is handed one for each type parameter.
+
+- There is one description for each type, so two `type` values are equal exactly when they
+  are the same address (3.7).
+- A `type` value has one size, whatever type it holds. That is why a `var` can be given any
+  other type (4.2), and why an array of types is an ordinary array.
+- How a generic function reaches the description of a type that is written with `T`, such as
+  `[]T`, is up to the compiler. It can make one copy of the function for each type, or one
+  copy that looks the description up.
 
 ### 4.4 Converting a value: `convert`
 
@@ -1320,8 +1351,6 @@ var y: {type, bool} = {
     value: bool = true;
 };
 ```
-
-**(filled in)** These are pictures only: a real `var` can't hold a `type` (4.2).
 
 The second field's type depends on the first, so every `any` can have a different shape
 inside. An `any` sits on the stack like everything else. Its size depends on the value
@@ -4775,7 +4804,7 @@ the place they are written for (3.8).
 | `var rate: float = 3;` | a float is written with a decimal point: `3.0` |
 | `var count: int = small;` where `small` is an `int8` | a value never changes type by itself: write `convert(int8, int)(small)` |
 | `count + small` | `+` needs two numbers of the same type |
-| `var T: type = int;` | a type can't be a `var` |
+| `var n: t = 5;` where `t` is a `var` that holds a type | `t` is not a type name: only a `const` declared with a type written out is (4.2) |
 | `int(3.0)` | a type is never called: write `convert(float, int)(3.0)` |
 | `describe(3);` | `describe` takes an `any`: write `wrap(int)(3)` |
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
@@ -4985,7 +5014,6 @@ program runs. The rules themselves are in the sections named.
 | The compiler rejects | Example | Rule |
 |---|---|---|
 | giving a `const` a new value | `limit = 11;` | 2.3 |
-| a type, or a value that holds types, in a `var` | `var T: type = int;` | 4.2 |
 | an assignment used as a value | `a = b = 3;` | 2.9 |
 | a left side that isn't a place | `makePoint(1, 2).x = 5;`, `3 = count;` | 2.9 |
 | assigning a length | `scores.length = 4;` | 5.5 |
@@ -5013,8 +5041,9 @@ program runs. The rules themselves are in the sections named.
 | written numbers whose answer doesn't fit, and a whole number divided by a written `0` | `var over: int8 = 100 + 100;`, `count / 0`, `count % 0` | 3.2 |
 | a value written on the spot with nothing to take its type from | `[]`, `{}` or `null` with no place | 3.8 |
 | a type that is called | `int(3.0)`, `Point(1, 2)` | 4.1 |
-| a type that isn't written out where it decides a type | `var n: wholeTypes[1] = 5;`, `first(x.T)` | 4.2, 4.3 |
-| a `const` of type `type` that isn't a type name, used as a type | `const U: type = x.T;` and then `var n: U = 5;` | 4.2 |
+| a type that isn't written out where it decides a type | `var m: wholeTypes[1] = 5;`, `first(x.T)`, `first(t)` | 4.2, 4.3 |
+| a name that holds a type but is not a type name, used as a type: a `var`, a `const` whose value is worked out, a `type` parameter that the function's type doesn't name | `var n: t = 5;` for a `var t: type`; `const U: type = x.T;` and then `var n: U = 5;` | 4.2, 4.3 |
+| a function that would be reached again, through its own calls, with a type that has the earlier type inside it | `wrapMore([1]T)` inside `wrapMore` | 4.3 |
 | in a function type, a name with no `type` parameter to its left that is still free | `(T, type)int`, `(type)([]T)U` | 4.3 |
 | a generic function that uses a `T` in a way not every type allows | `a + b` for two `T`s | 4.3 |
 | a conversion between two types that have none, where the compiler sees that the call runs `convert` | `convert([3]int, int)`, `convert(bool, float)` | 4.4 |
