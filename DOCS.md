@@ -2253,8 +2253,9 @@ steps[2](5)            // 10
 so each of its top-level names has one place, and the whole program knows where it is (11.5).
 So the variables whose addresses a function keeps are those of a function call or a struct
 value around it. A function that uses only top-level names keeps nothing, and it can go
-wherever a function value can. A name of a block written at the top level is found in the same
-way. A function that uses one keeps nothing either, but it can't outlive the block (7.8).
+wherever a function value can. A name of a block written at the top level of a file is found in
+the same way. A function that uses one keeps nothing either, but it can't outlive the block
+(7.8).
 
 **(filled in)** Each of the last two places in the table also holds the address of the place
 around it, and so on outwards, for as long as a function call or a struct value lies around it.
@@ -3011,8 +3012,8 @@ reached through the `const` (9.3).
 
 A `const` function and a `const` package are addresses: the name always holds the same code, or
 the same file. A function can still change a variable outside itself (7.8), and the names of a
-file follow their own `const` or `var` (11.3). Neither is an exception to the rule, because the
-`const` itself never changes.
+file follow their own `const` or `var` (11.3). Neither is an exception to the rule that a
+`const` never changes: the `const` itself, the address, stays the same.
 
 **(filled in)** An ownership is given only by a place that can be assigned (8.9), so there is
 never an ownership of a `const`. A `const` ownership of a `var` can only read it, like a
@@ -4308,9 +4309,10 @@ frozen.add(1);                 // fails while running: add could change the fiel
   fields that the function reads and that can hold a function (8.5). The check looks at each
   function in those fields in the same way: it fails when one of them is held in the struct it
   belongs to and could change it.
-- **A function that is only kept in the struct passes.** A function that was read out of
-  another struct, or that keeps the parameters of a call (7.8), belongs somewhere else. It
-  can't change this struct, so the check lets it through.
+- **A function that is only kept in the struct passes.** A function that belongs to another
+  struct, or to none, can't change this one: one that was read out of another struct, one
+  that keeps only the parameters of a call (7.8), or one that keeps nothing (7.7). The check
+  lets it through.
 
 ```go
 const Shape: type = {w: int, h: int, area: ()int, grow: ()void, show: ()void};
@@ -4816,7 +4818,8 @@ then calls `main`. The `int` it returns is the program's result, `0` when everyt
 
 **(filled in) When a file's names are set up.** The top-level declarations of a file are
 worked out in order, from the top down, each value when its line is reached. That is the
-file's set-up, and it happens once (11.2). The program starts by setting up every file it has:
+file's set-up, and it happens once (11.2). A program is the file you run and every file that is
+reached from it through imports. It starts by setting up all of them:
 
 1. A file's imports are all the `import`s written in it, at its top level and inside its
    functions (11.2).
