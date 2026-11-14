@@ -173,7 +173,8 @@ own. How long something lives depends on where it's written:
 | What | It lives until… |
 |---|---|
 | a name | the end of the block it's declared in |
-| a parameter | its function call ends. A parameter that a function given back keeps lives until the call that holds it ends (7.8) **(adjusted)** |
+| a parameter | its function call ends. A parameter that a function given back keeps lives on in the function's kept block (7.8) |
+| a kept block | the call ends whose frame holds it, or the heap value that holds it is freed (7.8) |
 | a value that isn't given a name | the end of its statement |
 | a value on the heap | its owner ends, or gives it up (8.11) |
 
@@ -214,18 +215,20 @@ count   total2   _spare   makePoint   Point      // five names
 2total                                           // ERROR: a name can't start with a digit
 ```
 
-**Reserved words.** Seven words belong to the language and are never names:
+**Reserved words.** Eight words belong to the language and are never names:
 
 ```
-const   var   return   void   true   false   null
+const   var   return   void   true   false   null   package
 ```
+
+`package` starts the type of a file, `package("geom")` (11.2).
 
 **Built-in names.** The built-in types and functions are ordinary names that are already
 declared when a file starts:
 
 | Built-in names | What they are |
 |---|---|
-| `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64` `float32` `float64` `int` `uint` `float` `bool` `char` `type` `any` `package` | types (3.1) |
+| `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64` `float32` `float64` `int` `uint` `float` `bool` `char` `type` `any` | types (3.1) |
 | `convert` `wrap` `unwrap` `import` `print` `read` `join` `exit` | functions (13) |
 
 A name is declared only once (2.8), so a file can't declare any of them again:
@@ -256,9 +259,9 @@ that block, and in every block and function body inside it (7.8).
 
 **A name can't be declared where the same name can already be seen.** So a name means one
 thing wherever it is read. This holds for every way of declaring a name: a `const`, a `var`,
-a parameter (7.4), a field in a struct value (9.2), the name of a type parameter in a function
-type (4.3), and the built-in names (2.7). One thing narrows what can be seen: the fields of a
-struct value are not seen inside another struct value that is written within it (9.2).
+a parameter (7.4), the name of a type parameter in a function type (4.3), and the built-in
+names (2.7). A field of a struct is not a name in this sense. It is only ever reached with a
+dot, so it never clashes with any other name (9.2).
 
 ```go
 var count: int = 3;
@@ -281,7 +284,7 @@ Two names can be spelled the same when neither can be seen from the other, like 
 front of the `.`, so it never clashes with a name declared somewhere else.
 
 **A name is used only below its declaration.** A name that is used but never declared is an
-error. The value of a declaration uses names declared above it. There are five exceptions, and
+error. The value of a declaration uses names declared above it. There are four exceptions, and
 each is safe because nothing runs too early:
 
 | Exception | Why it is safe |
@@ -290,11 +293,10 @@ each is safe because nothing runs too early:
 | a function's body can use the function's own name (7.8) | the same reason |
 | a type name declared at the top level can be used anywhere in its file, also in its own declaration (4.2, 4.6) | a type is known before the program runs, so nothing runs at all |
 | a type name declared inside a function can be used in its own declaration (4.6) | the same reason |
-| a function written in a struct value can use every field of its block, also one written below it (9.6) | the body runs only when the function is called, and 9.2 keeps a call from coming too early |
 
 A top-level name can be seen in every function body of its file, wherever it is declared. So
 no other name in that file can be spelled like it: no name in a block or in a function, no
-parameter, no field of a struct value, and no type parameter in a function type.
+parameter, and no type parameter in a function type.
 
 **How a name is found.** The compiler looks for a name in the block where it is used, then
 in each block around it, out to the top level of the file, and last among the built-in names.
@@ -420,8 +422,9 @@ Three everyday names stand for the 64-bit types:
 These are ordinary names for those types, the same as naming a type yourself (4.1), so an
 `int` and an `int64` are the same type.
 
-Three more built-in types have their own sections: `type`, the type of a type (4.1),
-`any`, a value of any type (4.5), and `package`, a file used from another file (11.2).
+Two more built-in types have their own sections: `type`, the type of a type (4.1), and `any`,
+a value of any type (4.5). A file that is used from another file has a type of its own, written
+`package("geom")` (11.2).
 
 ### 3.2 Writing basic values
 
@@ -736,6 +739,7 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
 | function that takes a type | `(T: type)R` | `(T: type)([]T)T` | takes a type, called `T` in the rest of the type, and returns a function for arrays of it (4.3) |
 | struct | `{a: T1, b: T2}` | `{debug: bool, size: int}` | a struct with a bool field `debug` and an int field `size` |
+| package | `package("file")` | `package("geom")` | the type of the file `geom` (11.2) |
 | on the heap | `^T` | `^int` | an int on the heap, owned by this holder (section 8) |
 | borrowed | `&T` | `&int` | an int that another holder owns (section 8) |
 | ownership | `@T` | `@int` | the ownership of an int variable (8.9) |
@@ -806,6 +810,7 @@ Type      = BasicType
           | "^" Type                          (a value on the heap, section 8)
           | "&" Type                          (a borrowed value, section 8)
           | "@" Type                          (the ownership of a variable, section 8)
+          | "package" "(" TEXT ")"            (the type of a file, 11.2)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "void"                     (void = returns nothing)
 TypeList  = TypeItem { "," TypeItem }
@@ -821,18 +826,18 @@ A function type always ends with its return type. A function that returns nothin
 with `void`: `(int)void` takes an int and returns nothing, and `()void` takes nothing and
 returns nothing.
 
-**(filled in)** Two more lines complete it:
+**(filled in)** Three more lines complete it:
 
 ```
-BasicType = NAME { "." NAME }                 (a type's name, or one reached through a package: geom.Box)
+BasicType = NAME { "." NAME }                 (a type's name, or one reached through a package: geom.Point)
+TEXT      = a text written in the code (5.10)
 NUMBER    = a whole number written in the code (3.2)
 ```
 
 **(filled in)** A type is written with these forms wherever a type is expected: after the `:`
 of a declaration, a parameter or a field, and inside another type. A `NAME` here is a type name
-(4.2). A type reached through a package, `geom.Box`, needs a package that can hold only one
-file (11.3), so that the compiler knows which type it is. The full grammar of the language is
-in Appendix A.
+(4.2). A type reached through a package, `geom.Point`, is the type that `Point` names in the
+file of the package's type (11.3). The full grammar of the language is in Appendix A.
 
 **(filled in)** Two types are the same type when they are the same once every type name is
 replaced by what it names (4.1). The names of a struct's fields are part of its type, and so is
@@ -860,7 +865,7 @@ value it was copied from, and that one rule says what "equal" means for every ty
 | a map | every key and its value | they have the same keys, and the values under each key are equal |
 | a heap owner `^T` | the value on the heap | the values they own are equal, or both are `null` |
 | a borrower `&T`, an ownership `@T` | the address | they point at the same place, or both are `null`. Two `&[]T` also need the same length |
-| a function | its two addresses (7.7) | they are the same code, and they keep the same place. Inside two structs that are compared, and between the same part of two structs of the same type, two functions that each keep the struct they are held in count as keeping the same place (9.6) |
+| a function | its two addresses (7.7) | they are the same code, and they keep the same place |
 | a `type` | the type | they are the same type |
 | an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
 | a `package` | the address of its file (11.5) | they hold the same file |
@@ -927,7 +932,8 @@ to, returned as, held in or used as, or the other side of an operator (3.2).
 | `a[i:j]` | `a` is an `[n]T` or `[]T`. `i` and `j` are `int`s, and either can be left out | `[]T`, a copy. With `&` in front: `&[]T`, a slice (5.9) |
 | `a.length` | `a` is an array or a map | `int` (5.5, 6.3) |
 | `s.x` | `s` is a struct, and `x` is one of the fields of its type | the type of that field (9.1) |
-| `g.x` | `g` is a `package`, and `x` is a top-level name of its file | the type of that name (11.2) |
+| `g.x` | `g` has a package type, and `x` is a top-level name of that file | the type of that name (11.3) |
+| `import("geom")` | the text is written out, and leads to a file | `package("geom")` (11.2) |
 | `x.T` | `x` is an `any` | `type` (4.5) |
 | `f(a, b)` | `f` is a `(P1, P2)R`, `a` is a `P1` and `b` is a `P2` | `R` (7.2) |
 | `^v` | `v` is a `T` | `^T` (8.3) |
@@ -1061,8 +1067,8 @@ another type name.
 
 **(filled in) A type never ends too soon.** Every type is known before the program runs, and a
 `type` value is the address of something that is part of the program itself (4.3). So a type is
-never an argument that a function given back could outlive (7.8): `first([3]int)` is as good
-as `first(int)`.
+never something that a function given back could outlast, and a type name takes no room in a
+kept block (7.7): `first([3]int)` is as good as `first(int)`.
 
 ### 4.3 Generics: functions that take a type
 
@@ -1233,8 +1239,8 @@ the address (4.5), and a generic function is handed one for each type parameter.
   other type (4.2), and why an array of types is an ordinary array.
 - How a generic function reaches the description of a type that is written with `T`, such as
   `[]T`, is up to the compiler. It can make one copy of the function for each type, or one
-  copy that looks the description up. A function that uses the fields of its struct is made
-  once for each type, because the one address it keeps is taken by the struct (9.6).
+  copy that looks the description up. A function that a generic function gives back keeps no
+  type name (7.7), so that one is made once for each type.
 
 ### 4.4 Converting a value: `convert`
 
@@ -1530,7 +1536,7 @@ An element can be changed when the array is a `var`.
 last is at `length - 1`. The compiler knows the length of an array when the length is in its
 type, and also when the array is a name that was declared with an array value written out,
 because an unsized array keeps its first length (5.3). A name that is reached through a package
-which can hold only one file (11.3) counts like the name itself, here and for the keys of a map
+whose file the compiler sees (8.12) counts like the name itself, here and for the keys of a map
 (6.2, 6.3) and the type inside an `any` (4.5). When it knows the length and the index is a
 written value (3.2), the compiler checks the index. It also rejects a written index below 0,
 whatever the length. Otherwise the check is made while the program runs, and an index out of
@@ -2062,7 +2068,7 @@ add(1, true)           // ERROR: the second argument is a bool, and add takes an
 ```
 
 **(filled in) Which function a call runs.** Several rules depend on whether the compiler can
-tell which function a call runs (4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.2, 9.3, 11.3, 11.4).
+tell which function a call runs (4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.3, 11.4).
 Where the docs say that a function is *called by its own name*, they mean one of these cases,
 in which the compiler sees the function:
 
@@ -2073,7 +2079,7 @@ in which the compiler sees the function:
 | a built-in, or what a built-in gives back, as in `convert(float, int)(x)` and `wrap(int)(3)` | what the built-in does |
 | what a call from this table gives back, when the function that is called gives back a function value written in its body, directly or through a `const` of the body that was declared with it: `first(int)(xs)`, `makeAdder(1)(2)` | that function value |
 | the name of a `const` that was declared with one of the rows above, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);`, `const firstInt: ([]int)int = first(int);` | the same function |
-| a name from these rows reached through a package that can hold only one file (11.3), as in `geom.area(3, 4)` | that function |
+| a name from these rows reached through an `import` that is written out, or through a `const` package that was declared with one: `import("geom").area(2.0)`, `geom.area(2.0)` (11.2) | that function |
 | a function field of a `const` struct that was declared with its block written out, when the field's value is a function value written out (9.3) | that function |
 | a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the rows above: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
 
@@ -2086,7 +2092,8 @@ written with a type parameter counts for every type that the parameter is handed
 
 **(filled in)** One rule doesn't count the worst case: the rule that a `const` never changes
 (8.6). Counting it would turn away every call through a variable that is lent a `const`, also
-the many that only read. There the check is made while the program runs instead (8.6, 9.3).
+the many that only read. There the check is made while the program runs instead (8.6). A copy
+of a function that keeps something is checked in the same way (7.8).
 
 **(adjusted)** Two things here change how 8.12 counts a call. The last row of the table makes
 a choice a call the compiler sees, and it matters because every choice is a lookup (section
@@ -2218,13 +2225,13 @@ const three: (int)[3]int = (const x: int){
 three(7)[0]                    // 7
 ```
 
-### 7.7 Underneath: a function value is an address
+### 7.7 Underneath: a function value is two addresses
 
 A function value is the address of the function's code. Storing a function in a name, an
 array or a map stores that address, and calling it jumps there:
 
 ```go
-const ops: [2](int, int)int = [add, sub];   // two addresses
+const ops: [2](int, int)int = [add, sub];   // two functions: the addresses of their code
 ops[1](5, 3)                                // jumps to sub's code
 ```
 
@@ -2234,9 +2241,11 @@ A function that uses variables from around it (7.8) also keeps their addresses, 
 given back by a call keeps the parameters it uses from that call. These are kept with the
 function out of sight, and its type is the same either way.
 
-So every function value has the same size: the address of its code, and the address of what
-it keeps. A function with nothing kept leaves the second empty. That is why functions given
-back go in arrays and maps like any other function of their type:
+**A function value is always two addresses:** one for the code, and one that points at the
+function's kept block. The kept block holds the parameters that a function given back keeps
+(7.8). A function with nothing kept leaves the second address empty. So every `(int)int` has
+the same size, and functions given back go in arrays and maps like any other function of
+their type:
 
 ```go
 var one: int = 1;
@@ -2248,48 +2257,49 @@ steps[1](5)            // 7
 steps[2](5)            // 10
 ```
 
-`steps` can't outlive `one` or `two`, because the functions in it can't (7.8).
+**The kept block lives on the stack, in the frame of the call that receives the new
+function.** The function value only points at it. The size of a kept block differs from
+function to function, but the block sits in the frame, and not in the variable. The two kept
+blocks above sit in the frame that declares `steps`, so `steps` can't outlast that frame (7.8).
+
+**Underneath.** A frame makes room for a kept block while the program runs, the way `alloca`
+does in C, because a call through a variable can't know the size of the block beforehand. The
+block stays in the frame until that call ends. **(filled in)** The note beside the function's
+code (below) says how big its kept block is.
 
 **(filled in) What the second address is.** One address is always enough:
 
-| The function | The address of what it keeps |
+| The function | Its second address |
 |---|---|
-| uses nothing of a function call or a struct value around it: only its own parameters and names, built-ins, types and top-level names | empty |
-| uses the fields of the struct value it is written in, and no name of a function call around it (9.6) | the struct value |
-| uses names of a function call around it (7.8) | that call's place on the stack |
-| was given back by a call and keeps parameters of it (7.8) | the place of that call's parameters |
+| uses only its own parameters and names, built-ins, types and top-level names | empty: it keeps nothing |
+| uses names of a function call around it that is still running (7.8) | that call's frame |
+| was given back by a call and keeps parameters of it (7.8) | its kept block |
+| was given back by a call and keeps one borrowed parameter, and nothing else | the address that was lent. It needs no block |
 
 **(filled in)** A top-level name needs no address. There is one instance of each file (11.2),
 so each of its top-level names has one place, and the whole program knows where it is (11.5).
-So the variables whose addresses a function keeps are those of a function call or a struct
-value around it. A function that uses only top-level names keeps nothing, and it can go
-wherever a function value can. A name of a block written at the top level of a file is found in
-the same way. A function that uses one keeps nothing either, but it can't outlive the block
-(7.8).
+A function that uses only top-level names keeps nothing, and it can go wherever a function
+value can. A name of a block written at the top level of a file is found in the same way. A
+function that uses one keeps nothing either, but it can't outlive the block (7.8).
 
-**(filled in)** Each of the last two places in the table also holds the address of the place
-around it, and so on outwards, for as long as a function call or a struct value lies around it.
-The chain ends at a struct value, for a function written inside a function of a struct (9.6),
-and otherwise at the outermost function call. So a function inside a function reaches
-everything it can see through one address. A struct value holds only its fields (9.8), and that
-is why a function that uses a struct's fields can't also use a name of a function call around
-the struct value (9.6).
+**(filled in)** A frame or a kept block also holds the address of the frame or the block
+around it, when the function uses names from there. So a function inside a function reaches
+everything it can see through one address.
 
-**(filled in)** A function *belongs to* the struct value that this ends at: the one it keeps
-itself, in the second row of the table, or the one at the end of the chain, in the last two. It
-is the struct whose fields the function can use. Every other function belongs to no struct.
+**(filled in)** A type parameter that is a type name (4.2) takes no room in a kept block. The
+type is known before the program runs, so the function that comes back is simply the one made
+for that type. A function that keeps nothing else keeps nothing: `first(int)` (4.3) is copied
+and stored like `double`.
 
 **A note beside the code.** For every function, the compiler stores a short note in the
 program, beside the function's code. It says which of the function's `&T` parameters are
-`var`. A call through a variable that lends a `const` reads the note of whichever function the
-variable holds (8.6). The note is stored with the code, not in the value, so a function value
-is still two addresses.
+`var`, and whether the function keeps anything. A call through a variable that lends a `const`
+reads the note of whichever function the variable holds (8.6), and so does a copy of a
+function that the compiler can't see (7.8). The note is stored with the code, not in the
+value, so a function value is still two addresses.
 
 **(filled in)** The note says the same for every other parameter, because a value with a
-borrower inside it follows the rule for a borrower (8.6). It also says what the function does
-to the struct it belongs to: which type that struct has (4.3), whether the function changes
-something held there, and which functions held there it reads (9.3). Where that type is
-written with a type parameter, there is one note for each type the parameter is handed (9.6).
+borrower inside it follows the rule for a borrower (8.6).
 
 ### 7.8 Using a variable from outside the function
 
@@ -2344,19 +2354,8 @@ const makeBroken: ()()int = (){
 };
 ```
 
-**A function given back keeps the parameters it uses.** The parameters are what the caller
-handed in, and the function given back is made from them, so they live at least as long as it
-does **(adjusted: how long exactly is said further down)**.
-
-**It can't outlive what was passed in.** At the call, the function given back counts as coming
-from every argument, the same as a borrower that comes back (8.13). If an argument dies
-before the function, the compiler raises an error. An argument handed over with `@` doesn't
-count: the call takes its value, and the caller's variable is left `null` (8.13), so nothing
-is left to die.
-
-**(adjusted)** What the handed-over value holds still counts. When a value given with `@`
-has a borrower or a function inside it, the function given back can't outlive what that part
-points at (8.5).
+**A function given back keeps the parameters it uses.** It keeps them in its kept block (7.7).
+Each kept parameter lives on there, as it was when the call ended:
 
 ```go
 const makeAdder: (int)(int)int = (const step: int){
@@ -2364,16 +2363,10 @@ const makeAdder: (int)(int)int = (const step: int){
 };
 
 var five: int = 5;
-var addFive: (int)int = makeAdder(five);         // fine: addFive can't outlive five
+var addFive: (int)int = makeAdder(five);         // the kept step is a copy of five, in a block in this frame
 addFive(2)                     // 7
-makeAdder(1)(2)                // 3: the 1 lasts until the end of the line (2.6)
-
-{
-    var six: int = 6;
-    addFive = makeAdder(six);  // ERROR: six dies at this block's }, before addFive
-}
-
-var addTen: (int)int = makeAdder(10);   // ERROR: the 10 is gone at the end of this line, before addTen
+makeAdder(1)(2)                // 3
+var addTen: (int)int = makeAdder(10);            // fine: the block holds its own 10
 ```
 
 A `var` parameter it keeps can still change, and the change stays for the next call:
@@ -2392,49 +2385,99 @@ next()                         // 1
 next()                         // 2
 ```
 
-**(filled in) One call has one set of parameters.** When a call gives back more than one
-function, in a struct, an array or a pair, they all use the same kept parameters. It is the
-rule from the top of this section again: a function borrows the variables it uses, and here
-the variable is the call's parameter. Every new call has parameters of its own.
+**A function with kept state is a borrower of its kept block.** The block lives in the frame
+of the call that receives the new function (7.7), and the ordinary rules for a borrower hold
+for the function (8.5), with no new ones:
+
+- It can't be stored somewhere that outlasts the block.
+- It can't be copied (below).
+- Sharing it uses `&`.
+
+**Returning it hands the block back one frame,** the same way returning any value copies it
+out to the caller. `return` is already the mark that a value goes back, so it needs no `@`, the
+same as returning a struct.
+
+**To keep it longer than the frame, use `^`.** `^makeAdder(five)` puts the function on the
+heap, kept block included. Heap use only happens where `^` is written, and the block is freed
+with its owner.
 
 ```go
-const makeTally: (int){up: ()void, get: ()int} = (var total: int){
-    var both: {up: ()void, get: ()int} = {
-        up: ()void = (){ total = total + 1; };
-        get: ()int = (){ return total; };
-    };
-    return both;
+var keep: (int)int = double;
+var keepLong: ^(int)int = ^makeAdder(five);    // on the heap, kept block included
+var topStep: int = 5;
+
+keepLong^(2)                       // 7: the function that keepLong owns
+
+const adderOn: (&int)(int)int = (const step: &int){
+    return (const n: int){ return n + step^; };   // keeps step: a borrower of what the caller lends
 };
 
-var zero: int = 0;
-var tally: {up: ()void, get: ()int} = makeTally(zero);
-tally.up();
-tally.up();
-tally.get()                    // 2: up and get use the same total
+const install: ()void = (){
+    keep = makeAdder(five);        // ERROR: keep outlasts install's frame, where step lives
+                                   // (the same error as storing a borrower of a local in a top-level var)
+    keepLong = ^makeAdder(five);   // fine: the function goes on the heap, with its kept block
+    keep = adderOn(&topStep);      // fine: topStep is a top-level variable that both sides borrow
+};
+
+keep = makeAdder(five);            // fine at the top level: this frame lasts the whole program
+
+const handOn: ()(int)int = (){
+    return makeAdder(five);        // fine: the kept block is handed back one frame
+};
 ```
 
-**(filled in) Copying a function doesn't copy what it keeps.** A function value
-is two addresses (7.7), and `=` copies those two. So a copy uses the same variables and the
-same kept parameters as the original, the way a copy of a borrower borrows the same value
-(8.8). And like the original, the copy can't outlive them:
+At the top level, storing the function is fine for the same reason that borrowing a top-level
+variable is: that frame lasts the whole program. It is one rule, and not a rule that depends on
+where the line is.
+
+**Copying a function that keeps parameters is an error.** `=` makes a complete copy everywhere
+(8.8), and a copy of a function with kept parameters would share them with the original, which
+is hidden sharing with no `&`. To have two names on one counter, borrow it, like any shared
+value:
 
 ```go
-var again: ()int = next;       // again and next use the same kept count
-again()                        // 3
+var again: ()int = next;       // ERROR: next keeps parameters, so a copy would share them
+var again: &()int = &next;     // fine: again borrows next, and both use one counter
+again^()                       // 3
 next()                         // 4
 ```
 
-**(filled in)** So `again` is not a second counter. It is a second value for the same function:
-the kept `count` stays where it is (see "Where kept parameters live" below), and both values
-hold its address. Nothing in the line says `&`, and the same is true whenever a function uses a
-variable from around it: the call doesn't show that either (see the top of this section). A
-second counter comes from a second call of `makeCounter`. State that is copied along with its
-functions is a struct with a field and a function (9.6): each copy of the struct has its own
-fields.
+A function that keeps nothing copies as normal. A function's type doesn't say whether it keeps
+anything, so the check follows the pattern of the `const` check (8.6): the compiler rejects the
+copy where it can see the function, and otherwise the copy fails while the program runs (11.7),
+using the note beside the function's code (7.7).
+
+**(filled in)** The details of that check:
+
+- **What keeps something.** A function keeps something when its second address isn't empty
+  (7.7): it keeps parameters, or it uses names of a function call around it. The second kind
+  borrows those names in the same hidden way, so the rule covers both. Only a function that
+  uses nothing but its own parameters and names, built-ins, types and top-level names copies
+  as normal.
+- **What a copy is.** Every place where `=` would copy the function value: a declaration, an
+  assignment, an argument that goes to a parameter, `^` in front of a name, a name written
+  inside an array, pair, map or struct value, and a move, which copies a plain value (8.9). A
+  copy of a bigger value that holds such a function is a copy of the function too.
+- **What is not a copy.** A value that nothing else holds is taken (8.8): the result of a
+  call, a function value written on the spot, and a name that its function returns. Borrowing
+  the function with `&` copies nothing, and neither does calling it.
+- **Where the compiler sees it.** The compiler rejects the copy when it sees that the function
+  keeps something: the value is the result of a call it sees (7.2), or a name that was only
+  ever given such values. In every other case the check is made while the program runs.
+
+```go
+twice(double, 3)               // 12: double keeps nothing, so it is copied into f
+twice(addFive, 3)              // ERROR: addFive keeps step, and the argument would be a copy
+twice(makeAdder(5), 3)         // 13: the new function is taken, not copied
+
+const twiceLent: (&(int)int, int)int = (const f: &(int)int, const x: int){ return f^(f^(x)); };
+twiceLent(&addFive, 3)         // 13: addFive is lent
+```
+
+(`twice` and `double` are from 7.6.)
 
 **A parameter that takes a heap value can be filled at the call.** The value can be made on the
-spot and handed straight over with `@` (8.9), so nothing in the caller has to outlive the
-function:
+spot and handed straight over with `@` (8.9), and the kept block then owns it **(adjusted)**:
 
 ```go
 const makeLookup: (@^[3]int)(int)int = (var @data: ^[3]int){
@@ -2464,100 +2507,48 @@ const newCounter: ()()int = (){
 A kept parameter is kept the way it was declared (7.4). A copy stays the function's own. A
 borrowed parameter (`&T`) is still a borrow, so the function can't outlive what the caller lent
 (8.13). A parameter that took the caller's heap value over (`@`) keeps that value, and the
-value is freed when the kept parameters end, as said below **(adjusted)** (8.11). `first` (4.3)
-keeps its `T` the same way.
+value is freed when the kept block ends (8.11). `first` (4.3) keeps its `T` the same way.
+**(filled in)** A `T` that is a type name takes no room in the block, though (7.7).
 
 The rule is only for a function the call gives back with `return`. A local is never kept by
 using it in the body: returning a function that does that is an error, as above.
 
-**(adjusted) Where kept parameters live, and how far the function can go.** Nothing goes on
-the heap unless the code says `^` (2.6). So the parameters a function keeps stay on the
-stack, with the function call that made the call: the call whose body the line is in. For a
-line at the top level of a file, they stay in the file's own place, which lasts as long as the
-program (11.5). The function given back holds their address (7.7). The rules below follow from
-that.
+**(adjusted) It can't outlive what was lent.** At the call, the function given back counts as
+coming from everything that was lent to the call, the same as a borrower that comes back
+(8.13): every `&` argument, and every argument that holds a borrower, an ownership or a
+function (8.5). A parameter that was copied sets no limit: the kept block holds its own copy.
+That is why `makeAdder(10)` above can be kept in a variable, and why `adderOn(&topStep)` can go
+wherever a borrower of `topStep` can. An argument handed over with `@` doesn't count: the call
+takes its value, and the caller's variable is left `null` (8.13), so nothing is left to die. A
+borrower, an ownership or a function inside that value still counts, because it points at
+something that was only lent. A result that is or holds a function also counts as borrowing
+what the function that was called keeps: the type doesn't say whether it does (see "A function
+that a kept function gives back" below).
 
-**(adjusted) Kept parameters go along when the function is given back again.** When a function
-`return`s a function that it was given back, the kept parameters move to its own caller, like
-every value that is given back (8.8). This holds for a function on its own, and for one
-inside the struct, array, pair, map or `any` that is given back, at any depth, as long as no
-pointer lies in between. It is how `newCounter` above hands on what `countFrom` gave it: the
-kept `count`, and the heap value it owns, move to whoever called `newCounter`. When the kept
-parameters lead on to other kept parameters that this call holds (7.7), those move with
-them. A kept parameter that borrows another kept parameter itself still points at the old
-place after the move, and 8.17 lists that case.
-
-**(adjusted) A function given back can't leave its call in any other way.** Inside a function,
-it can't be put in anything that outlasts the call it is in: a top-level `var` of any file, a
-`var` of a function around it, or a field of the struct that the function is written in (9.6).
-Nor can it be stored behind a pointer in a place that outlasts the call (8.5). This comes on
-top of the rule about the arguments above.
+**(filled in) One call has one kept block.** When a call gives back more than one function,
+in a struct, an array or a pair, they all use the same kept parameters, in one block. It is the
+rule from the top of this section again: a function borrows the variables it uses, and here
+the variable is the call's parameter. Every new call has parameters of its own.
 
 ```go
-var keep: (int)int = double;
-
-const install: ()void = (){
-    keep = makeAdder(five);    // ERROR: the step stays with this call of install, and keep lasts longer
+const makeTally: (int){up: ()void, get: ()int} = (var total: int){
+    var both: {up: ()void, get: ()int} = {
+        up: ()void = (){ total = total + 1; };
+        get: ()int = (){ return total; };
+    };
+    return both;
 };
 
-const handOn: ()(int)int = (){
-    return makeAdder(five);    // fine: the step moves to the caller of handOn
-};
-
-const adderFor: (int)(int)int = (const by: int){
-    return makeAdder(by);      // fine: by is a parameter, so it is kept, along with the step made from it
-};
-
-const adderPlus: (int)(int)int = (const by: int){
-    var more: int = by + 1;
-    return makeAdder(more);    // ERROR: the result comes from more, and a local is never kept
-};
-
-const adderFrom: (int)(int)int = (const by: int){
-    return (const n: int){ return n + by; };   // fine: it keeps by, a parameter of adderFrom itself
-};
+var zero: int = 0;
+var tally: {up: ()void, get: ()int} = makeTally(zero);
+tally.up();
+tally.up();
+tally.get()                    // 2: up and get use the same total
 ```
 
-(`five` is the top-level `var` from the example further up.)
-
-**(adjusted) Kept parameters end with the call that holds them.** They live until that function call
-ends, and a heap value that one of them owns is freed then (8.11). No function that uses them
-lasts longer, by the two rules above.
-
-**(filled in) Which results keep parameters.** Where the compiler sees the function that is
-called (7.2), it looks at what the function gives back. A function written in its body that
-uses its parameters keeps them. So does a value that holds such a function, and so does a
-result that the function was given back itself and hands on, as `handOn` does. Any other
-result keeps nothing, whatever its type: `wrap(int)(3)` gives back an `any` that holds only
-the 3. Where the call goes through a variable, a result whose type can hold a function (8.5)
-counts as keeping every parameter. This says how kept parameters travel (above). It also
-decides what a result comes from when the result only holds a function inside, as an `any` or
-a struct can. A result that is a function itself comes from every argument in any case, as
-said above.
-
-**(filled in) What a result comes from.** The rule about the arguments is one of three. At a
-call, a result that is or holds a function counts as coming from:
-
-| It comes from | Because |
-|---|---|
-| every argument, except one handed over with `@`. A result that is a function always counts this way. A result that only holds a function inside counts this way when it keeps parameters | the rule above: the kept parameters are made from the arguments. An `any` or a struct can hold no function at all, so there the compiler looks |
-| the function that was called | that function may keep parameters or use variables itself, and what it gives back can reach them through it (7.7). So everything that limits the called function limits the result |
-| what an argument came from, when the result is that argument or holds it | `pick(double)` in 7.6 gives back `double` itself. Such a result keeps nothing new, but it has every limit the argument had |
-
-**(filled in) When a result can be given back.** A function can `return` a result when
-everything the result comes from lasts beyond the call, or goes along with it:
-
-| The result comes from | Can it be given back? |
-|---|---|
-| a parameter of this function **(adjusted)** | yes. A function given back keeps the parameters it uses, and that includes a parameter it is made from by another call: the parameter is kept, and goes along. For the caller, the result then counts as coming from the arguments of this function |
-| a top-level name, or a name of a function around this one | yes. The result stays limited by that name |
-| kept parameters that this call holds: its own, or those of the function that was called | yes: they go along, as said above |
-| a name declared in this function, or a function that uses one | no: a local is never kept, as said above, and it ends with the call |
-| a value made on the spot that was an argument | no: it ends with its statement |
-
-**(filled in)** Where the function lent something with `&`, rule 8.13 decides instead: a result
-that holds a borrower of a copied parameter, or of a name declared in the function, can't be
-given back.
+**(filled in) A function that a kept function gives back.** It keeps the parameters of its own
+call in a block of its own, and it borrows the kept block of the function that made it, when it
+uses that function's kept parameters. So it can't outlast that block:
 
 ```go
 const adder3: (int)(int)(int)int = (const a: int){
@@ -2566,12 +2557,30 @@ const adder3: (int)(int)(int)int = (const a: int){
     };
 };
 
-const tenPlus: ()(int)int = (){
-    return adder3(five)(five);   // fine: the kept a and the kept b both move to the caller
-};
+var plusOne: (int)(int)int = adder3(1);      // keeps a
+var plusThree: (int)int = plusOne(2);        // keeps b, and borrows the block that holds a
+plusThree(3)                                 // 6
 
-tenPlus()(1)                     // 11
+const tenPlus: ()(int)int = (){
+    var plusFive: (int)(int)int = adder3(five);
+    return plusFive(five);       // ERROR: what comes back borrows the block of plusFive, which stays in this frame
+};
 ```
+
+**(filled in) Which results keep parameters.** Where the compiler sees the function that is
+called (7.2), it knows whether what comes back has a kept block: a function written in the body
+that uses the parameters has one, and so does a value that holds such a function, and a result
+that the function was given back itself and hands on, as `handOn` does. Any other result keeps
+nothing, whatever its type: `wrap(int)(3)` gives back an `any` that holds only the 3. Where the
+call goes through a variable, a result whose type can hold a function (8.5) counts as having a
+kept block in the frame that receives it.
+
+**(filled in) Where the block of a new function goes.** The call that makes the function is
+written in some frame, and that frame receives the block, also when the function goes straight
+on as an argument: in `twice(makeAdder(5), 3)` the block is in the caller's frame, and `f` only
+points at it. With a `^` in front of the call, the block is built on the heap with the
+function. The same holds for a struct, array, pair or map value that is written under the `^`
+with such calls in it.
 
 Inside its own body, a function's name is the function itself, so a function made inside
 another can call itself (10.3).
@@ -2817,7 +2826,7 @@ var top: &int = &three(7)[0];      // ERROR: the array three(7) gives back is go
 | a variable declared in an inner block | no: it ends before the borrower does |
 | a value with no name, as an argument (8.4) | yes: the value lives until the end of its statement (2.6), after the call has ended |
 | a value with no name, kept in a variable | no: the value is gone after its statement, and the borrower would outlive it |
-| a variable a function uses from around it (7.8) | yes, while the variable lasts at least as long as the function. A function given back keeps the parameters it uses, and can't outlive the arguments of the call, except those handed over with `@`. **(adjusted)** Nor can it leave the call it is in, except by being given back again |
+| a variable a function uses from around it (7.8) | yes, while the variable lasts at least as long as the function. A function given back keeps the parameters it uses in its kept block, and it is a borrower of that block: it can't be stored where it outlasts the frame that holds the block (7.8) |
 | what a parameter borrows or keeps, put in a variable that outlasts the call **(filled in)** | no: what comes in through a parameter is only known to last as long as the call |
 | a name of a call, by a borrower that is stored behind a pointer in a place that may outlast that call **(filled in)** | no: the line that stores it is checked, as said below |
 
@@ -2887,7 +2896,7 @@ that line, for a borrower, an ownership and a function alike:
 | Where it is stored | The check |
 |---|---|
 | in a heap value that is being made with `^v`, or in a place that the compiler can trace to a name: a heap value that the name owns, directly or through other heap values, or what a pointer made in this function leads to | the new value, or that name, counts as holding it from that line on, as if it sat in a field. So everything in this section holds for it: a name can't outlast what it holds that way, and a name that holds something of this call can't be given back or moved out of the call |
-| through a pointer that came in from outside (8.12) | the compiler can't tell how long that place lasts, so it counts the longest: the place may outlast every call. What is stored there can borrow or use only a top-level name itself, which lasts as long as the program, or what came in through a parameter of this call, as `back` does in `linkBack` (below). The caller counts what its own variables may have been given (8.13). It can't borrow or use a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function that is read from an outside variable, or kept parameters: those that this call holds, and those that the function itself keeps (7.8) |
+| through a pointer that came in from outside (8.12) | the compiler can't tell how long that place lasts, so it counts the longest: the place may outlast every call. What is stored there can borrow or use only a top-level name itself, which lasts as long as the program, or what came in through a parameter of this call, as `back` does in `linkBack` (below). The caller counts what its own variables may have been given (8.13). It can't borrow or use a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function that is read from an outside variable, or a kept block: one that sits in this call's frame, or the one that the function itself keeps (7.8) |
 
 ```go
 const boxed: ()^&int = (){
@@ -3036,8 +3045,8 @@ const joined: []&int = join(&int)([c], [c]);   // fine: join only reads, and wha
 (`first` is the generic function from 4.3. Its parameter is a `const`, so it can be handed
 `[c]`.)
 
-A `const` struct holds functions as well. A function held there that could change it is not
-reached through the `const` (9.3).
+A `const` struct that holds functions needs no rule of its own. A function reaches a struct
+only through a parameter, so the rules above protect it (9.3).
 
 A `const` function and a `const` package are addresses: the name always holds the same code, or
 the same file. A function can still change a variable outside itself (7.8), and the names of a
@@ -3090,10 +3099,10 @@ never changed.
 | `^T` | its own copy, in a new place on the heap |
 | `&T` | a borrower of the same value: a borrower owns nothing, so there is nothing to copy |
 | `@T` | an ownership of the same variable: it holds an address, like a borrower, and nothing moves |
-| a function **(filled in)** | the same code, using the same variables and kept parameters (7.8) |
+| a function | the same code, when the function keeps nothing. Copying a function that keeps parameters is an error (7.8) |
 | a `type` **(filled in)** | the same type |
 | an `any` **(filled in)** | its own copy of the type and the value inside |
-| a `package` **(filled in)** | the address of the same file: the file itself is not copied (11.5) |
+| a package | the address of the same file: a copy reaches the same file (11.2) |
 
 ```go
 var a: int = 3;
@@ -3140,9 +3149,7 @@ original borrows. For the list with a `prev` in 8.15, each copied node's `prev` 
 still borrows a node of the original list, and those links have to be set again after the
 copy.
 
-**(filled in)** A field that holds a function which uses its own struct's fields follows the
-struct: in the copy, that function uses the copy's fields. That holds for the whole copy and
-for each of its lines, such as `foo.b = boo.b;` (9.6).
+A field that holds a function is copied like any function value (7.8, 9.6).
 
 **An owner that is given a new value frees the one it had:**
 
@@ -3395,14 +3402,10 @@ A heap value is freed at the moment it has no owner left:
 | its owner is set to `null` | `r = null;` |
 | it has no name and nothing receives it | `makeBig(1);` on its own, or only lent as in `look(&makeBig(1)^);`: freed at the end of the statement (2.6) |
 | the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
-| the call that holds its kept parameter ends **(adjusted)** | a heap value owned by a parameter that a function given back keeps (7.8) |
+| its kept block ends | a heap value owned by a parameter that a function given back keeps: the block ends with the frame that holds it, or with the heap value it is part of (7.8) |
 
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
-
-**(filled in)** For the last row of the table: a heap value owned by a kept parameter is
-freed when the kept parameters end, and they end when the function call that holds them ends
-(7.8).
 
 ### 8.12 Nothing is freed while something still points at it
 
@@ -3436,13 +3439,13 @@ owner in this rule: it is the address of a file, and a file is never freed (11.5
 `var` package another file changes no owner. The top-level variables of a file are owners like
 any others, and there is one instance of each file. So `counter.list` and the `list` that the
 functions of the file `counter` use are the same owner, through whichever package the line
-reaches it. Where a package can hold more than one file (11.3), `g.list` counts as the `list`
-of each of those files.
+reaches it. The compiler sees which file a package holds when the package is an `import` that
+is written out, or a `const` that was declared with one. For any other package, `g.list` counts
+as the `list` of every file of the program that has the package's type (11.3).
 
 **(filled in)** A function counts as a pointer in this rule when it keeps a place that was
-reached by following an owner, or a pointer that followed one. A function read out of a struct
-on the heap (9.6) followed that struct's owner, like a borrower of the struct. A function that
-a call gave back followed what a borrower given back by that call would have (8.13).
+reached by following an owner, or a pointer that followed one. A function that a call gave
+back followed what a borrower given back by that call would have (8.13).
 
 **Which owners a pointer followed** is read off the line that made it:
 
@@ -3514,7 +3517,7 @@ each argument lets it (8.9):
 | `f(&x)` to a `var` parameter | change `x`, and every owner inside it | `x`, or an owner inside it |
 | `f(@x)` | take `x`'s value | `x`, or an owner inside it **(filled in: an owner inside it, because taking a struct or an array takes every owner in it, 8.9)** |
 | an argument with an ownership of `x` inside it, as in `f([@x, @y])` **(filled in)** | read `x`, and through a `var` parameter change it or take its value (8.13) | `x`, as for `f(&x)` |
-| an argument that is or holds a function **(filled in)** | call it | what that function changes or takes, as said below |
+| an argument that is, holds or lends a function **(filled in)** | call it | what that function changes or takes, as said below |
 
 "Another pointer in use" is one that is used below in the caller, or another argument of the
 same call: `f(&list^.next^, @list)` hands the list over while the first argument points into
@@ -3577,7 +3580,6 @@ uses it without declaring it (7.8). These are all the kinds:
 | a top-level `var` of a file: of its own file, or of another file that it reaches through a package | under the same name in that file, and through every package that holds the file (above) |
 | a name of a function or a block around the function | under the same name, for a call written inside that function or block. A call written anywhere else can't name it (below) |
 | a parameter that the function keeps (7.8) | no caller can name it (below) |
-| a field of its struct (9.6) | as that field of the struct which the function borrows: `counter.add(5)` changes `counter.count` |
 
 **(filled in) What a call counts as doing.** The compiler reads a function for three things,
 and a call counts as doing each of them at its line:
@@ -3609,21 +3611,21 @@ q = ^6;                          // ERROR: watch is used below, and this frees w
 watch^
 ```
 
-**(filled in) A function that is handed over may be called.** An argument that is or holds a
-function lets the function that is called run it. So the call counts as a call of the handed
+**(filled in) A function that is handed over may be called.** An argument that is, holds or
+lends a function lets the function that is called run it. So the call counts as a call of the handed
 function too: it does what that function does to its outside variables. Where the compiler
 sees which function is handed over (7.2), it reads that function. Otherwise it counts every
 function of that type, as for a call through a variable.
 
 ```go
-const run: (()void)void = (const f: ()void){ f(); };
+const run: (&()void)void = (const f: &()void){ f^(); };
 
-const demo: ()int = (){
-    var p: ^int = ^5;
-    const renew: ()void = (){ p = ^6; };
-    var b: &int = &p^;           // b followed p
-    run(renew);                  // ERROR: b is used below, and run may call renew, which frees what p owns
-    return b^;
+const runRefill: ()int = (){
+    var box: ^int = ^5;
+    const refill: ()void = (){ box = ^6; };
+    var inBox: &int = &box^;     // inBox followed box
+    run(&refill);                // ERROR: inBox is used below, and run may call refill, which frees what box owns
+    return inBox^;
 };
 ```
 
@@ -3655,10 +3657,9 @@ const renewSafely: ()void = (){
 
 (`q`, `watch` and `aim` are the three top-level names above.)
 
-**(filled in)** The parameters that functions given back keep are shared in this way (7.8),
-and so are the fields that the functions of one struct share (9.6). A caller can't see kept
-parameters at all, and it can call the functions that share them in any order. This check is
-made where those functions are written, so they are safe in every order.
+**(filled in)** The parameters that functions given back keep are shared in this way (7.8). A
+caller can't see kept parameters at all, and it can call the functions that share them in any
+order. This check is made where those functions are written, so they are safe in every order.
 
 **(filled in) Owners the compiler can't tell apart.** The compiler sees which owner a pointer
 leads to when the pointer was made in the function that uses it. A pointer that *came in from
@@ -3684,24 +3685,24 @@ const renewBoth: (&^int, &^int)int = (var a: &^int, var c: &^int){
 
 **(filled in) Owners that a caller can't name.** A function that is called can change or take
 an owner that the line of the call has no name for: a parameter that the function keeps, a name
-of a function call or a block that the call isn't written in, a field of a struct that the
-caller can't see, or what a pointer that the function keeps leads to. Each of these counts for
+of a function call or a block that the call isn't written in, or what a pointer that the
+function keeps leads to. Each of these counts for
 the caller as an owner that is reached through a pointer from outside, by the first row of the
 table. A top-level variable that the function changes is an outside variable for the caller in
 that row, also when the caller's own lines don't use it. For a call through a variable, the
 compiler counts every function of that type.
 
 ```go
-const useAfter: (&^int, ()void)int = (const o: &^int, const f: ()void){
+const useAfter: (&^int, &()void)int = (const o: &^int, const f: &()void){
     const r: &int = &o^^;        // r followed o^, an owner that is reached through a pointer from outside
-    f();                         // ERROR: r is used below, and renew, a ()void function, changes a ^int this line can't name
+    f^();                        // ERROR: r is used below, and swapOwn, a ()void function, changes a ^int this line can't name
     return r^;
 };
 
-const demo: ()int = (){
-    var p: ^int = ^5;
-    const renew: ()void = (){ p = ^6; };
-    return useAfter(&p, renew);
+const lendBoth: ()int = (){
+    var own: ^int = ^5;
+    const swapOwn: ()void = (){ own = ^6; };
+    return useAfter(&own, &swapOwn);     // swapOwn uses a name of this call, so it is lent, not copied (7.8)
 };
 ```
 
@@ -3924,7 +3925,7 @@ gave back, and a function that it gave back, are still there when the call is ov
   have followed it.
 - A call of such a function counts as lending the same things again, to the same parameters.
   It may change what a `var` parameter was lent, and it is a use of every pointer that was
-  handed over. A function that was read out of a struct counts as lent that struct (9.6).
+  handed over.
 
 ### 8.14 A linked list, step by step
 
@@ -4091,7 +4092,6 @@ is copied this way is a `var`.
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
 | `return (){ return x; };` where `x` is declared inside the function | `x` would die before the function that uses it (7.8) |
-| `var addTen: (int)int = makeAdder(10);` | the 10 dies at the end of the line, before the function made from it (7.8) |
 | `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
@@ -4099,7 +4099,7 @@ is copied this way is a `var`.
 | `wrap(&int)(c)` where `c` is a `const` borrower **(filled in)** | nothing read-only goes into an `any` (8.6) |
 | `var x: T = v[0];` in a generic function, where `v` is a `const` **(filled in)** | a `T` may have a borrower in it, and `v` can only be read (8.6) |
 | `first(@^int)` and `wrap(@^int)` **(filled in)** | a type parameter is never handed an ownership type itself (4.3) |
-| `run(renew);` where `renew` changes an owner that a pointer used below followed **(filled in)** | a function that is handed over may be called (8.12) |
+| `run(&refill);` where `refill` changes an owner that a pointer used below followed **(filled in)** | a function that is handed over may be called (8.12) |
 | `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns **(filled in)** | a pointer that function bodies share is still in use when the function ends (8.12) |
 | `c^ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below **(filled in)** | two pointers from outside may lead to the same owner (8.12) |
 | `addTo(&p^, renewP())` where `renewP` changes `p` **(filled in)** | a statement is still using what it has worked out (8.12) |
@@ -4112,7 +4112,8 @@ is copied this way is a `var`.
 | `var @t: ^int = h;` where `h` is a `const` ownership **(filled in)** | a `const` ownership can only read (8.6) |
 | `var n: int = null;` **(filled in)** | `null` fits only a `^T`, an `&T` or an `@T` (8.10) |
 | `both[0] = &inner;` where `both` outlives `inner` **(filled in)** | a value that holds a borrower can't outlive what the borrower borrows (8.5) |
-| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` **(adjusted)** | a function given back can't be stored where it outlasts the call it is in (7.8) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | `keep` outlasts the frame that holds the kept block: a function with kept state is a borrower of that block (7.8) |
+| `var again: ()int = next;` where `next` keeps parameters | copying a function that keeps parameters is an error: borrow it with `&next` (7.8) |
 
 **Checked while the program runs:**
 
@@ -4123,15 +4124,12 @@ is copied this way is a `var`.
 | `var @q: ^int = h;`, `@q = h;`, `take(h)`: taking a value through an ownership **(filled in)** | `h` is `null` (8.10) |
 | `^v`, and `=` where it copies a heap owner **(filled in)** | there is no room left on the heap (8.3) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
-| `frozen.add(1)`, a function reached through a `const` struct, where the compiler can't see every function involved | the function is held in the struct it belongs to, and could change it (9.3) |
+| `var g: ()int = f;`, a copy of a function that the compiler can't see | the function keeps something (7.8) |
 
 **(filled in)** Every check the compiler makes, and every check made while running, is listed
 in Appendix B.
 
 ### 8.17 What the compiler doesn't catch
-
-**(adjusted)** Nothing here is left unsettled. Two functions given back by one call share the
-parameters they keep (7.8).
 
 Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
 
@@ -4149,8 +4147,7 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
   **(filled in)** A move and a `return` put the plain parts of a value in a new place in the
   same way (8.9, 8.13). So the same holds for a value that is moved or given back while a
   borrower inside it points at another part of it, where the compiler can't see that
-  borrower: kept parameters that borrow each other, when they move with a function that is
-  given back again (7.8).
+  borrower. A kept block that is handed back one frame is such a value (7.8).
 
 **(filled in) What happens in these cases.** A pointer can then be followed, or a function
 called, after what it points at or keeps is gone, or has gone to another owner. That is not
@@ -4159,10 +4156,13 @@ what the program does then isn't defined. These are the only mistakes that neith
 compiler nor a check while running catches.
 
 A `const` is not on this list. A `const` that is lent to a function held in a variable is
-checked at the call, while the program runs (8.6), and so is a function in a `const` struct
-that the compiler can't see (9.3). So a `const` never changes. **(filled in)** Only the two
+checked at the call, while the program runs (8.6), and a `const` struct needs no more than
+that (9.3). So a `const` never changes. **(filled in)** Only the two
 mistakes above can still reach one: a borrower or a function that the compiler couldn't
 follow may still lead to a value that a `const` now holds.
+
+**(adjusted)** Two functions given back by one call that use the same `var` parameter are not
+on this list either. They share the kept parameter (7.8).
 
 Rule 8.12 also turns away some code that is safe, such as two borrowers returned from the
 same list when one of them is used to change the list. That code has to be reordered.
@@ -4217,8 +4217,7 @@ const Settings: type = {debug: bool, size: int};
 The names belong to the type. `.` reaches a field by its name, and the compiler finds the
 name in the type: `p.x` for a `Point`. **(filled in)** Two struct types are the same type when
 they have the same fields: the same names, with the same types, in the same order (3.6). A
-struct type names each field once, and never like a built-in name (2.7): no struct value could
-declare such a field (9.2).
+struct type names each field once.
 
 ### 9.2 Making a struct value
 
@@ -4235,44 +4234,33 @@ var p: Point = {
 A struct is declared with `const` or `var`, like any other value. The fields carry no
 `const` or `var` of their own (9.3).
 
+**A struct value is just a bundle of values.** A struct's fields are not names in scope: not
+for a function written in the struct (9.6), and not for the other fields. Each field's value is
+an ordinary value, worked out where the struct value is written:
+
+```go
+const Span: type = {a: int, b: int};
+var span: Span = { a: int = 1; b: int = a + 1; };   // ERROR: b can't see a
+```
+
+**A field name never clashes with any other name.** A field is only ever reached with a dot
+(`p.x`, `c^.count`), so it is not a name in scope, and it can't shadow anything (2.8):
+
+```go
+var x: int = 5;                              // a top-level x
+var p: Point = { x: int = 1; y: int = 2; };  // fine: the field x is only reached as p.x
+x                                            // 5: the top-level x
+p.x                                          // 1
+```
+
 The block is checked against the type: each field is written with the name and the type that
 the type gives it. **(filled in)** The block has every field of the type, in the type's order.
-A field's value can use the fields written above it, like the names above a declaration in any
-block (2.8). A call in a field's value follows the rule for a call at the top level of a file
-(11.4): it can run only when every field that its function uses is written above the call.
 
 ```go
 var q: Point = { x: int = 1; };                   // ERROR: a Point has two fields
 var r: Point = { x: int = 1; y: bool = true; };   // ERROR: the field y of a Point is an int
 var u: Point = { a: int = 1; b: int = 2; };       // ERROR: the fields of a Point are x and y
-var s: Point = { x: int = 2; y: int = x * 3; };   // fine: y uses x, so y is 6
-
-var early: {peek: ()int, first: int, last: ^int} = {
-    peek: ()int = (){ return last^; };            // fine by itself: a body can use a field below it (9.6)
-    first: int = peek();                          // ERROR: peek uses last, which is written below this line
-    last: ^int = ^5;
-};
 ```
-
-**(filled in)** Inside its own block, a field is also a plain name: for the fields below it
-and for the functions that are a field's value (9.6). Like every name, it can't be spelled like a
-name that can already be seen where the block is written, or like a top-level name of the file
-(2.8). The field's name comes from the type, so it is the other name that gives way.
-
-**(filled in)** A struct value that is written inside another struct value is a value of its
-own. The fields of the block around it can't be seen inside it, so the two can use the same
-field names, and a value of a type that holds itself can be written in one piece:
-
-```go
-var item: {id: int, owner: {id: int}} = {
-    id: int = 1;
-    owner: {id: int} = { id: int = 2; };       // fine: the outer id can't be seen in here
-};
-
-var list: ^Node = ^{ value: int = 1; next: ^Node = ^{ value: int = 2; next: ^Node = null; }; };
-```
-
-(`Node` is the list node from 8.14.)
 
 The type says what the fields are, and the value says what each one starts with. A field in
 the value is written like every declaration (2.1), with its name, its type and its value, so a
@@ -4304,8 +4292,8 @@ var p: Point = Point(1, 2);        // ERROR: a type is never called
 To make a struct from inputs, write an ordinary function that returns one:
 
 ```go
-const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = { x: int = a; y: int = b; };
+const makePoint: (int, int)Point = (const x: int, const y: int){
+    var p: Point = { x: int = x; y: int = y; };   // each field takes the parameter of the same name
     return p;
 };
 
@@ -4332,79 +4320,27 @@ origin.x = 1;          // ERROR: origin is const
 
 Arrays and maps follow the same rule (5.2, 6.2).
 
-**A function can't change the fields of a `const` struct either** (9.6). **(filled in)** When a
-struct is declared `const` with its block written out, its fields are `const` inside the block
-too, and the compiler rejects the change where it is written:
+**A `const` struct is protected by the normal `const` rule.** A function reaches a struct only
+through a parameter (9.6). So `counter.add(&counter)` lends `counter` to a `var` borrower, and
+that is an error when `counter` is `const` (8.6):
 
 ```go
-const fixed: {count: int, add: (int)void} = {
+const fixed: Counter = {
     count: int = 0;
-    add: (int)void = (const n: int){
-        count = count + n;     // ERROR: count is a field of a const struct
-    };
-};
-```
-
-A struct value that comes into a `const` from somewhere else brings its functions with it, and
-the compiler can't see what they do. Then the check is made while the program runs, with the
-note beside each function's code (7.7). It is the same kind of check as for a `const` that is
-lent to a function held in a variable (8.6):
-
-```go
-const frozen: {count: int, add: (int)void} = counter;   // a copy of the var struct counter from 9.6
-frozen.count = 9;              // ERROR: frozen is const
-frozen.add(1);                 // fails while running: add could change the fields of frozen, and frozen is const
-```
-
-**(filled in)** The check in detail:
-
-- **Where it is made.** Wherever a function value is read out of a struct through a place that
-  can't be assigned (2.9): through a `const` name, or through a read-only borrower (8.6). That
-  goes for a function that is read out by itself, and for each function inside a value that is
-  read out, such as an array of functions or an `any`. A line of the field-by-field copy is
-  not a reading out (9.6): a `const` can always be copied. It makes no difference whether the
-  function is then called or only read out. Where the compiler sees the function (7.2), it
-  makes the check itself, before the program runs. What then depends on a function it can't
-  see, in a field that the function reads (below), is still checked while the program runs.
-- **When it fails.** When the function is held in the struct it belongs to (7.7), and could
-  change it. A function is *held in* a struct when it sits in one of its fields, at any depth:
-  in an element or an entry, inside an `any`, or in a struct that is held there. What lies
-  behind a pointer doesn't count, as in 8.5. The note gives the type of the struct a function
-  belongs to, and the function keeps that struct's address, itself or at the end of its chain
-  (7.7). From the two, the program works out where the struct ends, also when a field has no
-  size in its type (5.3). So it can tell whether the place the function is read from lies
-  inside that struct.
-- **A function could change its struct** when it changes something that the fields reach: a
-  field, a place inside one, or what a `^`, an `&` or an `@` held there leads to. It changes it
-  when it gives it a new value, takes its value with `@`, or lends it with `&` where it may be
-  changed: to a `var` borrower, to a `var` parameter, or to a call through a variable. That is
-  everything a `const` name would not let it do (2.9). A function written inside it counts as
-  part of it.
-- **It could also change its struct through another function held there.** The note lists the
-  fields that the function reads and that can hold a function (8.5). The check looks at each
-  function in those fields in the same way: it fails when one of them is held in the struct it
-  belongs to and could change it.
-- **A function that is only kept in the struct passes.** A function that belongs to another
-  struct, or to none, can't change this one: one that was read out of another struct, one
-  that keeps only the parameters of a call (7.8), or one that keeps nothing (7.7). The check
-  lets it through.
-
-```go
-const Shape: type = {w: int, h: int, area: ()int, grow: ()void, show: ()void};
-
-var shape: Shape = {
-    w: int = 2;
-    h: int = 3;
-    area: ()int = (){ return w * h; };
-    grow: ()void = (){ w = w + 1; };
-    show: ()void = (){ print(convert(int, []char)(area())); };
+    add: (&Counter)void = (var c: &Counter){ c^.count = c^.count + 1; };
 };
 
-const still: Shape = shape;    // a copy: its functions use the fields of still (9.6)
-still.area()                   // 6: area only reads
-still.show();                  // fine: show reads the field area, and the function there only reads
-still.grow();                  // fails while running: grow gives w a new value, and still is const
+fixed.count = 9;               // ERROR: fixed is const
+fixed.add(&fixed);             // ERROR: add's parameter is a var borrower, and fixed is const
+
+const frozen: Counter = counter;   // a copy of the var struct counter from 9.6
+frozen.add(&frozen);           // fails while running: the same mistake, where the compiler can't see the function
 ```
+
+(`Counter` is the struct type from 9.6.) The compiler sees the function in `fixed`, because the
+struct is a `const` whose block is written out (7.2). In `frozen` it sees only the type, so the
+check is made at the call, while the program runs, as for every call through a variable that
+lends a `const` (8.6).
 
 ### 9.4 Setting a struct to another struct
 
@@ -4432,112 +4368,53 @@ settings.size = 5;          // fine: settings is a var
 
 ### 9.6 Functions inside a struct
 
-A function declared inside a struct is in the struct's scope, so it uses the struct's
-fields directly. There is no `this`:
+A function written in a struct value is an ordinary function. It sees only what any function
+sees: its own parameters, the top-level names of its file, and the parameters it keeps from the
+call around it (7.8). A function that works on its struct takes the struct as a parameter, like
+any other function. There is no `this`:
 
 ```go
-var counter: {count: int, add: (int)void} = {
+const Counter: type = {count: int, add: (&Counter)void};
+
+var counter: Counter = {
     count: int = 0;
-    add: (int)void = (const n: int){
-        count = count + n;     // count is the struct's own field
+    add: (&Counter)void = (var c: &Counter){
+        c^.count = c^.count + 1;     // fine: reaches count through its parameter
     };
 };
 
-counter.add(5);                // counter.count is now 5
-counter.add(2);                // counter.count is now 7
-```
+counter.add(&counter);               // count is now 1
 
-**A function inside a struct uses the fields of the copy it is called through.** After a copy,
-each copy's functions change its own fields:
-
-```go
-var other: {count: int, add: (int)void} = counter;     // a full copy, add included
-other.add(1);                  // other.count is now 8, and counter.count is still 7
-```
-
-**(filled in) A function that uses the fields keeps its own struct.** It keeps the address of
-the struct value it sits in (7.7). When a struct value is copied, moved or given back, each
-function that is held in the struct it keeps is re-aimed: in the new value it keeps the new
-struct. That goes for the struct that is copied and for every struct inside it, and *held in*
-means what it means in 9.3: at any depth, and not behind a pointer. It is how each copy's
-functions come to use its own fields. Any other function is copied like every function, with
-what it keeps (7.8): one that was read out of another struct, and one that lies behind a
-pointer.
-
-**(filled in) A line of the field-by-field copy re-aims in the same way.** `foo = boo;` is
-`foo.a = boo.a; foo.b = boo.b;` (8.8). So a line that copies a part of one struct straight into
-the same part of another struct of the same type does to the functions in that part what the
-whole copy does: a function that keeps `boo`, or a struct inside `boo`, keeps `foo` in the new
-place, or the same struct inside `foo`. The same goes for a field in a block that is given the
-same field of another struct of its type, and `==` between the same part of two such structs
-compares the functions as the comparison of the whole structs does (3.7).
-
-```go
-var b: {count: int, add: (int)void} = counter;   // every field is copied, add included
-b.add = counter.add;           // the same line of that copy again, for one field
-b.add(1);                      // b.count goes up: in b, add keeps b
-```
-
-**(adjusted) What such a function can use.** A block sees the names of the blocks around it
-(7.8), but a function that uses its struct's fields gives a part of that up:
-
-- It is written as the value of a field, or inside an array, a pair or a map that is the
-  value of a field. A function written anywhere else in the block, such as an argument in a
-  field's value, is an ordinary function, and it can't use the fields.
-- Its body can use every field of its block, above it or below it. The body runs only when
-  the function is called, and a call can't come before those fields are written (9.2). It
-  can call another function field by its name.
-- It has one address for what it keeps (7.7), and that address is the struct. So it can't
-  also use a name of a function call around the struct value: a parameter or a name of the
-  function that the struct value is written in. What it needs from there goes into a field,
-  or comes in as a parameter. A type parameter that is a type name (4.2) is no such name: it
-  is known before the program runs, and in a generic function a function that uses its
-  struct's fields is made once for each type the parameter is handed (4.3).
-- It can use the top-level names of its file, like any function. A top-level name needs no
-  address (7.7).
-- A function in a struct value that uses none of the fields is an ordinary function. It can
-  use the names around the struct value, as `up` and `get` do in 7.8.
-- A function written inside the body of a function that uses the fields can use them too. It
-  reaches them through the function it is written in (7.7), and it can also use the names of
-  that function's call, like any function inside a function (7.8). When it uses no name of
-  that call, it keeps the struct itself, so it can be given back, or stored in a field.
-
-```go
-var total: int = 0;
-
-const tallyBy: (int){count: int, add: (int)void} = (const step: int){
-    var tally: {count: int, add: (int)void} = {
-        count: int = 0;
-        add: (int)void = (const n: int){
-            count = count + n;         // fine: a field
-            total = total + n;         // fine: a top-level name of the file
-            count = count + step;      // ERROR: add uses the fields, so it can't also use a name of the call around it
-        };
+var bad: Counter = {
+    count: int = 0;
+    add: (&Counter)void = (var c: &Counter){
+        count = count + 1;           // ERROR: fields aren't names in scope; use c^.count
     };
-    return tally;
 };
 ```
 
-**(filled in) A function read out of a struct uses the struct it was read from.** `counter.add`
-on its own is a function value that keeps `counter`. It borrows `counter` (7.8), so it can't
-outlive it. A call to it does to the fields of `counter` what the function does to its fields
-(8.12). It goes on keeping `counter` wherever the value is stored, also in a field of another
-struct of the same type: only a copy of the struct, whole or line by line, re-aims a function.
+**Copying a struct copies its fields, nothing more.** A function field is copied like any
+function value, under the rule that copying a function that keeps parameters is an error (7.8):
 
 ```go
-const addToCounter: (int)void = counter.add;
-addToCounter(3);               // counter.count goes up by 3
-b.add = addToCounter;          // no line of a copy: the function is only kept in b
-b.add(1);                      // counter.count goes up again, and b.count stays as it is
+var other: Counter = counter;        // every field is copied: other has its own count, and the same add
+other.add(&other);                   // other.count is now 2, and counter.count is still 1
+other.add(&counter);                 // counter.count is now 2: add works on the struct it is lent
 ```
 
-**(filled in)** The same goes for a function inside a part of the struct that is read out,
-such as an array of functions that is a field: in the copy each function still keeps the
-struct, so the copy borrows the struct. A line of the field-by-field copy borrows nothing new:
-it counts like the whole copy.
+**(filled in) Why `counter.add(&counter)` is allowed.** The line reads a function out of
+`counter` and lends `counter` to that function in the same call. The borrowing rules allow it:
 
-**(filled in)** Through a `const`, a function that could change the struct it is held in can be
-neither called nor read out (9.3).
+- The value in front of the `(` is worked out first (2.9). It is an ordinary function value,
+  and it keeps nothing of `counter`: what a function keeps never sits in the struct that holds
+  the function (7.7). The call uses the function where it sits, and doesn't copy it.
+- `&counter` points at `counter` itself, so it followed no owner (8.12), and no other pointer
+  is in use.
+- The function may even give `c^.add` a new value while it runs. The code that is running is
+  part of the program, so nothing it uses is lost.
+
+A function in a file is different. It sees the file's top-level names, because there is one
+instance of each file (11.3).
 
 ### 9.7 A struct is copied, like every value
 
@@ -4704,12 +4581,12 @@ A call is the last thing a function does when both of these hold:
 | Condition | In detail |
 |---|---|
 | nothing comes after it | it is the whole value of a `return`, as in `return f(a, b);`. Or the function returns nothing, and the call is the last statement of its body |
-| nothing it uses lives in this call | What lives in this call is: the function's parameters and names, the heap values they own, the kept parameters this call holds (7.8), and the values made on the spot in the statement. An argument uses one of these when it is, or holds, a pointer to it or a function that uses it. The function that is called uses one when it keeps it. An ownership that a parameter of the called function takes over doesn't count, because its value has moved before the call starts (8.13) |
+| nothing it uses lives in this call | What lives in this call is: the function's parameters and names, the heap values they own, the kept blocks in its frame (7.8), and the values made on the spot in the statement. An argument uses one of these when it is, or holds, a pointer to it or a function that uses it. The function that is called uses one when it keeps it. An ownership that a parameter of the called function takes over doesn't count, because its value has moved before the call starts (8.13) |
 
 The arguments, and the function to call, are worked out before the names end (2.9). The other
 values made on the spot in the statement are gone by then as well. When the last call gives
-back a function that keeps its parameters (7.8), those parameters are held by the caller of the
-function that made the last call, as if that caller had made the call itself. In every other
+back a function that keeps parameters (7.8), its kept block goes to the frame of the caller of
+the function that made the last call, as if that caller had made the call itself. In every other
 case the call is an ordinary one, and the names end after it, as in 2.6.
 
 ```go
@@ -4750,26 +4627,26 @@ A file brings in another file with an ordinary declaration:
 
 ```go
 // the file geom
-const Box: type = {w: int, h: int};
-const area: (int, int)int = (const w: int, const h: int){
-    return w * h;
+const Point: type = {x: float, y: float};
+const area: (float)float = (const side: float){
+    return side * side;
 };
 var made: int = 0;
 ```
 
 ```go
 // the file main
-const geom: package = import("geom");
+const geom: package("geom") = import("geom");
 
-geom.area(3, 4)                        // 12
-const Box: type = geom.Box;            // a type from geom, named here too
+geom.area(2.0)                         // 4.0
+const Point: type = geom.Point;        // a type from geom, named here too
 geom.made = geom.made + 1;             // made is a var in the file geom, so it can change (11.3)
 ```
 
 | Piece | What it is |
 |---|---|
 | `import("geom")` | a built-in that gives the file `geom` as a value |
-| `package` | the type of that value, built in like `type` and `any` |
+| `package("geom")` | the type of that value: the type of the file `geom` |
 | `geom.area` | one of the package's names, reached with `.` like a struct field |
 
 - **`import` is a built-in, like `convert` and `wrap` (4.4, 4.5),** so the line is an ordinary
@@ -4777,8 +4654,18 @@ geom.made = geom.made + 1;             // made is a var in the file geom, so it 
 - **A package is a pointer to its file.** There is one instance of each file, and a package
   value is that file's address, held like a function value (11.5). Importing the same file
   twice gives the same file both times, so both names reach the same variables (11.3).
+- **A package's type is its file.** `package("geom")` is the type of the file `geom`: its
+  top-level names, each with its `const` or `var` and its type. It is a type form, written
+  where a type goes, like `[3]int` or `?int`. It is not a call: a type is still never called
+  (4.1). The text has to be written out, the same as for `import`, so the type is known before
+  the program runs. There is no plain type `package`: every package has its own exact type.
 - **A package can be a `const` or a `var`,** like a function. `const` means that the name
   always holds the same file. The file's own names follow their own `const` or `var` (11.3).
+- **A package value is always the address of the one instance of its file, so a copy of it
+  reaches the same file.** `var p: package("geom") = geom;` is fine: the type only ever means
+  "that file", and a file can't exist twice, so nothing is hidden. This is different from
+  copying a function with kept state (7.8), where the type `()int` doesn't say that anything
+  would be shared.
 - **The name in `import` is the file's path from the importing file's folder:**
   `import("shapes/geom")`. A folder only organises files.
 - **A file is set up once, before any file that imports it** (11.4). Two files can't import
@@ -4788,24 +4675,25 @@ geom.made = geom.made + 1;             // made is a var in the file geom, so it 
 the code, so the compiler knows every file of a program before it runs:
 
 ```go
-const geom: package = import("geom");            // the file geom.my, in this file's folder
-const deep: package = import("shapes/geom");     // shapes/geom.my
-const util: package = import("../common/util");  // ../common/util.my: .. is the folder above
-const which: package = import(fileName);         // ERROR: the file has to be written out
+const deep: package("shapes/geom") = import("shapes/geom");          // shapes/geom.my
+const util: package("../common/util") = import("../common/util");    // ../common/util.my: .. is the folder above
+const which: package("geom") = import(fileName);                     // ERROR: the file has to be written out
 ```
 
 - The text is the file's path without the `.my` (2.7). Its parts are joined with `/`. A text
   that leads to no file is an error.
 - Two texts that lead to the same file name the same file, however they are written:
   `"geom"` and `"shapes/../geom"`.
+- The text in a package type is read in the same way, from the folder of the file that writes
+  it.
 - A file can't import itself, at its top level or inside a function: it is the smallest
   circle of imports.
 - An `import` that is written inside a function counts like one at the top level, for the
   circle rule and for the order in which the files are set up (11.4). It makes no difference
   whether that line ever runs.
-- `import` has the type `([]char)package`. Unlike the other built-ins, it is always called by
-  its own name with its text written out, because a file that is only named while the program
-  runs couldn't be checked.
+- `import("geom")` has the type `package("geom")`. So `import` has no single type of its own.
+  Unlike the other built-ins, it is always called by its own name with its text written out,
+  because a file that is only named while the program runs couldn't be checked.
 
 **(filled in) What an import does when it runs.** An import is a call, and all it does is give
 the address of its file. Nothing of the file runs at that line: every file is set up when the
@@ -4832,8 +4720,8 @@ const bump: ()void = (){
 
 ```go
 // the file you run
-const a: package = import("counter");
-const b: package = import("counter");
+const a: package("counter") = import("counter");
+const b: package("counter") = import("counter");
 
 a.bump();
 a.bump();
@@ -4842,7 +4730,7 @@ b.count                // 2: a and b hold the same file, so it is the same count
 a == b                 // true: the same file (3.7)
 
 const readCount: ()int = (){
-    const c: package = import("counter");   // an import inside a function gives the same file again
+    const c: package("counter") = import("counter");   // an import inside a function gives the same file again
     return c.count;
 };
 readCount()            // 2
@@ -4862,32 +4750,37 @@ It is the same as a `const` function that changes a variable outside itself (7.8
 never changes, and neither does the package. So this is no exception to the rule that a `const`
 never changes (8.6).
 
-**(filled in) How the compiler checks a name reached through a package.** An `import` names
-its file in the code, and a package keeps its file wherever it goes. So for every place that
-can hold a package, the compiler works out which files can be there. It does this once, over
-the whole program:
+**Two package types are the same when the files have the same names, kinds and types.** So
+giving a `var` package another file is an ordinary type check, and a function can take a
+package of a given shape:
 
-| Place | The files it can hold |
-|---|---|
-| an `import("geom")` | exactly that file |
-| a name that is a package: a `const`, a `var` or a parameter | the files of everything it is given: by its declaration, by each assignment to it, and for a parameter by the argument of each call the compiler sees (7.2) |
-| a package inside a name: in a field of a struct, or in an array, a pair or a map | a field is a place of its own, told apart from the other fields by its name. All the elements of one array count together as one place, and so do the two values of a pair and the entries of a map, because an index or a key is only known while the program runs. The two combine: `plugins[i].draw` is the field `draw` of all the elements of `plugins` together. Such a place holds the files of everything it is given, by itself or as a part of a bigger value that is given to the name |
-| a borrower or an ownership of such a place, and a parameter that is handed one | the same files as the place it points at: the two count as one place |
-| the result of a call the compiler sees | the files the compiler finds that the function can give back |
-| everything else: a heap value, the inside of an `any`, the result of a call through a variable | one shared place for the whole program. It holds every file that is ever put into any of them |
+```go
+var shapes: package("geom") = import("geom");
+shapes = import("geomFast");      // fine only if geomFast has exactly geom's names, kinds and types
+shapes.area(2.0)                  // checked from the type alone
 
-**(filled in)** A function that is used in any other way than a call the compiler sees could be
-handed anything. So its package parameters also hold everything in the shared place, and a
-package that is handed to a call through a variable goes into the shared place. A place also
-joins the shared place when a borrower or an ownership of it is put where the compiler can't
-follow: on the heap, into an `any`, or into a call through a variable.
+const draw: (package("geom"))void = (const g: package("geom")){ ... };
+draw(shapes);                     // fine: shapes has the type the parameter asks for
+```
 
-**(filled in)** `g.name` is accepted when `name` is a top-level name of every file that the
-place of `g` can hold, with the same type in each. It can be assigned when it is a `var` in
-each. When the place can hold no file at all, `g.name` is an error, because nothing gives the
-name a type. A type name is reached this way only through a place that can hold one file (3.6).
-Through a place that can hold more, `g.Box` is a value that holds a type, like a `var` of type
-`type` (4.2): it can be compared and passed, and it can't declare anything.
+**A package type can be named once and reused,** as any type can:
+
+```go
+const Geom: type = package("geom");
+var fast: Geom = import("geomFast");
+```
+
+**(filled in) What "the same names, kinds and types" covers.** Two files have the same package
+type when each top-level name of the one is a top-level name of the other, with the same
+`const` or `var` and the same type (3.6). A type name also has to name the same type in both.
+The order of the declarations makes no difference, and neither do the values. So `g.name` is
+checked from the type of `g` alone: `name` has to be a top-level name of that file, it has the
+type it has there, and it can be assigned when it is a `var` there. `g.Point` is the type that
+`Point` names in the file, whichever file of that type `g` holds.
+
+**(filled in)** A package type can name any file, also one that the file doesn't import. The
+compiler reads such a file for its names, and the file is set up only when some `import` names
+it (11.4). Two files can name each other's types: only imports can't go in a circle.
 
 ### 11.4 Order, where statements go, and `main`
 
@@ -4902,7 +4795,7 @@ Through a place that can hold more, `g.Box` is a value that holds a type, like a
 
 ```go
 // the file geom
-area(1, 1);            // ERROR: geom is imported, so it holds only declarations
+area(1.0);             // ERROR: geom is imported, so it holds only declarations
 ```
 
 **It is good practice to put what the program does in a `const main: ()int`.** It isn't required,
@@ -4910,10 +4803,10 @@ and code can still go outside it:
 
 ```go
 // the file you run
-const geom: package = import("geom");
+const geom: package("geom") = import("geom");
 
 const main: ()int = (){
-    const size: int = geom.area(3, 4);
+    const size: float = geom.area(2.0);
     return 0;
 };
 ```
@@ -4929,15 +4822,15 @@ reached from it through imports. It starts by setting up all of them:
 1. A file's imports are all the `import`s written in it, at its top level and inside its
    functions (11.2).
 2. Before a file is set up, the files it imports are set up, in the order in which its text
-   first names them. A file that is already set up is left as it is.
+   first names them in an `import`. A file that is already set up is left as it is.
 3. The file you run comes last. Its set-up is its top-level lines, declarations and statements
    together, in the order written.
 
 ```go
 // the file you run
-const a: package = import("counter");   // counter is set up before this file, and so is every file it imports
-const g: package = import("geom");      // geom is set up after counter, because this file names it second
-print("start\n");                       // by the time this line runs, every file of the program is set up
+const a: package("counter") = import("counter");   // counter is set up before this file, and so is every file it imports
+const g: package("geom") = import("geom");         // geom is set up after counter, because this file names it second
+print("start\n");                                  // by the time this line runs, every file of the program is set up
 ```
 
 **(filled in)** So every file is set up before any file that imports it, and all of them before
@@ -4989,39 +4882,38 @@ program, and every package that holds the file leads to them. Copying a package 
 the address, and nothing else (8.8).
 
 So a package can be held like a function. It can be a `const` or a `var`, passed to a function
-or kept in an array, and a `var` one can be given another file, as a `var` function can be
-given another function (7.5):
+or kept in an array, and a `var` one can be given another file of the same type, as a `var`
+function can be given another function (7.5):
 
 ```go
-var shapes: package = import("geom");
-shapes.area(3, 4)              // 12, from geom
+var shapes: package("geom") = import("geom");
+shapes.area(2.0)               // 4.0, from geom
 
 shapes = import("geomFast");   // shapes now holds the file geomFast, and the file geom is untouched
-shapes.area(3, 4)              // 12, from geomFast
+shapes.area(2.0)               // 4.0, from geomFast
 ```
 
-The new file has to have the names the code uses through `shapes`, each with the same type, as
-a function in a `var` keeps its type. So the compiler still checks every `shapes.area`, and
-nothing is looked up while the program runs.
+The new file has to have the type of `shapes`: exactly the names, kinds and types of `geom`
+(11.3). So the compiler checks every `shapes.area` from the type, and nothing is looked up
+while the program runs.
 
 **(filled in)** This is how that works underneath. For each file the compiler writes a table
 into the program, with one entry for each of the file's top-level names. A package value is the
-address of that table, so every package value has the same size, whichever file it holds. Every
-name that the program reaches through a package has one fixed position in all these tables, so
-`shapes.area` reads the entry at that position, whichever file `shapes` holds. The entry leads
-to the name's value:
+address of that table, so every package value has the same size, whichever file it holds. Files
+of one package type have their tables laid out alike, so `shapes.area` reads the entry at the
+same position, whichever of them `shapes` holds. The entry leads to the name's value:
 
 | The name | Where its value is |
 |---|---|
 | is ready from the start (11.4): a function value written out, a value made of written values, a type | in the program itself |
 | is worked out when the file is set up: every `var`, and every `const` that isn't ready from the start | in the file's own place |
 
-**(filled in)** The file's own place also holds the kept parameters of the calls made at the
-file's top level (7.8). It is on the stack, like every value whose type has no `^` (2.6). The
-files are set up one after another when the program starts, and what each one works out stays
-where it is put, below everything that runs afterwards, until the program ends. So a file puts
-nothing on the heap out of sight, and a top-level value with no size in its type (5.3) takes
-its size from its first value, like any other.
+**(filled in)** The file's own place is the frame of the file's top level. It also holds the
+kept blocks of the calls made there (7.8). It is on the stack, like every value whose type has
+no `^` (2.6). The files are set up one after another when the program starts, and what each one
+works out stays where it is put, below everything that runs afterwards, until the program ends.
+So a file puts nothing on the heap out of sight, and a top-level value with no size in its type
+(5.3) takes its size from its first value, like any other.
 
 ### 11.6 Ownership and borrowing work on a package like on any variable
 
@@ -5031,10 +4923,10 @@ where it is:
 
 | You write | What happens, the same as for any variable |
 |---|---|
-| `var p: package = geom;` | `p` gets its own copy of the address, so `p` and `geom` hold the same file (8.8) |
-| `var b: &package = &geom;` | `b` borrows the name `geom`: nothing is copied, and through `b` the name can be read, or given another file (8.4) |
-| `var h: ^package = ^geom;` | a copy of the address on the heap (8.3) |
-| `var @mine: package = @geom;` | `mine` takes `geom`'s value over. An address owns nothing on the heap, so this is the same as a copy (8.9) |
+| `var p: package("geom") = geom;` | `p` gets its own copy of the address, so `p` and `geom` hold the same file (8.8) |
+| `var b: &package("geom") = &geom;` | `b` borrows the name `geom`: nothing is copied, and through `b` the name can be read, or given another file (8.4) |
+| `var h: ^package("geom") = ^geom;` | a copy of the address on the heap (8.3) |
+| `var @mine: package("geom") = @geom;` | `mine` takes `geom`'s value over. An address owns nothing on the heap, so this is the same as a copy (8.9) |
 | `take(@geom)` | a parameter that asks for an ownership takes it at the call, in the same way (8.13) |
 
 **(filled in)** The rules for `const` hold here too, for the name that holds the package. A
@@ -5047,9 +4939,9 @@ Everything that holds a package shares the one file. So a function that is hande
 changes the same variables as its caller, with no borrow:
 
 ```go
-const counter: package = import("counter");
+const counter: package("counter") = import("counter");
 
-const bumpTwice: (package)void = (const p: package){
+const bumpTwice: (package("counter"))void = (const p: package("counter")){
     p.bump();
     p.bump();
 };
@@ -5062,15 +4954,27 @@ A borrower of a package is for the name itself. It lets a function give the call
 another file:
 
 ```go
-const useFast: (&package)void = (var p: &package){
+const useFast: (&package("geom"))void = (var p: &package("geom")){
     p^ = import("geomFast");
 };
 
-var shapes: package = import("geom");
+var shapes: package("geom") = import("geom");
 useFast(&shapes);              // shapes now holds the file geomFast
 ```
 
 The borrowing rules hold too: a borrower of a package can't outlive the name it borrows (8.5).
+
+**One element of a package is just an ordinary declaration,** with no new syntax:
+
+```go
+const area: (float)float = geom.area;                  // a function
+const Point: type = geom.Point;                        // a type
+const area2: (float)float = import("geom").area;       // in one line
+const count: &int = &import("counter").count;          // a var, live: borrow it
+var snapshot: int = import("counter").count;           // a copy of the value now
+```
+
+A file lasts the whole program, so borrowing its variable is always fine.
 
 **(filled in) A file lasts as long as the program.** A name that is reached through a package
 is a top-level name of a file, wherever the line that reaches it is written. So:
@@ -5087,15 +4991,11 @@ is a top-level name of a file, wherever the line that reaches it is written. So:
 ```go
 var late: &int = null;
 {
-    const c: package = import("counter");
+    const c: package("counter") = import("counter");
     late = &c.count;           // fine: count is a variable of the file counter, which is always there
 }
 late^                          // the count of the file counter: c has ended, and the file has not
 ```
-
-A function that takes a package uses only the names that every package given to it has, each
-with the same type. The compiler checks this at each call, as it does when a `var` package is
-given another file (11.5).
 
 ### 11.7 When a check fails while the program runs **(filled in)**
 
@@ -5214,8 +5114,8 @@ applyTo(ops[2], &table[1][0], 2);   // table[1][0] is now 6
 // a struct type, a function that makes one, and a borrower to share it
 const Point: type = {x: int, y: int};
 
-const makePoint: (int, int)Point = (const a: int, const b: int){
-    var p: Point = { x: int = a; y: int = b; };
+const makePoint: (int, int)Point = (const x: int, const y: int){
+    var p: Point = { x: int = x; y: int = y; };
     return p;
 };
 
@@ -5252,7 +5152,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `char` | one character |
 | `type` | the type of a type |
 | `any` | a value of any type, with its type inside |
-| `package` | a file used from another file (11.2) |
+| `package("geom")` | the type of the file `geom` (11.2) |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
 | `&a[i:j]` | a slice: borrows elements `i` up to `j` of `a`, as an `&[]T` (5.9) |
@@ -5317,7 +5217,7 @@ to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 | `convert(float, int)` | `(float)int` | converts a value from the first type to the second (4.4) |
 | `wrap(int)` | `(int)any` | wraps a value in an `any` (4.5) |
 | `unwrap(int)` | `(any)int` | takes the value back out of an `any`, checked while running (4.5) |
-| `import("geom")` | `package` | gives the file `geom` as a package (11.2) |
+| `import("geom")` | `package("geom")` | gives the file `geom` as a package (11.2) |
 | `convert(int, []char)`, `convert([]char, int)` **(filled in)** | `(int)[]char`, `([]char)int` | writes a number as text, and reads one back (5.10) |
 | `join(char)` **(filled in)** | `([]char, []char)[]char` | joins two unsized arrays into a new one (5.11) |
 | `print` **(filled in)** | `([]char)void` | writes a text to the output (11.8) |
@@ -5368,11 +5268,13 @@ their type from the place they are written for (3.8).
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
-| a function given back uses a parameter `p` of the call | the function keeps `p`, and can't outlive the call's arguments, except those handed over with `@` (7.8). **(adjusted)** Nor can it leave the call it is in, except by being given back again |
+| a function given back uses a parameter `p` of the call | the function keeps `p` in its kept block, in the frame of the call that receives the function. It is a borrower of that block, so it can't be stored where it outlasts the frame (7.8) |
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
-| `var again: ()int = next;` **(filled in)** | `again` is the same function as `next`: it uses the same variables and the same kept parameters, which are not copied (7.8) |
-| `var p: package = geom;` | `p` holds the same file as `geom`: a package is the file's address, and the file isn't copied (11.5) |
+| `var again: ()int = next;` where `next` keeps parameters | an error: a copy would share them. To share the function, borrow it: `var again: &()int = &next;` (7.8) |
+| `var keep: ^(int)int = ^makeAdder(five);` | the function goes on the heap, kept block included (7.8) |
+| `var p: package("geom") = geom;` | `p` holds the same file as `geom`: a package is the file's address, and a copy of it reaches the same file (11.2) |
 | `import("geom")` twice | the same file both times: there is one instance of each file (11.2) |
+| `const area: (float)float = geom.area;` | one element of a package, declared like any name (11.6) |
 | `&geom`, `^geom`, `@geom` | borrows, puts on the heap or moves the address that a package holds, like any variable (11.6) |
 
 ### What never changes
@@ -5404,13 +5306,13 @@ their type from the place they are written for (3.8).
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `?int` | a pair is looked up with a `bool` |
 | `var sizes: [bool]int = [3, 10];` | the size of an array is a number (5.1) |
-| `shapes = import("other");` where `other` lacks a name the code uses from `shapes` | a package in a `var` can only be given a file with the same names and types (11.5) |
+| `shapes = import("other");` where `other` doesn't have exactly the names, kinds and types of `geom` | the two package types differ, so it is an ordinary type error (11.3) |
 | `geom = import("other");` where `geom` is a `const` package | a `const` package always holds the same file (11.3) |
 | `a.bump = a.bump;` where `bump` is a `const` in its file | a name of a file follows its own `const` or `var`, whatever the package is (11.3) |
 | two files that import each other | imports can't go round in a circle: a file is set up before any file that imports it (11.2) |
 | a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
-| a function of type `(int)int` that can reach the end of its body without a `return` | a function that returns a value has to reach a `return` on every path (7.1) |
+| a function of type `(int)int` whose body runs to its end without meeting a `return` | a function that returns a value has to run into a `return` (7.1) |
 | `return 5;` in a function of type `()void` | a function that returns nothing gives no value back (7.3) |
 | `return;` in a function of type `(int)int` | a function that returns a value has to give one (7.3) |
 | `a = [1, 2, 4, 5];` where `a` has length 3 | an unsized array keeps its first length |
@@ -5427,11 +5329,16 @@ their type from the place they are written for (3.8).
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
 | `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
 | returning a function that uses a variable declared inside the function around it | that variable would die before the function (7.8) |
+| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | `keep` outlasts the frame that holds the kept block: a function with kept state is a borrower of that block (7.8) |
+| `var again: ()int = next;` where `next` keeps parameters | copying a function that keeps parameters is an error: borrow it with `&next` (7.8) |
 | `Point(1, 2)` | a type is never called |
 | `var p: Point = Point;` | `Point` is a type, not a value of type `Point` |
 | `var u: Point = { a: int = 1; b: int = 2; };` | the fields of a `Point` are `x` and `y`: a struct value is checked against the names and types of its type (9.2) |
 | `p.z` where `p` is a `Point` | a `Point` has the fields `x` and `y`: a field name comes from the struct's type (9.1) |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
+| `count = count + 1;` in a function written in a struct value with a field `count` | fields aren't names in scope: the function takes the struct as a parameter and writes `c^.count` (9.6) |
+| `var span: Span = { a: int = 1; b: int = a + 1; };` | a field's value can't see the other fields (9.2) |
+| `fixed.add(&fixed);` where `fixed` is a `const` struct and `add`'s parameter is a `var` borrower | the normal `const` rule: a `const` isn't lent to a `var` borrower (9.3) |
 
 **(filled in)** These lines are rejected by the filled-in rules:
 
@@ -5449,21 +5356,19 @@ their type from the place they are written for (3.8).
 | `const Bad: type = {value: int, next: Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
-| `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` **(adjusted)** | a function given back can't be stored where it outlasts the call it is in (7.8) |
 | `var y: &int = x;` where `x` is a `const` borrower | a copy of a `const` borrower can only read (8.6) |
 | `var mine: [2]&int = views;` where `views` is a `const` | the borrowers inside a `const` can only read (8.6) |
 | `wrap(&int)(c)` where `c` is a `const` borrower | nothing read-only goes into an `any` (8.6) |
 | `var x: T = v[0];` in a generic function, where `v` is a `const` | a `T` may have a borrower in it, and `v` can only be read (8.6) |
 | `first(@^int)` | a type parameter is never handed an ownership type itself (4.3) |
-| `run(renew);` where `renew` changes an owner that a pointer used below followed | a function that is handed over may be called (8.12) |
+| `run(&refill);` where `refill` changes an owner that a pointer used below followed | a function that is handed over may be called (8.12) |
 | `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns | a pointer that function bodies share is still in use when the function ends (8.12) |
 | `c^ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below | two pointers from outside may lead to the same owner (8.12) |
 | `addTo(&p^, renewP())` where `renewP` changes `p` | a statement is still using what it has worked out (8.12) |
 | `return ^&local;`, and `slot^ = &local;` where `slot` came in through a parameter | the line that stores a borrower behind a pointer is checked (8.5) |
 | `x = wrap(bool)(true);` where `x` was declared with `wrap(int)(3)` | an `any` keeps the type of its first value (4.5) |
 | `kept = b;` where `b` is a parameter and `kept` outlasts the call | what comes in through a parameter is only known to last as long as the call (8.5) |
-| `count = count + step;` in a function of a struct value, where `step` is a parameter of the function around the struct value **(adjusted)** | a function that uses its struct's fields keeps its struct, and can't also use a name of a call around it (9.6) |
-| `count = count + n;` in a function of a struct that is declared `const` with its block | a function can't change the fields of a `const` struct (9.3) |
+| `twice(addFive, 3)` where `addFive` keeps parameters | the argument would be a copy of a function that keeps parameters (7.8) |
 | `import(fileName)` | the file is written out in the code (11.2) |
 | `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
 
@@ -5491,7 +5396,7 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.8) |
 | a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
-| `frozen.add(1)`, a function reached through a `const` struct, where the compiler can't see every function involved | the function is held in the struct it belongs to, and could change it (9.3) |
+| `var g: ()int = f;`, a copy of a function that the compiler can't see | the function keeps something (7.8) |
 
 ---
 
@@ -5573,7 +5478,8 @@ FunctionValue = "(" [ Param { "," Param } ] ")" Block
 Param         = Kind [ "@" ] NAME ":" Type
 ```
 
-`Type`, `Return`, `TypeList`, `TypeItem`, `FieldList` and `BasicType` are in 3.6.
+`Type`, `Return`, `TypeList`, `TypeItem`, `FieldList` and `BasicType` are in 3.6. A package
+type, `package("geom")`, is one of the forms of `Type`.
 
 ### A.4 Telling the forms apart
 
@@ -5581,15 +5487,17 @@ Some forms start with the same symbol. The compiler knows which names are types:
 the top-level type names of a file before it reads anything else (4.2). "A type" below is a
 type that is written out, with type names and the forms of 3.6. With that, these rules
 always decide. Two kinds of name are settled only once the declarations of the program have
-been read: `g.Name`, which is a type when `Name` is a type name in the file that `g` holds
-(11.3), and a `const` parameter of type `type`, which is a type name when its function's type
-names it (4.3). A form that starts with such a name is told apart at that point:
+been read: `g.Name`, which is a type when `g` has a package type and `Name` is a type name in
+that file (11.3), and a `const` parameter of type `type`, which is a type name when its
+function's type names it (4.3). A form that starts with such a name is told apart at that
+point:
 
 | What is read | It is |
 |---|---|
 | `&&` where a `Front` can start, or in a type | two `&` marks (3.2) |
 | `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2. So a mark never puts a type on the heap or borrows one: `^int` is always a type |
 | `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
+| `package` followed by `(` and a text | the type of a file (3.6). `package` is a reserved word, so nothing else starts with it |
 | `(` | a call, a function value, a function type or a group, by the table in 3.2 |
 | `(` followed by `NAME :` | a function type whose first parameter is a named type parameter, as in `(T: type)([]T)T` (4.3). The parameters of a function value start with `const` or `var` |
 | `()` followed by `{` | a function type when the braces hold fields written `name: Type`, or one type: `(){x: int, y: int}`, `(){int}bool`. Otherwise a function value with no parameters (3.2) |
@@ -5639,7 +5547,7 @@ program runs. The rules themselves are in the sections named.
 | a value given back by a function that returns nothing | `return 5;` in a `()void` | 7.3 |
 | no value given back by a function that returns one | `return;` in an `(int)int` | 7.3 |
 | a call that has no value, used as a value | `var x: int = show(5);`, `return hello();` | 3.8, 7.3 |
-| a statement that isn't a declaration, in an imported file | `area(1, 1);` in `geom` | 11.4 |
+| a statement that isn't a declaration, in an imported file | `area(1.0);` in `geom` | 11.4 |
 
 ### B.3 The types of values
 
@@ -5702,9 +5610,10 @@ program runs. The rules themselves are in the sections named.
 | a function value whose parameters don't match its type | `const f: (int)int = (const a: int, const b: int){ … };` | 7.1 |
 | a `return` whose value isn't the function's return type | `return true;` in an `(int)int` | 7.1 |
 | a function that uses a name declared inside the function around it, given back or stored where it lasts longer | `return (){ return x; };` | 7.8 |
-| a function given back that outlives an argument of its call | `var addTen: (int)int = makeAdder(10);`, `return makeAdder(more);` for a local `more` | 7.8 |
-| a function given back that is put in a variable that outlasts the call it is in | `keep = makeAdder(five);` inside a function | 7.8 |
-| a result given back that comes from a name declared in the function, or from a function that uses one | `return makeAdder(more);`, `return g();` where `g` uses a name of this function and gives back a function | 7.8 |
+| a function given back that outlasts what was lent to its call | `var f: (int)int = adderOn(&local);` kept beyond `local` | 7.8 |
+| a function with a kept block that is stored where it outlasts the frame that holds the block | `keep = makeAdder(five);` inside a function, for a top-level `keep` | 7.8 |
+| a function given back that borrows a kept block which stays in this frame | `return plusFive(five);` where `plusFive` is a name of this function that keeps parameters | 7.8 |
+| a copy of a function that keeps something, where the compiler sees the function | `var again: ()int = next;`, `twice(addFive, 3)` | 7.8 |
 
 ### B.6 Ownership
 
@@ -5719,12 +5628,11 @@ check these rules:
 | a `var` borrower is made only from a place that can be assigned, a value made on the spot, another borrower that isn't read-only, the result of a call that was lent nothing read-only, or `null`, wherever the compiler sees both | 8.6 |
 | a read-only borrower, or a value with one inside it, goes only into a `const`, a `const` parameter or back as a result, wherever the compiler sees both ends | 8.6 |
 | nothing read-only is wrapped into an `any`. Inside a generic function, a `T` read from a place that can't be assigned goes only into a `const`, a `const` parameter or back as a result | 8.6 |
-| a function that could change the struct it is held in isn't called or read out through a `const`, wherever the compiler sees the function | 9.3 |
 | what comes in through a parameter that holds a borrower, an ownership or a function isn't put in a variable that outlasts the call | 8.5 |
-| through a pointer that came in from outside, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or kept parameters. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
+| through a pointer that came in from outside, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or a kept block. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
 | a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
-| a top-level variable of a file counts as one owner, through whichever package it is reached. Through a package that can hold several files, a name counts as that name in each of them | 8.12, 11.6 |
+| a top-level variable of a file counts as one owner, through whichever package it is reached. Where the compiler doesn't see which file a package holds, a name counts as that name in every file of the program that has the package's type | 8.12, 11.6 |
 | what is put into a variable of a file, through a package or not, lasts as long as the program | 8.5, 11.6 |
 | both sides of a move are ownerships, and the one on the right comes from a `var` owner, not from a borrower | 8.9 |
 | `null` is given only to a `^T`, an `&T` or an `@T` | 8.10 |
@@ -5743,13 +5651,10 @@ check these rules:
 |---|---|---|
 | a struct value that doesn't have the fields of its type: their number, their order, their names and their types | `var q: Point = { x: int = 1; };`, `var u: Point = { a: int = 1; b: int = 2; };` | 9.2 |
 | a struct of one type where another is asked for | `var box: Size = p;` for a `p` that is a `Point` | 9.1, 9.2 |
-| a field named like a name that can be seen where the struct value is written, or like a top-level name of the file | a field `count` beside a `var count` | 2.8, 9.2 |
-| a function in a `const` struct that changes a field | `count = count + n;` in the block of a `const` struct | 9.3 |
-| a call in a field's value whose function uses a field written below the call | `first: int = peek();` where `peek` uses the field `last` below | 9.2 |
-| a function in a struct value that uses the struct's fields and also a name of a function call around the struct value | `count = count + step;` for a parameter `step` of the function that the struct value is written in | 9.6 |
-| a function that uses the fields but isn't a field's value, inside an array, pair or map in one, or inside the body of such a function | a function written as an argument in a field's value | 9.6 |
+| a field's value that uses another field of its block as a name | `var span: Span = { a: int = 1; b: int = a + 1; };` | 9.2 |
+| a function written in a struct value that uses a field as a name | `count = count + 1;` where `count` is a field: write `c^.count` | 9.6 |
 | a field name that the struct's type doesn't have | `p.z` for a `Point` | 9.1 |
-| a struct type that names a field twice, or names one like a built-in name | `{x: int, x: bool}`, `{type: int}` | 9.1 |
+| a struct type that names a field twice | `{x: int, x: bool}` | 9.1 |
 | a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 4.3 |
 
 ### B.8 Files and packages
@@ -5757,10 +5662,11 @@ check these rules:
 | The compiler rejects | Example | Rule |
 |---|---|---|
 | an `import` whose text isn't written out, or whose file doesn't exist | `import(fileName)`, `import("missing")` | 11.2 |
-| `import` used in any way but a call by its own name | `const load: ([]char)package = import;` | 11.2 |
+| `import` used in any way but a call by its own name | `const load: ([]char)package("geom") = import;` | 11.2 |
+| a package type whose text isn't written out, or leads to no file. `package` with nothing after it is no type | `var g: package = import("geom");` | 11.2 |
 | files that import each other, directly or through other files, and a file that imports itself. An `import` inside a function counts | `a` imports `b`, and `b` imports `a` | 11.2 |
-| a name that isn't a top-level name of every file a package can hold, with one type | `shapes.area` after `shapes = import("other");` when `other` has no `area` | 11.3, 11.5 |
-| a type reached through a package that can hold more than one file | `var b: shapes.Box = …;` when `shapes` is given two files | 3.6, 11.3 |
+| a name that the file of a package's type doesn't have | `geom.volume` when the file `geom` declares no `volume` | 11.3 |
+| a package given a file of another package type | `shapes = import("other");` when `other` doesn't have exactly the names, kinds and types of `geom` | 11.3 |
 | a new value for a `const` name of a file | `a.bump = a.bump;` | 11.3 |
 | a `const` package given another file | `a = import("counter");` for a `const a` | 11.3 |
 | a top-level `main` in the file you run that isn't a `const` of type `()int` | `var main: int = 0;` | 11.4 |
@@ -5788,7 +5694,7 @@ error line.
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
 | `f(&limit)`, a call through a variable that hands over something read-only: `&limit`, a read-only borrower, or a value with one inside it. Inside a generic function, a `T` counts when the type it stands for has a borrower in it | the parameter it goes to is a `var` in the function that runs | `const lent to a var parameter` | 8.6 |
-| `frozen.add(1)`, a function read out of a struct through a `const` name or a read-only borrower, by itself or inside a value that is read out, where the compiler can't see the function, or a function in a field that it reads | the function is held in the struct it belongs to, and could change it | `function can change a const` | 9.3 |
+| `var g: ()int = f;`, `twice(f, 3)`: a copy of a function that the compiler can't see, by itself or inside a bigger value that is copied | the function keeps something | `copy of a function that keeps parameters` | 7.8 |
 | `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |

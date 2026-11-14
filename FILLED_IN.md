@@ -7,76 +7,79 @@ what Claude added to get there, so Jack can review it. Every added rule is marke
 whole section, and a mark at the start of a paragraph covers that paragraph and the examples,
 lists and tables that follow it, up to the next paragraph.
 
-Nothing in `UNDECIDED.md` was decided, used or built on. One point there needs Jack's eye all
-the same: rule 79 and A1 say how the kept parameters of today's functions behave, and idea 1
-describes them the other way round. Section 5 says more.
+Nothing in `UNDECIDED.md` was decided, used or built on. Section 5 says where an undecided idea
+touches a rule.
 
 ---
 
 ## 1. Summary
 
 `DOCS.md` had the heart of the language: declarations, types, ownership, structs, choosing,
-files. It did not yet say how the source is written, what most operators do at their edges,
-what several rules mean for the compiler, or what happens when something goes wrong while the
-program runs. Those gaps are filled now:
+files. It did not yet say how the source is written, what most operators do at their edges, what
+several rules mean for the compiler, or what happens when something goes wrong while the program
+runs. Those gaps are filled now:
 
-- **128 rules were filled in.** They are listed in section 2, each with its reason and the
+- **124 rules were filled in.** They are listed in section 2, each with its reason and the
   principle that decided it.
-- **17 rules of Jack's were adjusted.** They are listed in section 3.
+- **16 rules of Jack's were adjusted.** They are listed in section 3.
 - **2 of those are bigger changes,** and they are the first things to review. They are in
-  section 4: where the parameters that a function keeps live, and which calls the compiler
-  can see into, with what a call through a variable counts as doing.
+  section 4: which calls the compiler can see into, with what a call through a variable counts
+  as doing, and what a function given back can't outlive.
 - **Nothing waits on `UNDECIDED.md`** (section 5).
-- **Four rules are Jack's own decisions,** not mine: a `var` can hold a type, a `const` never
-  changes, a struct type has its field names, and a package is a pointer to its file. Section
-  6 lists them with the rules I added so that they work.
+- **Ten rules are Jack's own decisions,** not mine: a `var` can hold a type, a `const` never
+  changes, a struct type has its field names, a package is a pointer to its file, copying a
+  function that keeps parameters is an error, a struct value is just a bundle of values, a field
+  name never clashes with another name, a function with kept state is a borrower of its kept
+  block, a package's type is its file, and importing one element is an ordinary declaration.
+  Section 6 lists them with the rules I added so that they work.
 
-What was added, in short: the source text and every literal; a full grammar (Appendix A);
-`/`, `%` and a minus in front; one rule for results that don't fit; equality for every type;
-the type of every value; the rules for names; every form of assignment; generics checked
-once, with every type known before the program runs; text as an array of `char`s with `join`
-and `convert`; map keys; what stays read-only, so that a `const` never changes; how a function
-in a `const` struct is checked; what a call counts as doing when the compiler can't see into
-it, and which owners it can't tell apart; the order in which files are set up, and `main`; what
-a failed check does; `print`, `read` and `exit`; the last-call rule for the stack; and one list
-of every check (Appendix B).
+What was added, in short: the source text and every literal; a full grammar (Appendix A); `/`,
+`%` and a minus in front; one rule for results that don't fit; equality for every type; the type
+of every value; the rules for names; every form of assignment; generics checked once, with every
+type known before the program runs; text as an array of `char`s with `join` and `convert`; map
+keys; what stays read-only, so that a `const` never changes; what the second address of a
+function is, and what counts as a copy of one; what a call counts as doing when the compiler
+can't see into it, and which owners it can't tell apart; what two package types have to share to
+be the same; the order in which files are set up, and `main`; what a failed check does; `print`,
+`read` and `exit`; the last-call rule for the stack; and one list of every check (Appendix B).
 
 The philosophy (1.2 and 1.3) and the gap list (1.4) were written first, before any decision.
 
 ### 1.1 Where to look first
 
 After the two bigger changes in section 4, these are the rules where I had to make a real
-choice. Each one has the options I weighed in its row of `DECISIONS.md`:
+choice. The options I weighed are in their rows of `DECISIONS.md`:
 
 | Rule | The choice |
 |---|---|
-| 10 (DOCS 2.8) | no shadowing at all, where most languages allow it. It also holds for the fields of a struct value: a block with a field `count` can't be written where another `count` can be seen, and the field's name comes from the type, so the other name has to change. One struct value inside another is the exception: the inner one doesn't see the fields of the outer one, so both can use the names their types give them (rule 103) |
+| 7 (DOCS 2.7) | `package` is a reserved word, the eighth. Jack's `package("geom")` is a type form and not a call, and a type can stand where a value is expected, so the word can't be an ordinary name like `int` |
+| 10 (2.8) | no shadowing at all, where most languages allow it. Fields are no part of it: by Jack's rule a field is only reached with a dot, so it never clashes with a name |
 | 28, 29 (3.2) | a result that doesn't fit fails, and there are no special float values |
 | 36 (3.7) | `==` works on every type and compares what `=` copies |
 | 44, 46, 47 (4.3) | what the name of a type parameter can do in a function type; a generic function checked once, so `+` on a `T` is an error; and a type parameter that is never handed an ownership type `@X` itself |
 | 48 (4.3) | every type is known before the program runs, so a generic function can't hand itself ever bigger types |
-| 79 (7.8) | copying a function shares what it keeps: `var again: ()int = next;` is not a second counter. A function value is two addresses, and the kept parameters stay with the call that holds them (section 4.1), so a copy leads to the same ones. Jack's rule for a package has the same shape: a package is an address, and a copy of it holds the same file. Still, a counter is state that the line seems to copy, and nothing in the line says `&`, so this one is Jack's to confirm. A copy with kept parameters of its own would fit "a copy is complete" better, but it needs a place for them that the code doesn't show. Idea 1 in `UNDECIDED.md` describes kept names that are copied with the function and live as long as it does, which is the opposite of this rule and of A1: section 5 says more |
-| 83, 84 (8.5) | what comes in through a parameter can't be stored where it outlasts the call. That holds for a function too, also one that keeps nothing, because a function's type doesn't say what it keeps. A function the compiler sees is stored like any value. And the line that stores a borrower behind a pointer is checked: something of this call can't go into a place that outlasts the call, and a name that holds it behind a pointer can't be given back. After a call, a variable that was lent for change counts as given what the other arguments were, so a helper function can't do a store that a line of its own would be turned away for |
-| 85 to 87 (8.6), A12 | a borrower that can only read stays that way, also inside another value and behind a `^`. That is why `copyLinks` now borrows its list as a `var`. In a generic function, a `T` read from a `const` stays in a `const` |
-| 93 to 97, 100 (8.12, 8.13) | what the compiler counts where it can't see. A call does what its function does to the variables it uses from outside itself, and a function that is handed over counts as called. A statement is still using what it has worked out, so a call later in the same statement can't free it. A pointer that function bodies share is still in use when a body ends, so the owner it may point into can be changed only after the pointer is given another target. Two pointers that came in from outside may lead to one owner. What a call gave back can still change what it was lent. These rules turn away some code that is safe, as 8.12 already did |
-| 106 (9.3) | how a function read out of a `const` struct is checked while running: the check follows the function fields it reads, so a function that only reads can call another one |
-| 107 to 109 (9.6), A10 | how "the copy it is called through" works. A function in a struct keeps its struct and follows it through every copy, whole or line by line: `b.add = counter.add;` is one line of `b = counter;`. A function value that was read out first keeps its struct wherever it is stored, so `b.add = f;` leaves the function working on the struct it came from. It can't also use a name of a function call around the struct value, and the top-level names of its file stay open to it |
-| 111 (10.4) | the last call takes over the stack |
-| 112 (11.2), A11 | `import` is the one built-in that can't be passed around |
-| 113 (11.2, 11.4) | the exact order in which the files are set up. Jack's rule says once, and before any file that imports it. I added that it all happens when the program starts, in the order in which each file's text first names its imports, and that an `import` inside a function counts whether or not it runs |
-| 119 (8.12, 11.6) | what one instance of each file means for ownership: a file's variable is one owner through whichever package it is reached, and where a package can hold several files, a name counts as that name in each of them |
+| 77 (7.7) | a function given back that keeps one borrowed parameter, and nothing else, has no kept block: its second address is the address that was lent. It is what lets `keep = adderOn(&topStep);` be written inside a function, as Jack's decision shows it. A function that keeps two borrowed parameters, or a borrowed one and a copied one, has a block, so it stays tied to the frame, and the way to keep it longer is `^` |
+| 79 (7.8) | how far Jack's copy rule reaches. I read "a function that keeps parameters" as every function whose second address isn't empty, so a function that uses names of a call around it can't be copied either: only a function that keeps nothing copies. And an argument is a copy, so a function with kept state is handed to another function with `&`: `twice(addFive, 3)` is an error, and `twiceLent(&addFive, 3)` is the way. A new function that is passed straight on, as in `twice(makeAdder(5), 3)`, is taken and not copied |
+| 81 (7.8) | a function that a kept function gives back borrows the kept block of the function that made it. So `return plusFive(five);` is an error when `plusFive` is a name of this function that keeps parameters: what comes back would point at a block that stays in this frame |
+| 85, 86 (8.5) | what comes in through a parameter can't be stored where it outlasts the call. That holds for a function too, also one that keeps nothing, because a function's type doesn't say what it keeps. A function the compiler sees is stored like any value. And the line that stores a borrower behind a pointer is checked: something of this call can't go into a place that outlasts the call, and a name that holds it behind a pointer can't be given back. After a call, a variable that was lent for change counts as given what the other arguments were, so a helper function can't do a store that a line of its own would be turned away for |
+| 87 to 89 (8.6), A10 | a borrower that can only read stays that way, also inside another value and behind a `^`. That is why `copyLinks` now borrows its list as a `var`. In a generic function, a `T` read from a `const` stays in a `const` |
+| 94 to 98, 101 (8.12, 8.13) | what the compiler counts where it can't see. A call does what its function does to the variables it uses from outside itself, and a function that is handed over counts as called. A statement is still using what it has worked out, so a call later in the same statement can't free it. A pointer that function bodies share is still in use when a body ends, so the owner it may point into can be changed only after the pointer is given another target. Two pointers that came in from outside may lead to one owner. What a call gave back can still change what it was lent. These rules turn away some code that is safe, as 8.12 already did |
+| 107 (10.4) | the last call takes over the stack |
+| 108 (11.2), A9 | `import` is the one built-in that can't be passed around |
+| 109 (11.2, 11.4) | the exact order in which the files are set up. Jack's rule says once, and before any file that imports it. I added that it all happens when the program starts, in the order in which each file's text first names its imports, and that an `import` inside a function counts whether or not it runs |
+| 110 (11.3) | what "the same names, kinds and types" covers for two package types. The order of the declarations and the values don't count, and a type name has to name the same type in both files, so that `g.Point` is one type. A package type can also name a file that the program never imports |
+| 115 (8.12, 11.6) | what one instance of each file means for ownership: a file's variable is one owner through whichever package it is reached, and where the compiler doesn't see which file a package holds, a name counts as that name in every file that has the package's type |
 
-**Five exceptions to know about.** Each of these rules gives up a little of "first-class",
-"explicit" or "one rule", for the reason its row in section 2 gives. They are listed together
-so that Jack can accept or change each one:
+**Four exceptions to know about.** Each of these rules gives up a little of "first-class",
+"explicit" or "one rule", for the reason its row in section 2 gives. They are listed together so
+that Jack can accept or change each one:
 
 | Rule | The exception |
 |---|---|
-| 112, A11 | `import` is the one built-in that can't be named, stored or passed |
-| 87 | a borrower that is unwrapped from a `const` `any` can still change the `var` it borrows, and an `any` counts like a `T` for lifetimes but not for the read-only rule |
-| 79 | `var again: ()int = next;` shares the kept parameters, with no `&` in the line |
-| 107, 109 | `b.add = counter.add;` is a line of copying the struct, so `add` then works on `b`. `b.add = f;`, with a function that was read out first, leaves it working on the struct it came from |
-| A2, section 4.2 | whether a call through a variable is accepted beside a pointer in use can depend on a function in another file |
+| 108, A9 | `import` is the one built-in that can't be named, stored or passed |
+| 89 | a borrower that is unwrapped from a `const` `any` can still change the `var` it borrows, and an `any` counts like a `T` for lifetimes but not for the read-only rule |
+| 77 | a function given back that keeps exactly one borrowed parameter travels like a borrower of that variable. With anything more kept, it has a kept block and is tied to the frame that holds it |
+| A1, section 4.1 | whether a call through a variable is accepted beside a pointer in use can depend on a function in another file |
 
 ### 1.2 The philosophy, as the two files show it
 
@@ -88,15 +91,15 @@ was decided against them.
 | 1 | **Everything is a value, under one set of rules.** A function, a type, a struct and a package are declared, stored, passed and returned like an `int`. A type can be held in a `var` like any value | DOCS 1, 4.1, 4.2, 11.6; DECISIONS 1 |
 | 2 | **Explicit.** Reading the code tells you what happens: the heap only at `^`, sharing only at `&`, a change of owner only at `@`, a change of type only at `convert`, `wrap`, `unwrap` | DOCS top, 3.2, 8.7; DECISIONS 1 |
 | 3 | **The default stays unmarked.** A plain `T` is owned in place and nothing says so | DOCS 8.1; DECISIONS 1, 5.1 |
-| 4 | **Strict types.** A value never changes type by itself, and a type describes its whole shape: a struct type has its field names | DOCS 3.2, 8.3, 9.1; DECISIONS 1, 4.4 |
+| 4 | **Strict types.** A value never changes type by itself, and a type describes its whole shape: a struct type has its field names, and a package type is its file | DOCS 3.2, 8.3, 9.1, 11.2; DECISIONS 1, 4.4, 9 |
 | 5 | **Declarative.** One shape for every declaration, two kinds of name, no loops, a choice is a lookup. A `const` truly never changes | DOCS 2.1, 8.6, 10; DECISIONS 3, 5.7, 7 |
-| 6 | **Reuse before adding.** Generics are functions that take a type. A slice reuses `&` and `&[]T`. An import is an ordinary declaration | DECISIONS 4.2, 4.3, 9 |
-| 7 | **One rule, no special cases.** "The same rule as for a borrower", "field by field", a package "held like a function", a `const` package that is "the same as a const function that changes a variable outside itself" | DOCS 7.8, 8.8, 11.3, 11.5 |
+| 6 | **Reuse before adding.** Generics are functions that take a type. A slice reuses `&` and `&[]T`. An import is an ordinary declaration, and so is importing one element | DECISIONS 4.2, 4.3, 9 |
+| 7 | **One rule, no special cases.** "The same rule as for a borrower", "field by field", a package "held like a function", a `const` package that is "the same as a const function that changes a variable outside itself", a function with kept state under "the ordinary borrower rules" | DOCS 7.8, 8.8, 11.3, 11.5 |
 | 8 | **The compiler checks what it can.** A check while running is kept only where the answer isn't known before, and it always sits at something written in the code | DOCS 4.4, 4.5, 8.6, 8.12, 8.16 |
 | 9 | **Otherwise, do what most languages do.** "Do whatever the conventions are for most programming languages" | DECISIONS 8 |
 | 10 | **Symbols for operators, modifiers in front.** What makes a value goes in front, what uses one goes behind | DOCS 3.3, 8.2; DECISIONS 4.1, 5.2, 8 |
 | 11 | **A type is never called.** What acts is a function, and built-ins are ordinary function values | DOCS 4.1, 4.4; DECISIONS 4.2 |
-| 12 | **Say what happens underneath.** A `bool` is a number, a pair is an array of two, a function is an address with a note beside its code, a package is the address of its file | DOCS 3.1, 5.7, 5.8, 7.7, 8.18, 11.5 |
+| 12 | **Say what happens underneath.** A `bool` is a number, a pair is an array of two, a function is two addresses with a note beside its code, a kept block sits in a frame, a package is the address of its file | DOCS 3.1, 5.7, 5.8, 7.7, 8.18, 11.5 |
 
 ### 1.3 How the files decided real cases
 
@@ -105,7 +108,7 @@ as the test for every new rule.
 
 | Case | How it was decided | The pattern |
 |---|---|---|
-| Packages | A file is reached through a value of type `package`, made by an ordinary declaration. The value is the file's address, held like a function value, and there is one instance of each file | A new thing is an old thing again: a value, a declaration, an address |
+| Packages | A file is reached through a value whose type is the file, `package("geom")`, made by an ordinary declaration. The value is the file's address, held like a function value, and there is one instance of each file | A new thing is an old thing again: a value, a declaration, an address |
 | Pairs | `?T` is an array of two underneath, the way a `bool` is a number. The types keep them apart | One representation underneath, and strict types on top |
 | Slices | `&a[i:j]` reuses the mark `&`, the type `&[]T` and every borrowing rule | No new type and no new rule where an old one fits |
 | A `const` package | The name always holds the same file, and the file's names follow their own `const` or `var`: "the same as a const function that changes a variable outside itself" | A new case is an old case again, so no rule gains an exception |
@@ -115,6 +118,9 @@ as the test for every new rule.
 | Conversions | Written out with both types, and checked while running that the value fits | A value always fits its type, and the check sits where the code shows it |
 | Types in a `var` | `var t: type = int;` holds a type as a value. Only a type name declares things | No value is left out of the rules for values |
 | Struct types | A struct type has its field names, and a value is checked against the names and the types | A type describes its whole shape |
+| Struct values | A bundle of values. A field is not a name in scope, and a function in a struct takes the struct as a parameter | Nothing reaches a value that the code doesn't name |
+| Functions given back | A function value is two addresses, and its kept block sits in the frame that receives it. The function is a borrower of that block, so the borrower rules decide where it can go, and `^` keeps it longer | A new case is an old case again, with no rule of its own |
+| Copying a function that keeps parameters | An error: the copy would share them with no `&` in the line. The compiler rejects what it sees, and otherwise the copy fails while running | Sharing is written with `&`, and never happens out of sight |
 | A `const` | It never changes. The compiler rejects what it sees, and a call through a variable that lends a `const` is checked at the call, with a note stored beside the function's code | The compiler when it can see, the running program when it can't, and nothing left unchecked |
 | Other calls through a variable | The compiler looks at a function called by its own name, and assumes the worst for one it can't see | Sound without a new notation: when in doubt, count it as the worst case |
 | `&&` / `\|\|`, brackets, the order of operations | The usual ones | Convention, where the philosophy has nothing to say |
@@ -135,7 +141,8 @@ applied again:
 7. **By its own name, the compiler looks. Through a variable, it counts the worst that a
    function of that type could do.**
    Where the worst case would turn away too much, the check is made while the program runs:
-   an index, a map key, `convert`, and whether a `const` would change.
+   an index, a map key, `convert`, whether a `const` would change, and whether a function that
+   is copied keeps something.
 8. **A `const` never changes.** What a `const` name reaches can't be changed through that
    name, whatever it is: a number, a struct or a borrower. A `const` function and a `const`
    package are addresses, so the name always holds the same code or the same file.
@@ -181,7 +188,7 @@ This list was written before anything was decided. Each group was then decided a
 
 #### Group D: names and scope (touches A, H, I and J)
 - declaring a name twice in one block
-- shadowing a name from an outer block, a parameter, a field or a built-in
+- shadowing a name from an outer block, a parameter or a built-in
 - the order of declarations in a block, and using a name above its declaration
 - a type that names itself (`Node`), and two types that name each other
 - calling a function at the top level before a name it uses is set up
@@ -213,18 +220,17 @@ This list was written before anything was decided. Each group was then decided a
 
 #### Group H: structs (touches C, D and L)
 - whether two struct types with the same field types and other names are one type
-- whether a struct value has to keep the order of its type, and can use the fields above it
-- how a function read out of a `const` struct is checked, and what "could change" means
-- reading a function out of a struct: which copy it uses
-- what "uses the fields of the copy it is called through" is underneath
+- whether a struct value has to keep the order of its type
+- whether `counter.add(&counter)` passes the borrowing rules, and why
 
 #### Group I: packages (touches D, F, H and L)
-- how the compiler checks names through a package in a `var`, a parameter or an array
-- a function that takes a package, called through a variable
+- what "the same names, kinds and types" covers for two package types: the order, the values,
+  the type names
+- whether a package type can name a file that isn't imported
+- whether `package` is a name or a reserved word
 - what `import` takes, where it may be written, and what it runs
 - which file is set up first when neither of two files imports the other
-- where a file's variables live, and how a name is found through a package that can hold
-  more than one file
+- where a file's variables live, and how a name is found through a `var` package
 - what one instance of each file means for the borrowing rules
 
 #### Group J: types and generics (touches C, D and K)
@@ -243,9 +249,11 @@ This list was written before anything was decided. Each group was then decided a
 #### Group K: functions (touches F, J and L)
 - the type of a function value that has no place to take its type from
 - two functions given back by one call that use the same `var` parameter (8.17)
-- what copying a function value does to what it keeps
-- where kept parameters live, with no heap use the code doesn't show
-- how far a function given back can travel
+- what counts as a copy of a function, and which functions keep something
+- what the second address is for each kind of function
+- which frame receives the kept block when the call is an argument, or stands under a `^`
+- a function given back by a function that was given back itself
+- whether an argument that was copied can still limit a function given back
 - what the note beside a function's code has to hold
 
 #### Group L: ownership (touches E, H, I and K)
@@ -285,11 +293,11 @@ happens underneath.
 | 2.7 | 4 | Spaces, tabs and line breaks only separate things. A line break is `\n`, alone or after `\r` | Every statement already ends with `;` (2.5) | 2 |
 | 2.7 | 5 | `//` is the only comment | One form does the job | 6 |
 | 2.7 | 6 | A name is letters, digits and `_`, not starting with a digit. Case matters | The convention | 9 |
-| 2.7 | 7 | Seven reserved words: `const var return void true false null` | Only the words the grammar itself needs | 6 |
+| 2.7 | 7 | Eight reserved words: `const var return void true false null package`. `package` is one of them so that `package("geom")` is read as a type wherever a type can be written, also where a value is expected | Only the words the grammar itself needs. Jack's `package("geom")` is "not a call", and a type can be written where a value goes: `const Geom: type = package("geom");`. As an ordinary name, `package` followed by `(` would read as a call there | 6, 11 |
 | 2.7 | 8 | The built-in types and functions are ordinary names, already declared when a file starts | `int` is "an ordinary name" (3.1) and built-ins are ordinary values (4.4). With rule 10 they can't be declared again, so no second reserved list is needed | 1, 6 |
 | 2.7 | 9 | The list of symbols, and the longest symbol is the one that is read | The convention. `&&` is already read this way (3.2) | 9 |
-| 2.8 | 10 | A name can't be declared where the same name can already be seen: no second declaration, no shadowing, for names, parameters, the fields of a struct value, type parameters in a function type, and built-in names. No other name in a file is spelled like one of its top-level names, wherever that one is declared | "One name means one thing." The docs' examples already avoid it (`o`, `k`, `back`). One rule settles declaring twice, shadowing and the built-in names | 2, 7 |
-| 2.8 | 11 | A name is used only below its declaration, with five exceptions: a function body (top-level names, its own name), type names (anywhere at the top level, and in their own declaration), and a function in a struct value (any field of its block) | Nothing may run before its names exist. A body runs later and a type never runs | 8 |
+| 2.8 | 10 | A name can't be declared where the same name can already be seen: no second declaration, no shadowing, for names, parameters, type parameters in a function type, and built-in names. No other name in a file is spelled like one of its top-level names, wherever that one is declared | "One name means one thing." The docs' examples already avoid it (`o`, `k`, `back`). One rule settles declaring twice, shadowing and the built-in names | 2, 7 |
+| 2.8 | 11 | A name is used only below its declaration, with four exceptions: a function body can use any top-level name of its file and its own name, and a type name can be used anywhere at the top level and in its own declaration | Nothing may run before its names exist. A body runs later and a type never runs | 8 |
 | 2.8 | 12 | A name is looked for in its block, the blocks around it, the file's top level, then the built-in names. Never in another file | "You can always tell where a name comes from" (11.1) | 2 |
 | 2.9 | 13 | Five kinds of statement: declaration, assignment, a value on its own, `return`, block. A `return` only inside a function | They are the forms the examples use | 5 |
 | 2.9 | 14 | Any value can stand on its own as a statement | The docs already write `4;` and `makeBig(1);`. No list of allowed forms | 7 |
@@ -316,9 +324,9 @@ happens underneath.
 | 3.2 | 30 | The compiler makes these checks itself when every number is a written value | As it does for written slice bounds (5.9) | 8 |
 | 3.2 | 31 | `==` and `!=` work on every type. `<` `>` `<=` `>=` work on numbers and `char`s, and they don't chain | A `char` is a number underneath. Ordering anything else can be written as a function | 7, 6 |
 | 3.2 | 32 | A `-` between two values subtracts, and a `-` where a value starts is the minus in front | The convention | 9 |
-| 3.2, 4.1 | 33 | In the rules for `(`, "a type" is a type written out. After `()`, a `{` that holds fields written `name: Type`, or one type, makes a function type, and anything else is a function body. A mark in front of a type written out makes a type: `^int` is never a heap value made from the type `int`. (The first sentence changes how Jack's rule for `(` is read: adjusted, A16) | `(){x: int, y: int}` and `(){ return 1; }` start alike, and `^int` has to mean one thing | 8 |
-| 3.6, 11.3 | 34 | A basic type is a type name, or one reached through a package that can hold only one file. Through a package that can hold several files, `g.Box` only holds a type. A type is written with the forms of 3.6 wherever a type is expected | "A name from another file is reached through a package" (11.1) | 7 |
-| 3.6, 9.1 | 35 | Two types are the same when their shape is the same. A struct's field names and their order are part of its shape, and a struct type names each field once, never like a built-in name. The names of parameters, `const` and `var`, and the name a function type gives a type parameter are not part of a function type. Types that name themselves are the same when no difference shows however far they are followed | "A name for a type is the same type under another name" (4.1). Fields are reached by name from outside, and a parameter's name is used only inside | 7, 4 |
+| 3.2, 4.1 | 33 | In the rules for `(`, "a type" is a type written out. After `()`, a `{` that holds fields written `name: Type`, or one type, makes a function type, and anything else is a function body. A mark in front of a type written out makes a type: `^int` is never a heap value made from the type `int`. (The first sentence changes how Jack's rule for `(` is read: adjusted, A14) | `(){x: int, y: int}` and `(){ return 1; }` start alike, and `^int` has to mean one thing | 8 |
+| 3.6, 11.3 | 34 | The grammar of types gains its last lines: a basic type is a type name, or one reached through a package, and `TEXT` and `NUMBER` are a text and a whole number written in the code. `geom.Point` is the type that `Point` names in the file of the package's type. A type is written with the forms of 3.6 wherever a type is expected | "A name from another file is reached through a package" (11.1), and a type is a name like any other. Two files of one package type name the same type under each type name (rule 110), so the type is known whichever file the package holds | 7 |
+| 3.6, 9.1 | 35 | Two types are the same when their shape is the same. A struct's field names and their order are part of its shape, and a struct type names each field once. The names of parameters, `const` and `var`, and the name a function type gives a type parameter are not part of a function type. Types that name themselves are the same when no difference shows however far they are followed | "A name for a type is the same type under another name" (4.1). Fields are reached by name from outside, and a parameter's name is used only inside | 7, 4 |
 | 3.7 | 36 | `==` compares exactly what `=` copies, for every type: values for a `^T`, addresses for an `&T` and an `@T`, part by part for arrays, structs and maps | One rule for every type, and a copy always equals its original | 7, 1 |
 | 3.8 | 37 | The table that gives every form of value its type | The typing rules, gathered from the sections | 4 |
 | 3.8 | 38 | Only a value written on the spot takes its type from its place. `[]`, `{}` and `null` need a place | It is how `5` and `[3, 10]` already work (3.2, 5.8) | 4 |
@@ -331,7 +339,7 @@ happens underneath.
 | 4.2, 4.3 | 40 | A type name is a built-in type, a `const` declared with a type written out, or a `const` `type` parameter that its function's type names. Every other name of type `type` only holds a type: a `var`, a `const` whose value is worked out, a `type` parameter the function's type gives no name | The compiler has to know which names are types before the program runs. A name that can be handed a type while the program runs can't be one of them | 8, 7 |
 | 4.2 | 41 | A type that decides the type of something is written out with type names. A type that is held or worked out another way (a `var`, `x.T`, `wholeTypes[1]`) can only be compared, stored and passed | Every value's type is known before the program runs (4.2) | 4, 8 |
 | 4.2 | 42 | A top-level type name can be used anywhere in its file. The compiler collects those names first, imported files before the files that import them | A type never runs, so the order can't matter | 8 |
-| 4.2 | 43 | A type never ends too soon: a `type` value is the address of something that is part of the program | A type never changes, so it is never an argument that a function given back could outlive | 7 |
+| 4.2, 7.7 | 43 | A type never ends too soon: a `type` value is the address of something that is part of the program. A type parameter that is a type name takes no room in a kept block, so a function that keeps nothing else keeps nothing: `first(int)` is copied and stored like `double` | A type never changes, so it is never something that a function given back could outlast. The function that comes back is simply the one made for that type | 7 |
 | 4.3 | 44 | The name of a type parameter in a function type can be used from its parameter to the end of that function type. Only a `type` parameter has a name, and only when something uses it. The name is not part of the type. The function value declares the parameter itself, as a `const`, and a type parameter can share one parameter list with the values of its type. A function value written where nothing asks for a type has no type to name the parameter, so there it only holds a type | It is a name like any other: used after it is declared, never spelled like a name that can be seen. A name nothing uses would give one type two spellings | 7, 6 |
 | 4.3 | 45 | The type handed in is written out whenever the function's type uses it | The result's type has to be known before the program runs | 8 |
 | 4.3 | 46 | A generic function is checked once. A `T` can be used only in the ways every type allows. For lifetimes it counts as possibly holding a borrower, an ownership and a function, and for the read-only rule as a value with a borrower inside it | The type then says everything, so a generic function can be held in a variable and still be checked | 1, 8 |
@@ -348,7 +356,7 @@ happens underneath.
 | DOCS | # | The rule | Why | Principle |
 |---|---|---|---|---|
 | 5.1 | 54 | An array's size is a written whole number, 0 or more. `[]` is the empty array value | A size is a number (5.1), and an empty text has to exist | 7 |
-| 5.2 | 55 | An index is an `int` and it is checked. The compiler knows a length when it is in the type, or when the array is a name declared with an array value written out, also one reached through a package that can hold only one file. It then checks a written index itself, and it rejects a written index below 0 whatever the length. Otherwise the check is made while running | The docs check a slice this way (5.9), and they already reject `a = [1, 2, 4, 5];` for such a name | 7, 8 |
+| 5.2 | 55 | An index is an `int` and it is checked. The compiler knows a length when it is in the type, or when the array is a name declared with an array value written out, also one reached through a package whose file the compiler sees. It then checks a written index itself, and it rejects a written index below 0 whatever the length. Otherwise the check is made while running | The docs check a slice this way (5.9), and they already reject `a = [1, 2, 4, 5];` for such a name | 7, 8 |
 | 5.3 | 56 | Giving an unsized array a value of another length is rejected when the compiler knows both lengths, and otherwise fails while running | The compiler can't always know both lengths | 8 |
 | 5.3 | 57 | Every holder of a type with no size in it (a name, a field, an element, a map entry, a value of a pair, a heap value) takes its size from its own first value and keeps it. Elements of such an array each hold their own size | The rule of 5.3, said once for every holder and every such type | 7, 12 |
 | 5.3 | 58 | A fixed array becomes an unsized one through a slice: `primes[:]`, `&primes[:]` | They are different types, and the slice form already exists | 4, 6 |
@@ -372,76 +380,72 @@ happens underneath.
 | 7.1 | 71 | "Every path reaches a `return`" means the body runs into one. Code after a `return` is accepted and never runs | No statement branches, so a body is one straight line. `return;` "stops a function early", as in most languages | 9 |
 | 7.1 | 72 | A function value is checked against its type, and takes its return type from its place | The value doesn't write the return type | 4 |
 | 7.2 | 73 | A call gives one argument of the right type for each parameter. The value in front of the `(` is worked out first, and an argument that is a call runs in its turn: "one argument can't change what another argument reads" is about the taking | The usual rule, and left to right | 4, 9 |
-| 7.2 | 74 | "Called by its own name" is defined: a `const` declared with a function value written out; a function value called where it is written; a built-in or what it gives back; a function value that a seen function gives back; a `const` declared with any of these; the same through a one-file package or a `const` struct written out; and a lookup in a `const` array, pair or map whose functions are all written out. Everything else is a call through a variable, which counts the worst that any function of that type does. Whether a `const` would change is checked while running instead | Many rules use the two phrases. The line between them has to be exact, and a user function such as `first(int)` is seen like a built-in. Counting the worst case for a `const` would turn away every call that is lent one | 8, 7 |
+| 7.2 | 74 | "Called by its own name" is defined: a `const` declared with a function value written out; a function value called where it is written; a built-in or what it gives back; a function value that a seen function gives back; a `const` declared with any of these; the same through an `import` that is written out, a `const` package declared with one, or a `const` struct written out; and a lookup in a `const` array, pair or map whose functions are all written out. Everything else is a call through a variable, which counts the worst that any function of that type does. Whether a `const` would change is checked while running instead | Many rules use the two phrases. The line between them has to be exact, and a user function such as `first(int)` is seen like a built-in. Counting the worst case for a `const` would turn away every call that is lent one | 8, 7 |
 | 7.3 | 75 | A call that has no value can't be given back: `return hello();` is an error | There is no value to give | 4 |
-| 7.7 | 76 | What the second address of a function value is, case by case: nothing, its struct, a call's place, a call's kept parameters. A top-level name needs no address, so a function that uses only top-level names keeps nothing. The struct at the end of the chain of kept places is the one the function belongs to | It shows that one address is always enough, and it makes `==` on functions exact. There is one instance of each file, so the program knows where every top-level name is. "Belongs to" is what the check for a `const` struct needs | 12 |
-| 7.7 | 77 | The note beside a function's code says for every parameter whether it is a `var`, not only for a `&T`. It also says what the function does to the struct it belongs to: which type that struct has, whether the function changes something held there, and which functions held there it reads | It is Jack's note carrying what the checks of 8.6 and 9.3 need. It is stored with the code, so a function value stays two addresses | 6, 12 |
-| 7.8 | 78 | One call has one set of parameters: every function a call gives back uses the same ones. **This settles the open point of 8.17** | A function borrows the variables it uses, and a kept parameter is one of them | 7, 6 |
-| 7.8 | 79 | Copying a function copies its two addresses, so the copy uses the same variables and kept parameters. A second counter comes from a second call, and state that is copied along is a struct with fields | "Copying a function value copies the address" (7.7). The kept parameters stay with the call that holds them, so a copy is a second value for the same function, as a copy of a borrower borrows the same value | 1, 12 |
-| 7.8 | 80 | Which results keep parameters: the compiler looks at a function it sees, and through a variable a result that can hold a function (a `T` included) counts as keeping every parameter. A result that is a function itself comes from every argument in any case, as Jack's rule says | `wrap(int)(3)` gives back an `any` that holds no function, so no rule should hold it: a value that only can hold a function has to be looked at | 8 |
-| 7.8 | 81 | A result that is a function comes from every argument, as Jack's rule says, and so does a value that holds a function and keeps parameters. Such a result also comes from the function that was called, and from what an argument came from when the result is that argument. It can be given back when all of that lasts beyond the call or goes along: a parameter, which is kept with it (this part is adjusted: A1), an outside name, kept parameters this call holds. Not a name declared in the function, and not an argument made on the spot | "A function given back keeps the parameters it uses", and "a local is never kept". What a called function gives back can reach that function's kept parameters, so they count too | 7 |
+| 7.7 | 76 | What the second address of a function value is, case by case: empty for a function that uses only its own parameters and names, built-ins, types and top-level names; the frame of a call around it that is still running; or its kept block. A top-level name needs no address, so a function that uses only top-level names keeps nothing. A frame or a kept block also holds the address of the frame or the block around it, when the function uses names from there | It shows that one address is always enough. There is one instance of each file, so the program knows where every top-level name is | 12 |
+| 7.7, 7.8 | 77 | A function that was given back and keeps one borrowed parameter, and nothing else, needs no kept block: its second address is the address that was lent. So it can be stored wherever a borrower of that variable can, as in `keep = adderOn(&topStep);` | It is what makes Jack's second way out of `install` work, "a top-level variable that both sides borrow". With a kept block in `install`'s frame, that line would be the same error as `keep = makeAdder(five);`. The function is then exactly a borrower of what the caller lent | 12, 7 |
+| 7.7 | 78 | The note beside a function's code says for every parameter whether it is a `var`, not only for a `&T`, and how big the function's kept block is | It is Jack's note, carrying what the checks need: a value with a borrower inside it follows the rule for a borrower (8.6), and a frame has to make room for a kept block that comes back from a call through a variable. It is stored with the code, so a function value stays two addresses | 6, 12 |
+| 7.8 | 79 | The details of Jack's copy check. It covers every function whose second address isn't empty: one that keeps parameters, and one that uses names of a function call around it. A copy is every place where `=` would copy the value: a declaration, an assignment, an argument, `^` in front of a name, a name inside an array, pair, map or struct value, a move, and a copy of a bigger value that holds the function. Taking the result of a call, a function value written on the spot or a name that is returned is no copy, and neither is `&f` or a call. The compiler rejects the copy when the value is the result of a call it sees, or a name that was only ever given such values. Otherwise the check is made while running | A function that uses names of a call around it borrows them just as invisibly, and the note beside the code says one thing for each function. An argument is a copy like any other (7.2), so a function with kept state is lent to the function that uses it: `twiceLent(&addFive, 3)` | 7, 2 |
+| 7.8 | 80 | One call has one kept block: every function that a call gives back uses the same kept parameters. **This settles the open point of 8.17** | A function borrows the variables it uses, and a kept parameter is one of them. Each function keeping its own copy would make a counter and its reader disagree | 7, 6 |
+| 7.8 | 81 | A function that a kept function gives back keeps the parameters of its own call in a block of its own, and borrows the kept block of the function that made it. So it can't outlast that block, and a result that is or holds a function counts as borrowing what the called function keeps | "A function borrows the variables it uses from around it": the kept parameters of the function around it are such variables. Copying them into the new block would give two functions each a copy of one variable | 7 |
+| 7.8 | 82 | Which results have a kept block: the compiler looks at a function it sees. A function written in the body that uses the parameters has one, and so does a value that holds such a function, and a result that the function was given back itself and hands on. Any other result keeps nothing, whatever its type. Through a variable, a result whose type can hold a function (a `T` included) counts as having a kept block in the frame that receives it | `wrap(int)(3)` gives back an `any` that holds no function, so no rule should hold it. Through a variable the compiler counts the worst case, as everywhere | 8 |
+| 7.8 | 83 | Where the block of a new function goes: to the frame in which the call is written, also when the function goes straight on as an argument. With `^` in front of the call it is built on the heap with the function, and so are the blocks of the calls inside a value that is written under the `^` | It says what "the call that receives the new function" is in each position. A parameter only points at a block in its caller's frame, which outlasts the call | 12 |
 
 ### Ownership
 
 | DOCS | # | The rule | Why | Principle |
 |---|---|---|---|---|
-| 8.5 | 82 | A value holds a borrower, an ownership or a function when it is one or has one inside, at any depth. An `any` and a `T` count as holding all three, a package holds none, and what lies behind a pointer doesn't count. A value can't outlive what a part it holds points at | Field by field (8.8). Behind a pointer the compiler can't follow, which is the docs' own limit (8.17) | 7 |
-| 8.5 | 83 | What comes in through a parameter is only known to last as long as the call: a borrower, an ownership, a function, or a value that holds one. It can't be put in a variable that outlasts the call. That holds for a function that keeps nothing too, and a function the compiler sees is stored like any value | A borrower can't outlive what it borrows (8.5), and a function can't outlive what it keeps (7.8) | 8 |
-| 8.5, 8.13 | 84 | The line that stores a borrower, an ownership or a function behind a pointer is checked. In a new heap value, or in one that a name owns, the value or the name counts as holding it from then on. Through a pointer that came in from outside, it can only be a borrower of a top-level name itself, or something that came in through a parameter of this call. It can't be a name of this call or of a function call or a block around the function, a heap value that a name owns, a pointer or a function from an outside variable, or kept parameters. A pointer that a call gave back counts like what was lent to that call. After a call, a variable that was lent for change and holds a borrower, an ownership or a function counts as given what the other arguments were (8.13). A borrower of a heap value can be stored in a heap value that the same name owns | "The check is made every time a borrower is given something to borrow" (8.5). At the line that stores it both ends are in view. Without the check, `return ^&local;` would be accepted while `return &local;` is an error, and a helper could do a store that a line of its own is turned away for | 8, 7 |
-| 8.6 | 85 | A borrower that can only read stays that way: one that is made from, or read from, a place that can't be assigned, every copy of it, and the result of a call that was lent one. It goes only into a `const`, a `const` parameter or back as a result. A value with a borrower anywhere in what `=` copies follows the same rule: in a field, an element or an entry, or in a heap value it owns | Otherwise a borrower that can only read could be turned into one that changes, and a `const` would change after all. A copy carries the borrowers behind a `^` along, so they count | 8, 7 |
-| 8.6 | 86 | The check at a call through a variable covers everything read-only that the call hands over: `&limit`, a read-only borrower held in a name, and a value with one inside it | It is Jack's check, for each form a read-only value can take | 7 |
-| 8.6 | 87 | Nothing read-only goes into an `any`: the parameter of `wrap` counts as `var`. Every other built-in only reads, so its parameters count as `const`. A `T` counts as a value with a borrower inside it, so in a generic function a `T` read from a `const` stays in a `const`. The check while running goes by the type the `T` really stands for. A borrower unwrapped from a `const` `any` can still change the `var` it borrows | The compiler can't follow a borrower inside an `any`, and `wrap` is the one way in, so every `any` can be copied freely. The `any` itself never changes. A generic function is checked once, so for a `T` the compiler counts the worst case, as it does for lifetimes | 8, 7 |
-| 8.6 | 88 | An ownership is given only by a place that can be assigned, and a `const` ownership can only read | One rule for every `const` | 7 |
-| 8.8 | 89 | What `=` copies for a function, a `type`, an `any` and a `package`. For a package it is the address of its file | It completes the table that 3.7 builds on | 1 |
-| 8.9, 8.18 | 90 | `@` works on a map entry | An entry is a holder like an element, and it can already be borrowed | 7 |
-| 8.10 | 91 | `null` fits a `^T`, an `&T` and an `@T`, and nothing else. Following any of them when `null` fails, and so does taking a value through a `null` ownership | `null` is "no address", and all three hold an address (8.18) | 1 |
-| 8.11 | 92 | A kept parameter lives until the call that holds it ends, and a heap value it owns is freed then. (The table rows in 2.6 and 8.11 are adjusted: A1) | It makes the last row of the 8.11 table exact | 12 |
-| 8.12 | 93 | A variable is outside a function when the function's body uses it without declaring it: a top-level `var` of any file, a name of a function or a block around it, a parameter it keeps, a field of its struct. The compiler reads a function for the outside variables it changes or takes, the pointers among them it gives a new target, and the pointers among them it uses. A call counts as doing all of that at its line. A function that keeps a place reached by following an owner, or a pointer that followed one, counts as a pointer itself, and the arguments and the function that is called are in use for everything the call does. A call that takes `x` with `@` counts for every owner inside `x`. (That a call through a variable counts only the functions of its type is adjusted: A2. That a call below to a function that uses a pointer is a use of it widens Jack's "still used below": adjusted, A15) | "The compiler reads which outside variables a function changes" has to cover a pointer that a function re-aims or follows, and the variables that a caller can't see | 7 |
-| 8.12 | 94 | A statement is still using what it has worked out. A pointer, a place or a function that an earlier part of a statement reached by following an owner stays in use until the statement has used it, so a call in a later part can't change that owner. A value is read when it is worked out | The parts of a statement are worked out one after another (2.9), so "later in the text is later in time" holds inside a statement too | 8, 7 |
-| 8.12 | 95 | A function that is handed to a call may be called by it: the call counts as a call of the handed function too | A handed function can use names of the function that hands it over, and no other rule counts those for the function that receives it | 8 |
-| 8.12 | 96 | A pointer in an outside variable is shared. It counts as made at the line of a call that gives it a new target. It is still in use when a body ends, as long as it lives on, and at the first line of a body that doesn't declare it, it counts as having followed every owner that any line of the program has it follow. The top level of a file counts as a body here. (This widens Jack's "still used below": adjusted, A15) | Any function that reaches it may run later. A caller can't see the parameters that functions given back keep, and can call those functions in any order, so the check is made where they are written | 8, 7 |
-| 8.12 | 97 | An owner reached through a pointer that came in from outside (a parameter, a pointer read out of a value that came in or from behind a pointer, a pointer in an outside variable) counts as the same owner as every owner of its type that is reached through another such pointer, and as every outside owner of that type. An owner that a called function changes and the caller can't name counts as one reached through a pointer from outside. Two elements of one array, or two entries of one map, count as one owner unless written values tell them apart, also when they are reached from one pointer. Owners of different types are never the same owner | `f(&p, &p)` hands one owner to two parameters, and nothing inside the function shows it. A function that is handed over can change a name of the call it was written in, which the function that calls it can't name. Strict types keep the worst case small | 8, 4 |
-| 8.13 | 98 | An argument that holds borrowers counts as lending what they borrow. An ownership inside another value is lent too, not taken: only an ownership that is the whole argument goes to a parameter that asks for it | A borrower taken out of such an argument and given back needs an origin, and an ownership inside an array is an address like a borrower | 7 |
-| 8.13 | 99 | A result that holds a pointer counts like a borrower that came back. A pointer behind a `^` in the result's type doesn't count. A borrower that is given back always comes from a parameter, never from a variable outside the function | The caller sees only the type. Behind a `^` the compiler doesn't follow, so what `copyLinks` gives back stays a value of its own | 7 |
-| 8.13 | 100 | What came back can still change what was lent. An owner reached through a `var` borrower that a call gave back counts as what was lent, or any owner inside it. A call of a function that came back counts as lending the same things again, and a function read out of a struct counts as lent that struct | A result "comes from everything that was lent" (8.13). That has to hold for what is done through it later, not only for how long it lives | 7 |
-| 8.3, 8.16 | 101 | Running out of heap fails while running: at `^v`, and where `=` copies a heap owner | It is the one thing a new heap value can't always get | 8 |
-| 8.17, 8.18 | 102 | What the two cases the compiler doesn't catch do while running: a pointer or a function whose target is gone, or has gone to another owner, reaches memory that isn't defined. Every borrower, ownership or function that lies behind a pointer belongs to the first case, from the line that stored it on. A move or a `return` of a value whose borrowers point into itself belongs to the second, where the compiler can't see them. The two are also the only way left to reach a `const`. And what a link to a map or an `any` holds | The docs leave these to the programmer. Saying what happens tells a compiler writer what may be assumed | 2, 12 |
+| 8.5 | 84 | A value holds a borrower, an ownership or a function when it is one or has one inside, at any depth. An `any` and a `T` count as holding all three, a package holds none, and what lies behind a pointer doesn't count. A value can't outlive what a part it holds points at | Field by field (8.8). Behind a pointer the compiler can't follow, which is the docs' own limit (8.17) | 7 |
+| 8.5 | 85 | What comes in through a parameter is only known to last as long as the call: a borrower, an ownership, a function, or a value that holds one. It can't be put in a variable that outlasts the call. That holds for a function that keeps nothing too. A function the compiler sees is stored like any value, by the rules of 7.8 | A borrower can't outlive what it borrows (8.5), and a function can't outlive what it keeps (7.8). A function's type doesn't say what it keeps | 8 |
+| 8.5, 8.13 | 86 | The line that stores a borrower, an ownership or a function behind a pointer is checked. In a new heap value, or in one that a name owns, the value or the name counts as holding it from then on. Through a pointer that came in from outside, it can only be a borrower of a top-level name itself, or something that came in through a parameter of this call. It can't be a name of this call or of a function call or a block around the function, a heap value that a name owns, a pointer or a function from an outside variable, or a kept block. A pointer that a call gave back counts like what was lent to that call. After a call, a variable that was lent for change and holds a borrower, an ownership or a function counts as given what the other arguments were (8.13). A borrower of a heap value can be stored in a heap value that the same name owns | "The check is made every time a borrower is given something to borrow" (8.5). At the line that stores it both ends are in view. Without the check, `return ^&local;` would be accepted while `return &local;` is an error, and a helper could do a store that a line of its own is turned away for | 8, 7 |
+| 8.6 | 87 | A borrower that can only read stays that way: one that is made from, or read from, a place that can't be assigned, every copy of it, and the result of a call that was lent one. It goes only into a `const`, a `const` parameter or back as a result. A value with a borrower anywhere in what `=` copies follows the same rule: in a field, an element or an entry, or in a heap value it owns | Otherwise a borrower that can only read could be turned into one that changes, and a `const` would change after all. A copy carries the borrowers behind a `^` along, so they count | 8, 7 |
+| 8.6 | 88 | The check at a call through a variable covers everything read-only that the call hands over: `&limit`, a read-only borrower held in a name, and a value with one inside it | It is Jack's check, for each form a read-only value can take | 7 |
+| 8.6 | 89 | Nothing read-only goes into an `any`: the parameter of `wrap` counts as `var`. Every other built-in only reads, so its parameters count as `const`. A `T` counts as a value with a borrower inside it, so in a generic function a `T` read from a `const` stays in a `const`. The check while running goes by the type the `T` really stands for. A borrower unwrapped from a `const` `any` can still change the `var` it borrows | The compiler can't follow a borrower inside an `any`, and `wrap` is the one way in, so every `any` can be copied freely. The `any` itself never changes. A generic function is checked once, so for a `T` the compiler counts the worst case, as it does for lifetimes | 8, 7 |
+| 8.6 | 90 | An ownership is given only by a place that can be assigned, and a `const` ownership can only read | One rule for every `const` | 7 |
+| 8.8 | 91 | What `=` copies for a `type` and an `any`: the same type, and a copy of the type and the value inside | It completes the table that 3.7 builds on. The rows for a function and a package are Jack's | 1 |
+| 8.9, 8.18 | 92 | `@` works on a map entry | An entry is a holder like an element, and it can already be borrowed | 7 |
+| 8.10 | 93 | `null` fits a `^T`, an `&T` and an `@T`, and nothing else. Following any of them when `null` fails, and so does taking a value through a `null` ownership | `null` is "no address", and all three hold an address (8.18) | 1 |
+| 8.12 | 94 | A variable is outside a function when the function's body uses it without declaring it: a top-level `var` of any file, a name of a function or a block around it, a parameter it keeps. The compiler reads a function for the outside variables it changes or takes, the pointers among them it gives a new target, and the pointers among them it uses. A call counts as doing all of that at its line. A function that keeps a place reached by following an owner, or a pointer that followed one, counts as a pointer itself, and the arguments and the function that is called are in use for everything the call does. A call that takes `x` with `@` counts for every owner inside `x`. (That a call through a variable counts only the functions of its type is adjusted: A1. That a call below to a function that uses a pointer is a use of it widens Jack's "still used below": adjusted, A13) | "The compiler reads which outside variables a function changes" has to cover a pointer that a function gives a new target or follows, and the variables that a caller can't see | 7 |
+| 8.12 | 95 | A statement is still using what it has worked out. A pointer, a place or a function that an earlier part of a statement reached by following an owner stays in use until the statement has used it, so a call in a later part can't change that owner. A value is read when it is worked out | The parts of a statement are worked out one after another (2.9), so "later in the text is later in time" holds inside a statement too | 8, 7 |
+| 8.12 | 96 | A function that is handed to a call may be called by it: the call counts as a call of the handed function too | A handed function can use names of the function that hands it over, and no other rule counts those for the function that receives it | 8 |
+| 8.12 | 97 | A pointer in an outside variable is shared. It counts as made at the line of a call that gives it a new target. It is still in use when a body ends, as long as it lives on, and at the first line of a body that doesn't declare it, it counts as having followed every owner that any line of the program has it follow. The top level of a file counts as a body here. (This widens Jack's "still used below": adjusted, A13) | Any function that reaches it may run later. A caller can't see the parameters that functions given back keep, and can call those functions in any order, so the check is made where they are written | 8, 7 |
+| 8.12 | 98 | An owner reached through a pointer that came in from outside (a parameter, a pointer read out of a value that came in or from behind a pointer, a pointer in an outside variable) counts as the same owner as every owner of its type that is reached through another such pointer, and as every outside owner of that type. An owner that a called function changes and the caller can't name counts as one reached through a pointer from outside. Two elements of one array, or two entries of one map, count as one owner unless written values tell them apart, also when they are reached from one pointer. Owners of different types are never the same owner | `f(&p, &p)` hands one owner to two parameters, and nothing inside the function shows it. A function that is handed over can change a name of the call it was written in, which the function that calls it can't name. Strict types keep the worst case small | 8, 4 |
+| 8.13 | 99 | An argument that holds borrowers counts as lending what they borrow. An ownership inside another value is lent too, not taken: only an ownership that is the whole argument goes to a parameter that asks for it | A borrower taken out of such an argument and given back needs an origin, and an ownership inside an array is an address like a borrower | 7 |
+| 8.13 | 100 | A result that holds a pointer counts like a borrower that came back. A pointer behind a `^` in the result's type doesn't count. A borrower that is given back always comes from a parameter, never from a variable outside the function | The caller sees only the type. Behind a `^` the compiler doesn't follow, so what `copyLinks` gives back stays a value of its own | 7 |
+| 8.13 | 101 | What came back can still change what was lent. An owner reached through a `var` borrower that a call gave back counts as what was lent, or any owner inside it. A call of a function that came back counts as lending the same things again | A result "comes from everything that was lent" (8.13). That has to hold for what is done through it later, not only for how long it lives | 7 |
+| 8.3, 8.16 | 102 | Running out of heap fails while running: at `^v`, and where `=` copies a heap owner | It is the one thing a new heap value can't always get | 8 |
+| 8.17, 8.18 | 103 | What the two cases the compiler doesn't catch do while running: a pointer or a function whose target is gone, or has gone to another owner, reaches memory that isn't defined. Every borrower, ownership or function that lies behind a pointer belongs to the first case, from the line that stored it on. A move or a `return` of a value whose borrowers point into itself belongs to the second, where the compiler can't see them, and so does a kept block that is handed back one frame. The two are also the only way left to reach a `const`. And what a link to a map or an `any` holds | The docs leave these to the programmer. Saying what happens tells a compiler writer what may be assumed | 2, 12 |
 
 ### Structs
 
 | DOCS | # | The rule | Why | Principle |
 |---|---|---|---|---|
-| 9.2 | 103 | A struct value has every field of its type, in the type's order. A field's value can use the fields above it. Inside the block a field is a plain name, so it can't be spelled like a name that can already be seen there, or like a top-level name of the file. A struct value written inside another one doesn't see the fields of the block around it, so the two can use the same field names | The block is a block of declarations, and one order means one layout. Two struct values take their field names from their types, so neither name could give way | 7 |
-| 9.2 | 104 | A call in a field's value can run only when every field its function uses is written above the call | A function in a struct value can use a field below it, so a call could otherwise read a field with no value yet. It is the rule for a file's top level (11.4) | 7, 8 |
-| 9.3 | 105 | In a struct declared `const` with its block, the fields are `const` inside the block too, so the compiler rejects a function there that changes them | A `const` never changes, and here the compiler sees the function | 8 |
-| 9.3 | 106 | The check while running for a function read out of a struct through a `const` name or a read-only borrower: it fails when the function is held in the struct it belongs to, at any depth but not behind a pointer, and could change it. "Could change" means it changes something the fields reach, also through a `^`, an `&` or an `@` held there, or reads a field with a function in it that could. A function that belongs somewhere else passes. Calling and reading out are checked alike, for a function read out by itself and for each function inside a value that is read out. A function inside an `any` in a field counts as held in the struct, and a line of the field-by-field copy is not a reading out | It is Jack's "same kind of check", made exact: "could change" is everything a `const` name would not allow. Following the fields a function reads keeps `show` usable when it calls `area`. A function of another struct can't change this one | 8, 7 |
-| 9.6 | 107 | A function written in a struct value that uses the fields keeps the address of its struct. A copy, a move or a `return` of the struct re-aims the functions that are held in the struct they keep. A line of the field-by-field copy re-aims in the same way: a line that copies a part of one struct straight into the same part of another struct of the same type, and a field in a block that is given the same field of another struct. Every other function is copied with what it keeps | "A function inside a struct uses the fields of the copy it is called through" (9.6): the function has to know which struct it sits in, and its second address says so (7.7). A struct is copied field by field (8.8), so each line of that copy has to do what the whole copy does | 7, 12 |
-| 9.6 | 108 | Such a function is written as a field's value, or inside an array, pair or map in a field. It can use every field of its block, above or below, and the top-level names of its file, but no name of a function call around the struct value (both limits are adjusted: A10). A function in a struct value that uses no field is an ordinary function. A function written inside the body of a function that uses the fields reaches them through it. A type parameter that is a type name is no name of a call: in a generic function, a function of a struct is made once for each type | A function has one address for what it keeps, and a struct holds only its fields. A top-level name needs no address, and a type name is known before the program runs | 12 |
-| 9.6 | 109 | A function read out of a struct uses the struct it was read from, and borrows it. It goes on keeping that struct wherever the value is stored, also in a field of another struct of the same type: only a copy of the struct, whole or line by line, re-aims a function. A part of the struct that is read out with functions in it borrows the struct in the same way | The borrower rule for a function that uses names around it (7.8). A value doesn't change what it does when it is stored | 7, 1 |
+| 9.2 | 104 | A struct value has every field of its type, in the type's order | One order for the type and the value means one layout | 7 |
+| 9.6 | 105 | Why `counter.add(&counter)` is allowed. The function is worked out first, and it is an ordinary value that keeps nothing of the struct. The call uses it where it sits and doesn't copy it. `&counter` followed no owner, so nothing is in use that the call could free, and the function may even give its own field a new value while it runs | Jack asked for the reason to be written down. What a function keeps never sits in the struct that holds it (7.7), and the code that is running is part of the program | 8 |
 
 ### Repeating, files and running
 
 | DOCS | # | The rule | Why | Principle |
 |---|---|---|---|---|
-| 10.4 | 110 | A program that calls deeper than the stack allows fails like any other check, and so does a declaration that needs more stack than is left | One behaviour for every failure | 7 |
-| 10.4 | 111 | The last call takes over the stack of the function that makes it, when nothing the call uses lives in that call: its names, the heap values they own, its kept parameters, the values made on the spot. An ownership that is handed over doesn't count. (That the names of such a function end before the last call changes Jack's lifetimes: adjusted, A17) | Repeating is a function calling itself, so repeating without end has to be possible | 5, 12 |
-| 11.2 | 112 | `import` takes one text written out in the code, the path without `.my`. A text that leads to no file is an error, two texts that lead to one file name the same file, and a file can't import itself. An `import` inside a function counts like one at the top level. (That `import` is always called by its own name is adjusted: A11) | The compiler has to know every file before the program runs | 8 |
-| 11.2, 11.4 | 113 | An `import` only gives the address of its file, and nothing of the file runs at that line. The program starts by setting up every file, each one after the files it imports, in the order in which the importing file's text first names them. An `import` inside a function counts, whether or not it runs, and the file you run comes last. So a name reached through a package is always set up | Jack's rule says once, and before any file that imports it. A compiler also has to know which of two files comes first when neither imports the other, because a declaration's value can be a call that prints | 2, 8 |
-| 11.3 | 114 | The compiler works out which files each place can hold: an `import` is exactly its file, a name is its own place, each field of a struct is its own place, and the elements of an array, the values of a pair and the entries of a map count together. A pointer shares the place it points at, a seen call's result is looked at, and a heap value, an `any` and an unseen result are one shared place. A name has to be in every file of the place, with one type, and a place that can hold no file has no names | It is how the checks of 11.5 and 11.6 are made, exactly enough that every compiler accepts the same programs. Fields are told apart by name, so a struct can hold two different files side by side. A place the compiler can follow is not mixed with the ones it can't | 8, 2 |
-| 11.4 | 115 | A file's names are set up from the top down. A `const` whose value is a function value written out, a written value, or an array, pair or map value made only of written values, and a type name, are ready from the start. A top-level call can't reach any other name declared below it. Only the names of the file that is being set up can be missing | A body can use any top-level name, so a call could otherwise read a name with no value yet | 8 |
-| 11.4 | 116 | A top-level `main` in the file you run has to be a `const` of type `()int`. The status is from 0 to 255. With no `main` it is 0 | It completes the `main` rule. The status reuses the conversion rule | 6 |
-| 11.5 | 117 | Underneath, a package value is the address of its file's table of names, one table for each file, and every name reached through a package has one fixed position in all the tables. What a file works out stays in the file's own place until the program ends: every `var`, every worked-out `const`, and the kept parameters of top-level calls. That place is on the stack, below everything that runs afterwards | It is how `shapes.area` works with nothing looked up while running, and one address is one size. A file's variables are values like any other, so nothing goes on the heap out of sight | 12 |
-| 11.6 | 118 | The `const` rules hold for the name that holds a package: a `var` borrower and an ownership need a `var` package, and through a `const` borrower the package can't be given another file. The file's own names follow their own `const` or `var` through all of them | "Like any other variable", and what such a name holds is the address | 7 |
-| 8.5, 8.12, 11.6 | 119 | A file lasts as long as the program. A borrower of a file's variable and a function of a file never outlive the file, though a function still can't give such a borrower back. A package holds nothing that can end, and what is put into a file's variable has to last as long as the program. For 8.12, a file's variable is one owner through whichever package it is reached, and a package is not an owner. Through a package that can hold several files, a name counts as that name in each of them | "One instance of each file", carried into the ownership rules. Where the compiler can't tell which file a package holds, it counts the worst case | 7, 8 |
-| 11.1 | 120 | The file you run is a file like every other: one instance, set up when the program starts, after the files it imports. No file of the program can import it | "A package is a file", with no special case for the first one. An import of it would close a circle | 7 |
-| 11.7 | 121 | A failed check stops the program at once, writes `error: FILE:LINE: REASON` to the error output, and ends with status 1 | One behaviour for every check. 0 means everything went well | 7, 9 |
-| 11.7 | 122 | A failure can't be caught. A program that isn't sure tests first | The tests already exist and are in the code | 6, 2 |
-| 11.8 | 123 | `print: ([]char)void` writes exactly the `char`s it is given, at once | Nothing is added out of sight | 2, 11 |
-| 11.8 | 124 | `read: ()[]char` gives the next line with its `\n`, and an empty text at the end of the input | An empty result can then only mean the end | 6 |
-| 11.8 | 125 | `exit: (int)void` ends the program with a status | The same status rule as for `main` | 6, 11 |
-| 11.8 | 126 | `print` and `read` fail like any other check when the output or the input can't be used | One behaviour for every failure | 7 |
-| App. A | 127 | The full grammar, with the order of operations built in, and the rules that tell the forms apart | One place for whoever writes the parser | 12 |
-| App. B | 128 | Every check the compiler makes and every check made while running, with the reason each one prints | One place for whoever writes the compiler | 8 |
+| 10.4 | 106 | A program that calls deeper than the stack allows fails like any other check, and so does a declaration that needs more stack than is left | One behaviour for every failure | 7 |
+| 10.4 | 107 | The last call takes over the stack of the function that makes it, when nothing the call uses lives in that call: its names, the heap values they own, the kept blocks in its frame, the values made on the spot. An ownership that is handed over doesn't count. When the last call gives back a function that keeps parameters, its kept block goes to the frame of the caller of the function that made the last call. (That the names of such a function end before the last call changes Jack's lifetimes: adjusted, A15) | Repeating is a function calling itself, so repeating without end has to be possible | 5, 12 |
+| 11.2 | 108 | `import` takes one text written out in the code, the path without `.my`. A text that leads to no file is an error, two texts that lead to one file name the same file, and a file can't import itself. An `import` inside a function counts like one at the top level. `import("geom")` has the type `package("geom")`, so `import` has no single type of its own, and the text in a package type is read like the text of an `import`. (That `import` is always called by its own name is adjusted: A9) | The compiler has to know every file before the program runs | 8 |
+| 11.2, 11.4 | 109 | An `import` only gives the address of its file, and nothing of the file runs at that line. The program starts by setting up every file, each one after the files it imports, in the order in which the importing file's text first names them. An `import` inside a function counts, whether or not it runs, and the file you run comes last. So a name reached through a package is always set up | Jack's rule says once, and before any file that imports it. A compiler also has to know which of two files comes first when neither imports the other, because a declaration's value can be a call that prints | 2, 8 |
+| 11.3 | 110 | What "the same names, kinds and types" covers. Two files have the same package type when each top-level name of the one is a top-level name of the other, with the same `const` or `var` and the same type, and each type name names the same type in both. The order of the declarations and the values make no difference. So `g.name` is checked from the type of `g` alone, and `g.Point` is a type through any package. A package type can name any file, also one that isn't imported: it is read for its names, and set up only when an `import` names it. Two files can name each other's types | Jack's rule, made exact. A type name has to name the same type, or `g.Point` would be two types under one name. A name is reached by its name, so the order can't matter. A file that is only named in a type runs nothing, so only imports can go in a circle | 4, 8 |
+| 11.4 | 111 | A file's names are set up from the top down. A `const` whose value is a function value written out, a written value, or an array, pair or map value made only of written values, and a type name, are ready from the start. A top-level call can't reach any other name declared below it. Only the names of the file that is being set up can be missing | A body can use any top-level name, so a call could otherwise read a name with no value yet | 8 |
+| 11.4 | 112 | A top-level `main` in the file you run has to be a `const` of type `()int`. The status is from 0 to 255. With no `main` it is 0 | It completes the `main` rule. The status reuses the conversion rule | 6 |
+| 11.5 | 113 | Underneath, a package value is the address of its file's table of names, one table for each file, and files of one package type have their tables laid out alike. What a file works out stays in the file's own place until the program ends: every `var`, every worked-out `const`, and the kept blocks of the calls made at its top level. That place is the frame of the file's top level. It is on the stack, below everything that runs afterwards | It is how `shapes.area` works with nothing looked up while running, and one address is one size. A file's variables are values like any other, so nothing goes on the heap out of sight | 12 |
+| 11.6 | 114 | The `const` rules hold for the name that holds a package: a `var` borrower and an ownership need a `var` package, and through a `const` borrower the package can't be given another file. The file's own names follow their own `const` or `var` through all of them | "Like any other variable", and what such a name holds is the address | 7 |
+| 8.5, 8.12, 11.6 | 115 | A file lasts as long as the program. A borrower of a file's variable and a function of a file never outlive the file, though a function still can't give such a borrower back. A package holds nothing that can end, and what is put into a file's variable has to last as long as the program. For 8.12, a file's variable is one owner through whichever package it is reached, and a package is not an owner. Where the compiler doesn't see which file a package holds, a name counts as that name in every file that has the package's type | "One instance of each file", carried into the ownership rules. Where the compiler can't tell which file a package holds, it counts the worst case | 7, 8 |
+| 11.1 | 116 | The file you run is a file like every other: one instance, set up when the program starts, after the files it imports. No file of the program can import it | "A package is a file", with no special case for the first one. An import of it would close a circle | 7 |
+| 11.7 | 117 | A failed check stops the program at once, writes `error: FILE:LINE: REASON` to the error output, and ends with status 1 | One behaviour for every check. 0 means everything went well | 7, 9 |
+| 11.7 | 118 | A failure can't be caught. A program that isn't sure tests first | The tests already exist and are in the code | 6, 2 |
+| 11.8 | 119 | `print: ([]char)void` writes exactly the `char`s it is given, at once | Nothing is added out of sight | 2, 11 |
+| 11.8 | 120 | `read: ()[]char` gives the next line with its `\n`, and an empty text at the end of the input | An empty result can then only mean the end | 6 |
+| 11.8 | 121 | `exit: (int)void` ends the program with a status | The same status rule as for `main` | 6, 11 |
+| 11.8 | 122 | `print` and `read` fail like any other check when the output or the input can't be used | One behaviour for every failure | 7 |
+| App. A | 123 | The full grammar, with the order of operations built in, and the rules that tell the forms apart | One place for whoever writes the parser | 12 |
+| App. B | 124 | Every check the compiler makes and every check made while running, with the reason each one prints | One place for whoever writes the compiler | 8 |
 
 Left out on purpose, and so not rules: reading and writing files, program arguments, and bit
 operations. The language is complete without them, and each can come later as one more
@@ -451,119 +455,44 @@ built-in function.
 
 ## 3. Adjusted rules
 
-Every existing rule that changed. Each is marked **(adjusted)** in `DOCS.md`, and
-`DECISIONS.md` section 13 has the same list.
+Every existing rule that changed. Each is marked **(adjusted)** in `DOCS.md`, and `DECISIONS.md`
+section 13 has the same list.
 
 | # | DOCS | Old wording | New wording | Why |
 |---|---|---|---|---|
-| A1 | 7.8, 8.11, 2.6. Also marked in 8.5, 8.16, 13 | "It can't outlive what was passed in… An argument handed over with `@` doesn't count: … nothing is left to die." "So they live as long as it does." "The value is freed when the function given back ends." In 2.6: a parameter lives "as long as a function the call gives back uses it". Nothing said where kept parameters are | Kept parameters stay on the stack with the function call that made the call, and go along when the function is given back again. In no other way can the function leave that call: it can't be put in a variable that outlasts it. They end, and a heap value they own is freed, when the call that holds them ends. What a value handed over with `@` holds still counts. A result also comes from the function that was called. A parameter also counts as kept when the function given back is made from it by another call, so `return makeAdder(by);` is fine for a parameter `by` | Kept parameters need a place to live that isn't hidden heap use. **This is a bigger change: section 4.1** |
-| A2 | 8.12, 7.2 | "For one called through a variable, an array or a map, every `&` argument counts as one that may change." "A call through a variable, an array or a map counts as changing every outside variable." | "Through a variable (7.2)" in both places. A lookup in a `const` array, pair or map whose functions are all written out is a call the compiler sees. It counts the worst of those functions. A call through a variable counts as changing every outside variable that a function of its type changes or takes, not every outside variable | Every choice is such a lookup, so the old wording made every function that chooses count as changing everything. And a variable holds only a function of its type, so only those functions can run. The second half goes further than a gap in Jack's sentence asked for: the need for it comes from the filled-in rules for pointers in outside variables. **This is a bigger change: section 4.2** |
-| A3 | 8.17 | The heading "…and what isn't settled", and "Not settled yet: Two functions given back by one call that use the same `var` parameter… Whether they share the kept parameter or each keep their own." | "Nothing here is left unsettled. Two functions given back by one call share the parameters they keep (7.8)." | The docs' own open point, decided by rule 78 |
-| A4 | 5.9 | "`&a[:]` \| the whole array, the same as `&a`" | "the whole array. When `a` is unsized it is the same as `&a`. When `a` is fixed, `&a` is an `&[3]T` and `&a[:]` is the `&[]T`" | An `&[3]T` and an `&[]T` are different types, and a value never changes type by itself |
-| A5 | 5.9 | The comment "checked while running: fails if n is over 4" on `&scores[1:n]` | "fails if n is below 1 or over 4" | The slice starts at 1, and the rule above the example says a start after the end fails |
-| A6 | 13 | "Four checks happen while the program runs:" | "These checks happen while the program runs. A check that fails stops the program (11.7), and Appendix B lists all of them" | The table had five rows already, and the filled-in rules add more |
-| A7 | 3.2, 13 | The order of operations, step 2: "`!` and the marks". Step 3: "`*`" | Step 2: "`!`, `-` and the marks". Step 3: "`*` `/` `%`" | The new operators needed a place in the order. Nothing that was there moved |
-| A8 | 11.4 | "Nothing runs because a file was imported, so the order the program runs in never depends on imports." | "All that runs for an imported file is the working out of those declarations' values, once, when the file is set up. Nothing runs at the line of an `import`. So the order the program runs in is fixed before it starts: every imported file is set up first, and then the file you run goes from the top." | A declaration's value can be a call, so setting a file up does run something. No statement runs, and nothing runs because of where an `import` is written |
-| A9 | 5.9 | "When both are written as numbers and the length is in the type, the compiler checks them." | "When both are written values and the compiler knows the length (5.2), the compiler checks them, and a bound that is left out counts as written." | The docs already reject `a = [1, 2, 4, 5];` for an unsized `a` declared with three elements, so the compiler knows that length. Under the old wording an assignment and an index would use it, and a slice of the same array would not |
-| A10 | 9.6, which narrows a sentence of 7.8. Also marked in 13 | 7.8: "a block sees the names of the blocks around it". 9.6: "A function declared inside a struct is in the struct's scope, so it uses the struct's fields directly." | The same, but only a function that is written as a field's value, or inside an array, a pair or a map in a field, can use the fields. And such a function can't also use a name of a function call around the struct value: a parameter or a name of the function that the struct value is written in | A function value has one address for what it keeps, and a struct holds only its fields (9.8). A function that keeps its struct has no second address for the call around it, and only a function that sits in the struct can keep it. The top-level names of its file need no address, so it can still use those, and so can it use a type parameter that is a type name |
-| A11 | 13, 4.4 | In 13: "Built-ins are first-class values like everything else: they can be named, stored and passed." In 4.4: "Like every built-in, it's an ordinary first-class value" | The same, with one exception: `import` is always called by its own name with its text written out. In 4.4: "Like every built-in except `import` (11.2)" | The compiler has to know every file of a program before it runs |
-| A12 | 8.15 | "`const copyLinks: (&^Link)^Link = (const from: &^Link){`" | "`(var from: &^Link){`", with a sentence that says why | The copy's `prev` links borrow nodes of the original until `linkBack` has set them. Through a read-only borrower, that would put borrowers of a list that may be a `const` into a `var` (rule 85) |
-| A13 | 5.9 | "and the array can't be given a new value or moved while the slice is used further down (8.12)" | "and an array on the heap can't be freed or moved away while a slice of it is used further down (8.12)" | 8.12 protects what an owner on the heap holds. A plain array stays where it is when it is given a new value, and a slice then sees the new elements, as `b^` sees `count = 8;` in 8.4 |
-| A14 | 4.5 | "Everything that doesn't touch an `any` is checked before the program runs." | "The type of everything that doesn't touch an `any` is checked before the program runs." The checks about values are listed in Appendix B | The docs already had checks while running that touch no `any`: a `null` that is followed, a map key, a conversion that doesn't fit, a slice. The sentence is about types, and now it says so |
-| A15 | 8.12 | "'Still used below' means written anywhere further down the function." | The same, with two things added: a call further down to a function that uses the pointer is a use of it, and a pointer in an outside variable is still in use when the function ends | A function can use a pointer in a variable from outside itself, and a pointer that function bodies share can be followed after the function that aimed it has ended. With the old wording alone, freeing what such a pointer points at would go unnoticed (rules 93 and 96) |
-| A16 | 3.2 | "The compiler knows which values are types, because their type is `type` (4.1). So `(a)` starts a function type when `a` is a type, and a group when it isn't." | The same sentences, followed by: in these rules "a type" means a type that is written out, with type names and the forms of 3.6. A value that only holds a type, such as a `var` of type `type` or `x.T`, is an ordinary value, so `(x.T)` is a group | The type of `x.T` and of a `var` that holds a type is `type` too, and neither can be written where a type is expected. Only a type that is written out is known before the program runs (rule 33) |
-| A17 | 10.4, which changes the lifetimes of 2.6 and 8.11 for one case | In 2.6, a name lives until "the end of the block it's declared in". In 8.11, a heap value is freed when "its owner ends": at "the `}` of the block the owner was declared in, or the end of the call for a parameter" | The same, with one case added in 10.4: when the last thing a function does is a call that uses nothing of that function, its names and parameters end before the call starts, and a heap value that one of them owns is freed then | Repeating is a function calling itself, so a repeat without end must not grow the stack. The names have to end before the last call for that, which is sooner than the `}` (rule 111) |
+| A1 | 8.12, 7.2 | "For one called through a variable, an array or a map, every `&` argument counts as one that may change." "A call through a variable, an array or a map counts as changing every outside variable." | "Through a variable (7.2)" in both places. A lookup in a `const` array, pair or map whose functions are all written out is a call the compiler sees. It counts the worst of those functions. A call through a variable counts as changing every outside variable that a function of its type changes or takes, not every outside variable | Every choice is such a lookup, so the old wording made every function that chooses count as changing everything. And a variable holds only a function of its type, so only those functions can run. The second half goes further than a gap in Jack's sentence asked for: the need for it comes from the filled-in rules for pointers in outside variables. **This is a bigger change: section 4.1** |
+| A2 | 8.17 | The heading "…and what isn't settled", and "Not settled yet: Two functions given back by one call that use the same `var` parameter… Whether they share the kept parameter or each keep their own." | The heading is "What the compiler doesn't catch", and the section says: "Two functions given back by one call that use the same `var` parameter are not on this list either. They share the kept parameter (7.8)." | The docs' own open point, decided by rule 80 |
+| A3 | 5.9 | "`&a[:]` \| the whole array, the same as `&a`" | "the whole array. When `a` is unsized it is the same as `&a`. When `a` is fixed, `&a` is an `&[3]T` and `&a[:]` is the `&[]T`" | An `&[3]T` and an `&[]T` are different types, and a value never changes type by itself |
+| A4 | 5.9 | The comment "checked while running: fails if n is over 4" on `&scores[1:n]` | "fails if n is below 1 or over 4" | The slice starts at 1, and the rule above the example says a start after the end fails |
+| A5 | 13 | "Four checks happen while the program runs:" | "These checks happen while the program runs. A check that fails stops the program (11.7), and Appendix B lists all of them" | The table had five rows already, and the filled-in rules add more |
+| A6 | 3.2, 13 | The order of operations, step 2: "`!` and the marks". Step 3: "`*`" | Step 2: "`!`, `-` and the marks". Step 3: "`*` `/` `%`" | The new operators needed a place in the order. Nothing that was there moved |
+| A7 | 11.4 | "Nothing runs because a file was imported, so the order the program runs in never depends on imports." | "All that runs for an imported file is the working out of those declarations' values, once, when the file is set up. Nothing runs at the line of an `import`. So the order the program runs in is fixed before it starts: every imported file is set up first, and then the file you run goes from the top." | A declaration's value can be a call, so setting a file up does run something. No statement runs, and nothing runs because of where an `import` is written |
+| A8 | 5.9 | "When both are written as numbers and the length is in the type, the compiler checks them." | "When both are written values and the compiler knows the length (5.2), the compiler checks them, and a bound that is left out counts as written." | The docs already reject `a = [1, 2, 4, 5];` for an unsized `a` declared with three elements, so the compiler knows that length. Under the old wording an assignment and an index would use it, and a slice of the same array would not |
+| A9 | 13, 4.4 | In 13: "Built-ins are first-class values like everything else: they can be named, stored and passed." In 4.4: "Like every built-in, it's an ordinary first-class value" | The same, with one exception: `import` is always called by its own name with its text written out. In 4.4: "Like every built-in except `import` (11.2)" | The compiler has to know every file of a program before it runs |
+| A10 | 8.15 | "`const copyLinks: (&^Link)^Link = (const from: &^Link){`" | "`(var from: &^Link){`", with a sentence that says why | The copy's `prev` links borrow nodes of the original until `linkBack` has set them. Through a read-only borrower, that would put borrowers of a list that may be a `const` into a `var` (rule 87) |
+| A11 | 5.9 | "and the array can't be given a new value or moved while the slice is used further down (8.12)" | "and an array on the heap can't be freed or moved away while a slice of it is used further down (8.12)" | 8.12 protects what an owner on the heap holds. A plain array stays where it is when it is given a new value, and a slice then sees the new elements, as `b^` sees `count = 8;` in 8.4 |
+| A12 | 4.5 | "Everything that doesn't touch an `any` is checked before the program runs." | "The type of everything that doesn't touch an `any` is checked before the program runs." The checks about values are listed in Appendix B | The docs already had checks while running that touch no `any`: a `null` that is followed, a map key, a conversion that doesn't fit, a slice. The sentence is about types, and now it says so |
+| A13 | 8.12 | "'Still used below' means written anywhere further down the function." | The same, with two things added: a call further down to a function that uses the pointer is a use of it, and a pointer in an outside variable is still in use when the function ends | A function can use a pointer in a variable from outside itself, and a pointer that function bodies share can be followed after the function that aimed it has ended. With the old wording alone, freeing what such a pointer points at would go unnoticed (rules 94 and 97) |
+| A14 | 3.2 | "The compiler knows which values are types, because their type is `type` (4.1). So `(a)` starts a function type when `a` is a type, and a group when it isn't." | The same sentences, followed by: in these rules "a type" means a type that is written out, with type names and the forms of 3.6. A value that only holds a type, such as a `var` of type `type` or `x.T`, is an ordinary value, so `(x.T)` is a group | The type of `x.T` and of a `var` that holds a type is `type` too, and neither can be written where a type is expected. Only a type that is written out is known before the program runs (rule 33) |
+| A15 | 10.4, which changes the lifetimes of 2.6 and 8.11 for one case | In 2.6, a name lives until "the end of the block it's declared in". In 8.11, a heap value is freed when "its owner ends": at "the `}` of the block the owner was declared in, or the end of the call for a parameter" | The same, with one case added in 10.4: when the last thing a function does is a call that uses nothing of that function, its names and parameters end before the call starts, and a heap value that one of them owns is freed then | Repeating is a function calling itself, so a repeat without end must not grow the stack. The names have to end before the last call for that, which is sooner than the `}` (rule 107) |
+| A16 | 7.8. Also marked at `makeLookup` in 7.8 | "It can't outlive what was passed in. At the call, the function given back counts as coming from every argument, the same as a borrower that comes back (8.13). If an argument dies before the function, the compiler raises an error. An argument handed over with `@` doesn't count…" Two examples were errors by it: `addFive = makeAdder(six);` in a block where `six` ends first, and `var addTen: (int)int = makeAdder(10);`. At `makeLookup`: "so nothing in the caller has to outlive the function" | "It can't outlive what was lent." The function given back counts as coming from everything that was lent to the call: every `&` argument, and every argument that holds a borrower, an ownership or a function. A parameter that was copied sets no limit, so `makeAdder(10)` can be kept in a variable. An argument handed over with `@` still doesn't count, but a borrower, an ownership or a function inside its value does. At `makeLookup`: "and the kept block then owns it" | The kept block holds its own copy of each parameter that was copied, so an argument that was copied can end without harm. What can still end too soon is what was lent, as for a borrower that comes back. **This is a bigger change: section 4.2** |
 
-Several existing tables also gained rows or cells (2.6, 3.2, 5.9, 8.5, 8.8, 8.9, 8.11, 8.12,
-8.16, 8.18 and the tables of section 13). Each addition of mine is marked
-**(filled in)** or **(adjusted)** where it stands.
+Several existing tables also gained rows or cells (3.2, 5.9, 8.5, 8.8, 8.9, 8.12, 8.16, 8.18 and
+the tables of section 13). Each addition of mine is marked **(filled in)** or **(adjusted)**
+where it stands.
 
 ---
 
 ## 4. Bigger changes
 
-### 4.1 Where kept parameters live, and how far a function given back can go (DOCS 7.8, A1)
+### 4.1 A choice by lookup is a call the compiler sees (DOCS 7.2 and 8.12, A1)
 
-**The gap.** 7.8 says a function given back keeps the parameters it uses, and that they "live
-as long as it does". 7.7 says every function value is two addresses. The docs say nothing
-goes on the heap unless the code says `^`. Nothing said where the kept parameters are, so a
-compiler writer could not build `makeAdder`.
-
-**The options.**
-
-| Option | What it means | Against the philosophy |
-|---|---|---|
-| a. A hidden heap block for kept parameters | Every `makeAdder(five)` quietly allocates, and something has to free it | Heap use the code doesn't show. It breaks "explicit" at its centre |
-| b. Function values that carry their kept parameters inside | A function value has a different size for each function | It undoes Jack's decision that every function value is two addresses, and with it arrays and maps of functions |
-| c. Only Jack's rule: the function can't outlive the arguments | No new restriction | It can't be built. `keep = makeAdder(five);` inside a function passes the rule when `five` and `keep` are both top-level names, yet the kept `step` has nowhere to live once that function ends |
-| d. Kept parameters stay on the stack of the caller, and the function can never leave that call | The simplest rule that can be built | It breaks Jack's own `newCounter`, which gives back what `countFrom` gave it |
-| e. As d, but kept parameters go along when the function is given back again | One restriction: a function given back can't be *stored* where it outlasts the call it is in | Nothing hidden. A value that is given back is always taken by the caller (8.8), and the kept parameters are taken with it |
-
-**Picked: e.** It keeps every example in the docs, and every rule except the wordings that A1
-lists. `makeAdder`, `makeCounter`, `steps`, `makeLookup`, `countFrom` and `newCounter` all work
-as written, and so does `first(int)` given back from a function.
-
-**What it rejects that the old wording allowed.**
-
-```go
-const install: ()void = (){
-    keep = makeAdder(five);    // the step would have to outlive this call of install
-};
-```
-
-`keep` is a top-level `var`. Written at the top level of the file, the same line is fine.
-
-**What else changed with it.**
-
-- A value handed over with `@` "doesn't count" as before, but a borrower or a function inside
-  it still does. Without this, a function given back could keep a borrower of a local that
-  was handed over inside a struct.
-- Whether a result keeps parameters is read off the function when the compiler sees it
-  (rule 80). So `wrap(int)(3)`, an `any` with no function in it, is held by nothing. A result
-  that is a function still comes from every argument, as Jack's rule says.
-- Kept parameters end when the call that holds them ends, and a heap value they own is freed
-  then (rule 92). The docs said "when the function given back ends", which is not one moment
-  once the function has been copied.
-- A result that comes from a parameter can be handed on (rule 81). So `return makeAdder(by);`
-  is fine when `by` is a parameter, and an error when it is a name declared in the function.
-  The docs said a function given back can't outlive any argument, and read alone that would
-  turn the line away. But "a function given back keeps the parameters it uses", and "a local
-  is never kept": the parameter that the function is made from is kept with it, and for the
-  caller the result is limited by the arguments of the function that handed it on. Generic
-  code needs this, as `sumWith` in 4.3 shows.
-- A result also comes from the function that was called (rule 81). `adder3(five)(five)` gives
-  back a function that reaches the kept parameters of both calls, so both sets go along when
-  it is given back.
-- Stored behind a pointer in a place that outlasts the call, a function given back is turned
-  away at the line that stores it (rule 84). What the compiler can't see there belongs to the
-  list in 8.17 (rule 102), like the borrower the docs already had there.
-- Kept parameters stay with the call that holds them, and a function value holds their
-  address. So a copy of such a function uses the same kept parameters (rule 79), the way a
-  copy of a borrower borrows the same value. It is the one place where `=` on a value with
-  state doesn't give a second, independent state, and nothing in the line says `&`.
-- Kept parameters move when the function is given back again. A kept parameter that borrows
-  another kept parameter itself would still point at the old place, and the compiler can't
-  see it from the caller. That case is on the list in 8.17 (rule 102).
-
-**A cost to know about.** Kept parameters end when the call that holds them ends. At the top
-level of a file, that is the end of the program, so a heap value that a kept
-parameter owns stays that long, even after the last function that used it is gone. Ending
-them with the block the call is written in would free sooner, but it would stop a function
-given back from being stored in a variable of an outer block of the same function.
-
-**What Jack may want to change.** If a function given back should be storable anywhere, or if
-a copy of it should get kept parameters of its own, the honest way is option a with a mark
-that shows the allocation. That would be a new piece of syntax, close to idea 1 in
-`UNDECIDED.md`, so I did not go there.
-
-### 4.2 A choice by lookup is a call the compiler sees (DOCS 7.2 and 8.12, A2)
-
-**The gap.** The docs use "called by its own name" and "called through a variable, an array
-or a map" in many rules, and never say exactly where the line is. Read as written, every
+**The gap.** The docs use "called by its own name" and "called through a variable, an array or a
+map" in many rules, and never say exactly where the line is. Read as written, every
 `cases[n == 0](n)` is a call through an array. 8.12 then counts it as changing every outside
 variable and as changing every `&` argument. Since every choice in MyLang is such a lookup,
-every function that chooses would count as changing everything, and none could be called
-while a pointer into a list is in use.
+every function that chooses would count as changing everything, and none could be called while a
+pointer into a list is in use.
 
 **The options.**
 
@@ -575,16 +504,16 @@ while a pointer into a list is in use.
 
 **Picked: c.** The list of calls the compiler sees is in 7.2, and 8.12 points to it. The docs'
 own examples (`valueOr`, `length`, `sumFrom`, `calc`) are all of this kind. Every rule that
-needs to know what a call does uses the same list: 4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.2,
-9.3, 11.3 and 11.4.
+needs to know what a call does uses the same list: 4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.3 and
+11.4.
 
-**The second half: what a call through a variable counts.** The docs said such a call "counts
-as changing every outside variable, because the compiler can't tell which function runs". A
-function can also give a pointer in an outside variable a new target, or follow one (rules 93
-and 96). With all three counted for every outside variable, any file with an owner and a
-pointer at its top level would turn away three calls of a struct's functions in a row: the
-first could aim the pointer at what the owner holds, the second could free it, and the third
-could follow the pointer.
+**The second half: what a call through a variable counts.** The docs said such a call "counts as
+changing every outside variable, because the compiler can't tell which function runs". A
+function can also give a pointer in an outside variable a new target, or follow one (rules 94
+and 97). With all three counted for every outside variable, any file with an owner and a pointer
+at its top level would turn away three calls of a struct's functions in a row: the first could
+aim the pointer at what the owner holds, the second could free it, and the third could follow
+the pointer.
 
 | Option | What it means | Against the philosophy |
 |---|---|---|
@@ -593,11 +522,11 @@ could follow the pointer.
 | c. Only the functions that are ever used as a value | Finer still | It needs a second notion, and a reader can no longer tell from a type what a call counts |
 
 **Picked: b.** What Jack wanted still holds: when the compiler can't tell which function runs,
-it counts the worst. It now counts the worst of the functions that could run. It stops short
-of option b in the first table: the compiler doesn't follow where each function value
-travels, it only asks which functions have the type.
+it counts the worst. It now counts the worst of the functions that could run. It stops short of
+option b in the first table: the compiler doesn't follow where each function value travels, it
+only asks which functions have the type.
 
-**What Jack may want to change.** The need for this half comes from my own rules 93 and 96,
+**What Jack may want to change.** The need for this half comes from my own rules 94 and 97,
 which follow pointers in outside variables, and not from a gap in the docs' sentence. If Jack
 prefers his worst case as it stood, the price is the example above: three calls of a struct's
 functions in a row are turned away beside a top-level owner and pointer.
@@ -607,38 +536,99 @@ kind of line is judged more strictly for it: a `const` that is lent to a lookup 
 sees is an error when any of the listed functions could change it, also when the function that
 is picked would not.
 
+### 4.2 What a function given back can't outlive (DOCS 7.8, A16)
+
+**The rule that changed.** 7.8 said: "It can't outlive what was passed in. At the call, the
+function given back counts as coming from every argument… If an argument dies before the
+function, the compiler raises an error." Two of its examples were errors by that rule:
+
+```go
+{
+    var six: int = 6;
+    addFive = makeAdder(six);           // was an ERROR: six dies at this block's }, before addFive
+}
+
+var addTen: (int)int = makeAdder(10);   // was an ERROR: the 10 is gone at the end of this line
+```
+
+**Why it had to be looked at.** Jack's rule for kept parameters puts them in a kept block, in
+the frame of the call that receives the function, and makes the function a borrower of that
+block under "the ordinary borrower rules", "with no new ones". A parameter that was copied is
+then the block's own: the kept `step` holds its own 6 or 10. The argument it was copied from has
+nothing left to protect.
+
+**The options.**
+
+| Option | What it means | Against the philosophy |
+|---|---|---|
+| a. Keep the sentence as it stood | `makeAdder(10)` can't be kept in a variable, and `makeAdder(six)` not beyond `six` | A rule with no reason left: the block holds its own copy, so nothing can point at a value that is gone. It would be one more rule beside the borrower rules, where Jack's decision says "no new ones" |
+| b. Drop the rule | Only the kept block limits the function | A kept `&T` parameter still borrows the caller's variable, and an argument that holds a borrower, an ownership or a function still points at something of the caller. The function could outlive it |
+| c. Narrow it to what was lent | The function counts as coming from every `&` argument, and from every argument that holds a borrower, an ownership or a function. A parameter that was copied sets no limit | None: it is the rule for a borrower that comes back (8.13), which the old sentence already pointed to |
+
+**Picked: c.** Both examples above are now fine. What can go wrong is still turned away:
+
+```go
+var keep: (int)int = double;
+{
+    var local: int = 5;
+    keep = adderOn(&local);             // ERROR: local was lent, and it ends at this }, before keep
+}
+```
+
+(`adderOn` and `double` are from DOCS 7.8 and 7.6.) Storing a function with a kept block where
+it outlasts the frame that holds the block is an error by Jack's own rule, as in `install`. That
+rule and this one are two different limits: the block, and what was lent.
+
+**What else changed with it.**
+
+- The sentence at `makeLookup` said that with a value handed straight over with `@`, "nothing in
+  the caller has to outlive the function". The function is tied to the frame that holds its kept
+  block, so the sentence now ends "and the kept block then owns it".
+- An argument handed over with `@` still "doesn't count", in Jack's words. A borrower, an
+  ownership or a function inside its value does count: it points at something that was only
+  lent.
+
+**What Jack may want to change.** If the old sentence should stand as it was written (option a),
+the two examples are errors again, and every `makeAdder(10)` needs a variable for the 10 that
+lasts as long as the function.
+
 ---
 
 ## 5. Waiting on `UNDECIDED.md`
 
 Nothing waits. Every gap could be filled with the rules that are decided.
 
-Two filled-in rules would read more simply if an undecided idea were accepted. Both were
-written with today's rules instead, and neither depends on the idea:
+One filled-in rule would read more simply if an undecided idea were accepted. It was written
+with today's rules instead, and it doesn't depend on the idea:
 
 | Rule | Today | With the undecided idea |
 |---|---|---|
-| 4.1 above, a function that has to be stored for longer than the call that made it | it is made at the top level of its file, or given back to where it is needed | idea 1 (kept names after a `;`) would be the place to say how a function keeps a value of its own |
 | 71 (DOCS 7.1), "every path reaches a `return`" | a body is one straight line, so the rule is "the body runs into a `return`" | idea 2 (`if` and `else`) would bring branches back, and the rule would need its branch cases again |
 
 One thing to know before deciding idea 1. Its text says that a kept name "lives as long as the
-function", and that "copying the function copies its kept names". For the kept parameters
-that exist today, rule 79 and A1 say the opposite: a copy of a function shares them, and they
-end with the call that holds them. Both follow from 7.7, where every function value is two
-addresses. I did not use the idea to decide either rule. If Jack accepts idea 1 as written,
-rule 79 and A1 have to be looked at again together with it.
+function", and that "copying the function copies its kept names". For the kept parameters that
+exist today, Jack's own rules say something else: copying such a function is an error, and the
+kept block ends with the frame or the heap value that holds it (section 6). I did not use the
+idea to decide anything. If Jack accepts idea 1 as written, it has to be read together with
+those two rules.
 
 ---
 
 ## 6. Jack's own changes
 
-Four rules in `DOCS.md` are decisions Jack made himself. They carry no mark there, and each
-has a row in `DECISIONS.md` in his words. They are listed here apart from my work, with the
-rules I added so that each one works.
+Ten rules in `DOCS.md` are decisions Jack made himself. They carry no mark there, and each has a
+row in `DECISIONS.md` in his words. They are listed here apart from my work, with the rules I
+added so that each one works.
 
 | Jack's rule | Where in DOCS | What I added for it |
 |---|---|---|
 | **A `var` can hold a type:** `var t: type = int;`. The variable holds the type as a value. It is not a type name, so it can't declare anything | 4.2 | Rule 40 says which names are type names. Rule 48 makes every type known before the program runs, and rule 49 makes a `type` value one address, so a `var` has room for any type. Rule 41 keeps a held type out of every place that decides a type |
-| **A `const` never changes.** A call through a variable that lends a `const` is checked at the call, while the program runs, with a note beside the function's code that says which parameters are `var`. A function called through a `const` struct is checked in the same way. Both are off the list in 8.17, and both have a row in Appendix B.9 | 8.6, 7.7, 8.17, 9.3 | Rules 85 to 87 keep everything read-only from reaching a `var` where the compiler can see, so the check at the call is the only one needed. Rules 77 and 106 say what else the note holds and how the check for a struct works. Rule 102 says what is left in 8.17. One adjustment follows from the rule: A12 (`copyLinks`) |
-| **A struct type has its field names:** `const Point: type = {x: int, y: int};`. A value is checked against the names and the types. A function type keeps no names, except a type parameter that a later part of the type uses: `(T: type, []T)T` | 3.3, 3.6, 4.3, 9.1, 9.2 | Rule 35 makes the names and their order part of what makes two struct types the same. Rule 44 says where a type parameter's name can be used. Rule 103 says what a struct value has to hold |
-| **A package is a pointer to its file: one instance of each file.** A package value is the file's address, held like a function value. `const` on a package means the name always holds the same file, and the file's own names follow their own `const` or `var`. A file is set up once, before any file that imports it, and imports can't go in a circle | 11.2, 11.3, 11.5, 11.6, with 2.9, 7.7, 8.6 and 9.6 | Rule 113 fixes the order in which the files are set up, and says that an `import` only gives the address. Rule 117 says what the address points at and where a file's variables live. Rule 118 says what `const` and `&` mean for the name that holds a package, and rule 119 carries "one instance" into the ownership rules. Rule 76 follows it for functions: a function keeps no address for its file. Two adjustments stand beside the rule. A8 says when the declarations of an imported file run. A10 keeps a function in a struct from using the names of a call around it, and leaves the top-level names of its file open to it, because a top-level name needs no address |
+| **A `const` never changes.** A call through a variable that lends a `const` is checked at the call, while the program runs, with a note beside the function's code that says which parameters are `var`. It is off the list in 8.17, and it has a row in Appendix B.9 | 8.6, 7.7, 8.17 | Rules 87 to 89 keep everything read-only from reaching a `var` where the compiler can see, so the check at the call is the only one needed. Rule 78 says what else the note holds. Rule 103 says what is left in 8.17. One adjustment follows from the rule: A10 (`copyLinks`) |
+| **A struct type has its field names:** `const Point: type = {x: int, y: int};`. A value is checked against the names and the types. A function type keeps no names, except a type parameter that a later part of the type uses: `(T: type, []T)T` | 3.3, 3.6, 4.3, 9.1, 9.2 | Rule 35 makes the names and their order part of what makes two struct types the same. Rule 44 says where a type parameter's name can be used. Rule 104 says what a struct value has to hold |
+| **A package is a pointer to its file: one instance of each file.** A package value is the file's address, held like a function value. `const` on a package means the name always holds the same file, and the file's own names follow their own `const` or `var`. A file is set up once, before any file that imports it, and imports can't go in a circle | 11.2, 11.3, 11.5, 11.6, with 2.9, 7.7, 8.6 and 9.6 | Rule 109 fixes the order in which the files are set up, and says that an `import` only gives the address. Rule 113 says what the address points at and where a file's variables live. Rule 114 says what `const` and `&` mean for the name that holds a package, and rule 115 carries "one instance" into the ownership rules. Rule 76 follows it for functions: a function keeps no address for its file. One adjustment stands beside the rule: A7 says when the declarations of an imported file run |
+| **Copying a function that keeps parameters is an error; to share it, borrow it.** `var again: ()int = next;` is an error, and `var again: &()int = &next;` is the way. A function that keeps nothing copies as normal. The compiler rejects the copy where it can see the function, and otherwise the copy fails while running, using the note beside the function's code | 7.8, with 7.2, 7.7, 8.8, 8.16, 13 and Appendix B.5 and B.9 | Rule 79 says which functions keep something, what counts as a copy, and where the compiler sees it. Rule 43 lets a function that keeps only a type name copy as normal |
+| **A struct value is just a bundle of values.** Fields aren't names in scope: not for a function written in the struct, and not for the other fields. A function that works on its struct takes the struct as a parameter, as in `counter.add(&counter)`. Copying a struct copies its fields, nothing more, and a `const` struct is protected by the normal `const` rule | 9.2, 9.3, 9.6 | Rule 105 says why `counter.add(&counter)` passes the borrowing rules, as Jack asked. Rule 104 keeps the fields of a value in the type's order. Nothing else was needed: a function in a struct is an ordinary function, and the check for a `const` struct is the one of 8.6 |
+| **A field name never clashes with another name:** fields are only reached with a dot | 9.2, 2.8 | Nothing. Rule 10 (no shadowing) is about names in scope, and a field is not one |
+| **A function value is two addresses; its kept block lives in the frame of the call that receives it,** and a function with kept state is a borrower of that block, so the borrower rules decide where it can go. Returning it hands the block back one frame, and `^` keeps it longer: `^makeAdder(five)` puts the function on the heap, kept block included | 7.7, 7.8, with 2.6, 8.5, 8.11, 8.16, 10.4 and 13 | Rule 76 says what the second address is for each kind of function, and rule 77 makes `keep = adderOn(&topStep);` work. Rule 83 says which frame receives the block when the call is an argument or stands under a `^`. Rule 80 gives one call one block, rule 81 covers a function that a kept function gives back, and rule 82 says which results have a block. Rule 78 puts the block's size in the note. One adjustment follows from the rule, and it is a bigger change: A16, in section 4.2 |
+| **A package's type is its file: `package("geom")`.** It is a type form written where a type goes, and not a call. There is no plain type `package`. Two package types are the same when the files have the same names, kinds and types, so giving a `var` package another file is an ordinary type check. A copy of a package reaches the same file | 11.2, 11.3, 11.5, 11.6, with 2.7, 3.6, 3.8, 13 and Appendices A and B | Rule 7 makes `package` a reserved word. Rule 110 says what "the same names, kinds and types" covers, and that a package type can name a file that isn't imported. Rule 34 makes `geom.Point` a type through any package of that type. Rule 108 gives `import("geom")` its type, rule 113 lays the tables of one package type out alike, and rule 115 says what a name counts as where the compiler doesn't see which file a package holds |
+| **Importing one element is an ordinary declaration:** `const area: (float)float = geom.area;`, and `const count: &int = &import("counter").count;` for a variable that stays live | 11.6 | Nothing new. Rule 115 already says that a borrower of a file's variable never outlives the file |
