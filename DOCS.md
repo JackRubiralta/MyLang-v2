@@ -35,7 +35,9 @@ Why each rule is the way it is is in `DECISIONS.md`.
 - **(filled in)** marks a rule that Claude added, and **(adjusted)** marks one that Claude
   changed. A mark in a heading covers the whole section. A mark at the start of a paragraph
   covers that paragraph and the examples, lists and tables that follow it, up to the next
-  paragraph. `FILLED_IN.md` lists them all.
+  paragraph. A mark inside a paragraph covers the sentence it stands in and what follows, up
+  to the next mark or the end of the paragraph. A mark in a table covers its row or its cell,
+  and a mark in a comment covers its line. `FILLED_IN.md` lists them all.
 
 ## Contents
 
@@ -578,13 +580,14 @@ for a `float32`, so writing it for one is an error. `0.0` and `-0.0` are equal (
 keeps its sign when it is written as text (5.10).
 
 **(filled in)** The compiler makes the check itself where it already knows the answer: when
-every number is a written value, and when a whole number is divided by a written `0` with `/`
-or `%`:
+every number is a written value, and when a number is divided by a written `0` or `0.0` with
+`/` or `%`:
 
 ```go
 var over: int8 = 100 + 100;    // ERROR: 200 doesn't fit in an int8
 var none: int = count / 0;     // ERROR: division by zero
 var left: int = count % 0;     // ERROR: division by zero
+var rate: float = price / 0.0; // ERROR: division by zero
 ```
 
 **Comparing two values of the same type gives a `bool`:**
@@ -940,6 +943,8 @@ Three rules go with the table:
 show(5);                       // fine
 var x: int = show(5);          // ERROR: show returns nothing
 ```
+
+(`show` is the function from 7.3 that returns nothing.)
 
 ---
 
@@ -2016,6 +2021,8 @@ const none: ()int = (){
 };                             // ERROR: the body ends without a return
 ```
 
+(`show` is the function from 7.3.)
+
 **(filled in) A function value is checked against its type.** It has as many parameters as
 the type lists, each with the type listed at its position, and every `return` in it gives a
 value of the return type. A function value written where nothing asks for a type takes its
@@ -2244,13 +2251,15 @@ blocks above sit in the frame that declares `steps`, so `steps` can't outlast th
 **Underneath.** A frame makes room for a kept block while the program runs, the way `alloca`
 does in C, because a call through a variable can't know the size of the block beforehand. The
 block stays in the frame until that call ends. **(filled in)** The note beside the function's
-code (below) says how big its kept block is.
+code (below) says how big its kept block is. When a kept parameter has a type with no size in
+it (5.3), the size differs from call to call, so the block holds its own size, the way an
+unsized array holds its length (5.7).
 
 **(filled in) What the second address is.** One address is always enough:
 
 | The function | Its second address |
 |---|---|
-| uses only its own parameters and names, built-ins, types and top-level names | empty: it keeps nothing |
+| uses only its own parameters and names, built-ins, types, top-level names and names of a block written at the top level | empty: it keeps nothing |
 | uses names of a function call around it that is still running (7.8) | that call's frame |
 | was given back by a call and keeps parameters of it (7.8) | its kept block |
 | was given back by a call and keeps only one borrower, under the conditions of 7.8 | the address that was lent. It needs no block |
@@ -2262,7 +2271,8 @@ level of the file is found in the same way. A function that uses one keeps nothi
 it can't outlive the block (7.8).
 
 **(filled in)** A frame or a kept block also holds the address of the frame or the block
-around it, when the function uses names from there. So a function inside a function reaches
+around it, when the function uses names from there. Where the function around it has no kept
+block (7.8), it holds the address that function holds. So a function inside a function reaches
 everything it can see through one address.
 
 **(filled in)** A type parameter that is a type name (4.2) takes no room in a kept block. The
@@ -2420,11 +2430,13 @@ can store it in `keep`. It holds when all of these do:
 - The function keeps exactly one parameter, and it uses no name of a function call around it.
 - That parameter is a borrower that is one address: any `&T` except an `&[]T`, which holds two
   things (8.18).
-- No line of the function points the parameter at something else. A `const` parameter never is.
+- No line points the parameter at something else: not in this function, and not in any other
+  function that uses the parameter. A `const` parameter never is.
 
-In every other case the function has a kept block, as `makeAdder(five)` has, and it can't be
-stored where it outlasts the frame that holds the block. A function that keeps two borrowers is
-such a case, and so is one whose borrower is a `var` that it points at something else:
+**(filled in)** In every other case the function has a kept block, as `makeAdder(five)` has,
+and it can't be stored where it outlasts the frame that holds the block. A function that keeps
+two borrowers is such a case, and so is one whose borrower is a `var` that it points at
+something else:
 
 ```go
 const sumOn: (&int, &int)()int = (const a: &int, const b: &int){
@@ -2462,8 +2474,8 @@ using the note beside the function's code (7.7).
 - **What keeps something.** A function keeps something when its second address isn't empty
   (7.7): it keeps parameters, or it uses names of a function call around it. The second kind
   borrows those names in the same hidden way, so the rule covers both. Only a function that
-  uses nothing but its own parameters and names, built-ins, types and top-level names copies
-  as normal.
+  uses nothing but its own parameters and names, built-ins, types, top-level names and names of
+  a block written at the top level copies as normal.
 - **What a copy is.** Every place where `=` would copy the function value: a declaration, an
   assignment, an argument that goes to a parameter, `^` in front of a name, a name written
   inside an array, pair, map or struct value, and a move, which copies a plain value (8.9). A
@@ -2472,9 +2484,12 @@ using the note beside the function's code (7.7).
   call, a function value written on the spot, and a local or a parameter that its function
   returns. Returning any other name is a copy. Borrowing the function with `&` copies nothing,
   and neither does calling it.
-- **Where the compiler sees it.** The compiler rejects the copy when it sees that the function
-  keeps something: the value is the result of a call it sees (7.2), or a name that was only
-  ever given such values. In every other case the check is made while the program runs.
+- **Where the compiler sees it.** The compiler rejects the copy when it sees that the name
+  being copied holds a function that keeps something. It sees that for a name that was declared
+  with a function value written out that uses names of a call around it, or with the result of
+  a call it sees (7.2) that keeps something, as long as no line of the program gives the name
+  another value, or lends it to a `var` borrower or an ownership. In every other case the check
+  is made while the program runs.
 
 ```go
 twice(double, 3)               // 12: double keeps nothing, so it is copied into f
@@ -2535,8 +2550,8 @@ const linked: (int, &int)()int = (var n: int, var b: &int){
 };
 ```
 
-A heap value that a kept parameter owns stays where it is when the block is handed back, so a
-kept parameter can borrow that.
+**(filled in)** A heap value that a kept parameter owns stays where it is when the block is
+handed back, so a kept parameter can borrow that.
 
 The rule is only for a function the call gives back with `return`. A local is never kept by
 using it in the body: returning a function that does that is an error, as above.
@@ -2576,7 +2591,9 @@ tally.get()                    // 2: up and get use the same total
 
 **(filled in) A function that a kept function gives back.** It keeps the parameters of its own
 call in a block of its own, and it borrows the kept block of the function that made it, when it
-uses that function's kept parameters. So it can't outlast that block:
+uses that function's kept parameters. So it can't outlast that block. When the function that
+made it keeps only one borrower and has no block (above), it holds the same address instead,
+and borrows what was lent:
 
 ```go
 const adder3: (int)(int)(int)int = (const a: int){
@@ -3927,10 +3944,12 @@ the result comes from everything that was lent to the call. A pointer that lies 
 in the type doesn't count: `copyLinks` in 8.15 gives back a `^Link` whose `prev` borrowers
 sit inside heap values, where the compiler doesn't follow them (8.17), so the copy is a value
 of its own. What a function's own lines put behind a `^` is checked inside that function
-(8.5). Whether a result can only read is another question, and there every borrower that
-`=` copies counts, also one behind a `^`: such a result is read-only when something read-only
-was lent to the call (8.6). A result that holds a function follows 7.8. A result that holds
-none of these is a plain copy, and it lives as long as the holder it is put in.
+(8.5). What a called function put there from what it was lent is not followed by the caller:
+that case is on the list in 8.17. Whether a result can only read is another question, and
+there every borrower that `=` copies counts, also one behind a `^`: such a result is read-only
+when something read-only was lent to the call (8.6). A result that holds a function follows
+7.8. A result that holds none of these is a plain copy, and it lives as long as the holder it
+is put in.
 
 **(filled in) A variable that is lent for change can be given what else was lent.** A function
 can store what came in through one parameter behind a pointer that came in through another
@@ -4140,7 +4159,7 @@ is copied this way is a `var`.
 | `addTo(&p~, renewP())` where `renewP` changes `p` **(filled in)** | a statement is still using what it has worked out (8.12) |
 | `return ^&local;`, and `slot~ = &local;` where `slot` came in through a parameter **(filled in)** | the line that stores a borrower behind a pointer is checked: the place may outlast `local`, whether `local` is a name of this call or of a call around it (8.5) |
 | `aim(&b, &x);` where `aim` may store its second argument through its first, and `b` outlasts `x` **(filled in)** | a variable that is lent for change can be given what else was lent (8.13) |
-| `f();` where `f` is a parameter, a borrower made through another parameter is used below, and a function of `f`'s type changes an owner of that type which the line can't name **(filled in)** | an owner that a caller can't name counts as one reached through a pointer from outside (8.12) |
+| `f~();` where `f` borrows a function and came in through a parameter, a borrower made through another parameter is used below, and a function of `f`'s type changes an owner of that type which the line can't name **(filled in)** | an owner that a caller can't name counts as one reached through a pointer from outside (8.12) |
 | `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `return &list~;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
 | `p = ^6;` where a function called below uses a borrower made with `&p~` **(filled in)** | the call is a use of that borrower (8.12) |
@@ -4183,6 +4202,19 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
   same way (8.9, 8.13). So the same holds for a value that is moved or given back while a
   borrower inside it points at another part of it, where the compiler can't see that
   borrower. A kept block that is handed back one frame is such a value (7.8).
+
+**(filled in)** So a helper function can put a borrower behind a `^` where a line of the
+caller's own would be turned away. `return ^&local;` is an error, because that one line shows
+both ends (8.5). Split over two functions, the same store is not caught:
+
+```go
+const boxUp: (&int)^&int = (var b: &int){ return ^b; };   // fine: what b borrows came in through a parameter
+
+const lost: ()^&int = (){
+    var local: int = 5;
+    return boxUp(&local);      // not caught: the borrower of local lies behind the ^ of what boxUp gave back
+};
+```
 
 **(filled in) What happens in these cases.** A pointer can then be followed, or a function
 called, after what it points at or keeps is gone, or has gone to another owner. That is not
@@ -4407,9 +4439,8 @@ settings.size = 5;          // fine: settings is a var
 
 A function written in a struct value is an ordinary function. It sees only what any function
 sees: its own parameters, the top-level names of the file, and the parameters it keeps from the
-call around it (7.8). **(filled in)** Written inside a function, it can also use that
-function's names, like any function made there (7.8). A function that works on its struct takes
-the struct as a parameter, like any other function. There is no `this`:
+call around it (7.8). A function that works on its struct takes the struct as a parameter, like
+any other function. There is no `this`:
 
 ```go
 const Counter: type = {count: int, add: (&Counter)void};
@@ -4430,6 +4461,9 @@ var bad: Counter = {
     };
 };
 ```
+
+**(filled in)** A function in a struct value that is written inside a function can also use
+that function's names, like any function made there (7.8).
 
 **Copying a struct copies its fields, nothing more.** A function field is copied like any
 function value, under the rule that copying a function that keeps parameters is an error (7.8):
@@ -4881,7 +4915,6 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `any` | a value of any type, with its type inside |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
-| `&a[i:j]` | a slice: borrows elements `i` up to `j` of `a`, as an `&[]T` (5.9) |
 | `?T` | pair: one `T` for `false`, one for `true` |
 | `{K}V` | map from `K` keys to `V` values |
 | `(P1, P2)R` | function taking `P1` and `P2`, returning `R` |
@@ -4916,6 +4949,7 @@ to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 |---|---|
 | `^v` | puts a copy of `v` on the heap: a `^T` |
 | `&x` | borrows `x`: an `&T` |
+| `&a[i:j]` | a slice: borrows elements `i` up to `j` of `a`, as an `&[]T` (5.9) |
 | `@x` | the ownership of `x`: an `@T` |
 | `p~` | what a heap owner, a borrower or an ownership leads to |
 | `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
@@ -4996,7 +5030,7 @@ their type from the place they are written for (3.8).
 | `keep = adderOn(&topStep);` where the function keeps only the borrower `step` **(filled in)** | the function has no kept block. It is a borrower of `topStep`, so it can go wherever one can (7.8) |
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
 | `var again: ()int = next;` where `next` keeps parameters | an error: a copy would share them. To share the function, borrow it: `var again: &()int = &next;` (7.8) |
-| `var keep: ^(int)int = ^makeAdder(five);` | the function goes on the heap, kept block included (7.8) |
+| `var keepLong: ^(int)int = ^makeAdder(five);` | the function goes on the heap, kept block included (7.8) |
 
 ### What never changes
 
@@ -5272,7 +5306,7 @@ program runs. The rules themselves are in the sections named.
 | `&&`, `\|\|` or `!` on anything but `bool`s | `count && ready`, `!count` | 3.2 |
 | `==` or `!=` on two different types | `count == small` | 3.2, 3.7 |
 | `<`, `>`, `<=`, `>=` on anything but two numbers of one type or two `char`s | `0 < count < 10`, `ready < true` | 3.2 |
-| written numbers whose answer doesn't fit, and a whole number divided by a written `0` | `var over: int8 = 100 + 100;`, `count / 0`, `count % 0` | 3.2 |
+| written numbers whose answer doesn't fit, and a number divided by a written `0` or `0.0` | `var over: int8 = 100 + 100;`, `count / 0`, `count % 0`, `price / 0.0` | 3.2 |
 | a value written on the spot with nothing to take its type from | `[]`, `{}` or `null` with no place | 3.8 |
 | a type that is called | `int(3.0)`, `Point(1, 2)` | 4.1 |
 | a type that isn't written out where it decides a type | `var m: wholeTypes[1] = 5;`, `first(x.T)`, `first(t)` | 4.2, 4.3 |
