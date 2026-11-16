@@ -194,6 +194,10 @@ var a: int = 1;
 When a name ends, its value is removed from the stack. If the name owns a value on the
 heap, that value is freed too.
 
+**(adjusted)** One case ends sooner than the table says. Before the last call of a function,
+the function's names and parameters end, and so do the values made on the spot in that
+statement (10.4).
+
 ### 2.7 Writing the source **(filled in)**
 
 A program is one source file (section 11). The file is plain text in UTF-8, and its name ends
@@ -2464,6 +2468,8 @@ again~()                       // 3
 next()                         // 4
 ```
 
+(The first two lines are two ways to write one declaration. A program has one of them.)
+
 A function that keeps nothing copies as normal. A function's type doesn't say whether it keeps
 anything, so the check follows the pattern of the `const` check (8.6): the compiler rejects the
 copy where it can see the function, and otherwise the copy fails while the program runs (11.2),
@@ -2943,7 +2949,7 @@ that line, for a borrower, an ownership and a function alike:
 | Where it is stored | The check |
 |---|---|
 | in a heap value that is being made with `^v`, or in a place that the compiler can trace to a name: a heap value that the name owns, directly or through other heap values, or what a pointer made in this function leads to | the new value, or that name, counts as holding it from that line on, as if it sat in a field. So everything in this section holds for it: a name can't outlast what it holds that way, and a name that holds something of this call can't be given back or moved out of the call |
-| through a pointer that came in from outside (8.12) | the compiler can't tell how long that place lasts, so it counts the longest: the place may outlast every call. What is stored there can borrow or use only a top-level name itself, which lasts as long as the program, or what came in through a parameter of this call, as `back` does in `linkBack` (below). The caller counts what its own variables may have been given (8.13). It can't borrow or use a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function that is read from an outside variable, or a kept block: one that sits in this call's frame, or the one that the function itself keeps (7.8) |
+| through a pointer that came in from outside, or that was read from behind a pointer (8.12) | the compiler can't tell how long that place lasts, so it counts the longest: the place may outlast every call. What is stored there can borrow or use only a top-level name itself, which lasts as long as the program, or what came in through a parameter of this call, as `back` does in `linkBack` (below). The caller counts what its own variables may have been given (8.13). It can't borrow or use a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function that is read from an outside variable, or a kept block: one that sits in this call's frame, or the one that the function itself keeps (7.8) |
 
 ```go
 const boxed: ()^&int = (){
@@ -3453,6 +3459,9 @@ A heap value is freed at the moment it has no owner left:
 A heap value is **not** freed when it's moved (it has a new owner), and never by a
 borrower.
 
+**(adjusted)** A heap value whose owner ends before the last call of a function is freed
+there, and not at the `}` (10.4).
+
 ### 8.12 Nothing is freed while something still points at it
 
 Rule 8.5 stops a borrower from outliving the variable it borrows from. A value on the heap
@@ -3700,18 +3709,20 @@ caller can't see kept parameters at all, and it can call the functions that shar
 order. This check is made where those functions are written, so they are safe in every order.
 
 **(filled in) Owners the compiler can't tell apart.** The compiler sees which owner a pointer
-leads to when the pointer was made in the function that uses it. A pointer that *came in from
-outside* is different: a parameter, a pointer that is read out of a value that came in or from
-behind another pointer, and a pointer in an outside variable. The compiler knows its type, and
-not where it points. `f(&p, &p)` hands one owner to two parameters. So the rule counts the
-worst case:
+leads to when the pointer was made in the function that uses it, and is held in a name. A
+pointer that *came in from outside* is different: a parameter, a pointer that is read out of a
+value that came in, and a pointer in an outside variable. So is a pointer that is *read from
+behind a pointer*: a borrower or an ownership that lies in a heap value, or behind a borrower.
+The compiler knows the type of such a pointer, and not where it points. `f(&p, &p)` hands one
+owner to two parameters. So the rule counts the worst case:
 
 | These two owners | Count as |
 |---|---|
 | one that is reached through a pointer from outside, and one of the same type that is reached through another pointer from outside, or that is an outside variable or lies inside one | one owner: a change to either is a change to both |
+| one that is reached through a pointer read from behind a pointer, and any other owner of the same type, also one that the function names itself | one owner: any line may have stored that pointer there (8.5) |
 | two elements of one array, or two entries of one map | one owner, unless both are picked by written values (3.2) that differ |
 | two owners of different types | two owners. Inside a generic function, a type with a `T` in it counts as the same type as every type |
-| two owners that are reached along different ways from one pointer, when the ways differ by more than an index or a key | two owners: `o~` and `o~~.next` in 8.15 are never the same. Ways that differ only by an index or a key follow the second row |
+| two owners that are reached along different ways from one pointer, when the ways go only through owners and their fields, and differ by more than an index or a key | two owners: `o~` and `o~~.next` in 8.15 are never the same. Ways that differ only by an index or a key follow the third row, and a way that follows a borrower or an ownership held in the value follows the second |
 
 ```go
 const renewBoth: (&^int, &^int)int = (var a: &^int, var c: &^int){
@@ -3734,6 +3745,16 @@ r~
 ```
 
 (`p` and `q` are two `var`s of type `^int`, and `flag` is a `bool`.)
+
+**(filled in)** A pointer that is read from behind a pointer can lead back to an owner that the
+function names itself, so the second row counts that owner too:
+
+```go
+var box: ^&^int = ^&p;               // fine: box counts as holding a borrower of p (8.5)
+var r: &int = &p~;                   // r followed p
+box~~ = null;                        // ERROR: r is used below, and box~ may borrow p, so this may free what p owns
+r~
+```
 
 **(filled in) Owners that a caller can't name.** A function that is called can change or take
 an owner that the line of the call has no name for: a parameter that the function keeps, a name
@@ -3798,7 +3819,9 @@ the call has to give. So the move happens at the call itself:
 An ownership held in a variable is given the same way: `take(h)`, where `h` is an
 `@^[1000]int`. A value made on the spot is handed straight over with `@` in front:
 `take(@makeBig(1));` (8.9). A parameter is never declared with the type `@T` itself, so a
-function that is given an ownership can't leave the value where it was.
+function that is given an ownership can't leave the value where it was. **(adjusted)** That is
+about an ownership that is the whole argument. One that sits inside another value, as in
+`f([@x, @y])`, is lent and not taken (below).
 
 A value made on the spot can be lent as well, with `&` in front: `look(&makeBig(1)~);`. The
 parameter borrows the new array for the call, nothing takes it over, and it is freed at the
@@ -4462,8 +4485,9 @@ var bad: Counter = {
 };
 ```
 
-**(filled in)** A function in a struct value that is written inside a function can also use
-that function's names, like any function made there (7.8).
+**(adjusted)** A function in a struct value that is written inside a function can also use
+that function's names, like any function made there (7.8). "What any function sees" includes
+them.
 
 **Copying a struct copies its fields, nothing more.** A function field is copied like any
 function value, under the rule that copying a function that keeps parameters is an error (7.8):
@@ -4769,7 +4793,8 @@ every such check. All of them fail in the same way:
 2. **One line goes to the error output,** saying what failed and where. Its form is
    `error: FILE:LINE: REASON`. `FILE` is the name of the source file, with its `.my` and
    without the folders in front of it. `LINE` is the line, counted from 1, of the operator,
-   bracket or call that failed. For a failed assignment it is the line of the `=`,
+   bracket or call that failed. For a failed assignment or declaration it is the line of the
+   `=`, for a map value with a key written twice it is the line of the second of the two keys,
    and for the status of `main` it is the line of the `return` that gave the number:
 
    ```
@@ -5373,7 +5398,7 @@ check these rules:
 | a read-only borrower, or a value with one inside it, goes only into a `const`, a `const` parameter or back as a result, wherever the compiler sees both ends | 8.6 |
 | nothing read-only is wrapped into an `any`. Inside a generic function, a `T` read from a place that can't be assigned goes only into a `const`, a `const` parameter or back as a result | 8.6 |
 | what comes in through a parameter that holds a borrower, an ownership or a function isn't put in a variable that outlasts the call | 8.5 |
-| through a pointer that came in from outside, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or a kept block. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
+| through a pointer that came in from outside, or that was read from behind a pointer, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or a kept block. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
 | a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
 | both sides of a move are ownerships, and the one on the right comes from a `var` owner, not from a borrower | 8.9 |
@@ -5383,7 +5408,7 @@ check these rules:
 | a call doesn't change or take an owner that a pointer in use followed: an argument, the function that is called, or a pointer used below. A function that is handed over counts as called, an ownership inside an argument as lent, and a function that came back as lent the same things again | 8.12, 8.13 |
 | a call counts as doing what its function does to its outside variables: changing them, giving a pointer among them a new target at the call line, and using one. A call through a variable counts what every function of that type does | 8.12 |
 | a pointer in an outside variable is still in use when a body ends. At the first line of a body that doesn't declare it, it counts as having followed every owner that any line of the program has it follow | 8.12 |
-| an owner reached through a pointer from outside counts as the same owner as every owner of its type that is reached through another such pointer, or that is an outside variable. An owner that a called function changes and the caller can't name counts as one reached through a pointer from outside. Two elements of one array, or two entries of one map, count as one owner unless written values tell them apart | 8.12 |
+| an owner reached through a pointer from outside counts as the same owner as every owner of its type that is reached through another such pointer, or that is an outside variable or lies inside one. An owner reached through a pointer that was read from behind a pointer counts as the same owner as every owner of its type, also one that the function names. An owner that a called function changes and the caller can't name counts as one reached through a pointer from outside. Two elements of one array, or two entries of one map, count as one owner unless written values tell them apart, and a pointer read out of an array, a pair or a map of pointers with an index or a key that isn't a written value counts as each pointer held there. Two owners reached from one pointer along ways that go only through owners and their fields, and differ by more than an index or a key, are two owners. Inside a generic function, a type with a `T` in it counts as the same type as every type | 8.12 |
 | an owner reached through a `var` borrower that a call gave back counts as what the call was lent, or any owner inside it | 8.13 |
 | after a call, a variable that was lent with `&` where it may be changed, and that holds a borrower, an ownership or a function, doesn't outlast the other arguments, and counts as having followed what they followed | 8.13 |
 
