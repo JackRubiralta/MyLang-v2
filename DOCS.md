@@ -12,7 +12,7 @@ MyLang is a **declarative, explicit, first-class** language.
   repeating is a function calling itself. A choice is a lookup.
 
 This file documents the language: values, names, types, arrays, maps, functions, ownership
-(the heap, borrowing and moving), structs, choosing and repeating, and files.
+(the heap, borrowing and moving), structs, choosing and repeating, and the program as a whole.
 
 Why each rule is the way it is is in `DECISIONS.md`.
 
@@ -29,7 +29,7 @@ Why each rule is the way it is is in `DECISIONS.md`.
 - **(filled in)** Each example is its own piece of code. It can use names that other examples
   declare: usually the nearest one above it, and otherwise a comment or a note beside the
   example says where the name comes from. It can also declare a name again that an earlier
-  example declared. In one real file that second declaration would be an error (2.8). A line
+  example declared. In a real program that second declaration would be an error (2.8). A line
   marked `// ERROR` declares nothing, and neither does code that is introduced as a picture of
   what a value is underneath.
 - **(filled in)** marks a rule that Claude added, and **(adjusted)** marks one that Claude
@@ -49,7 +49,7 @@ Why each rule is the way it is is in `DECISIONS.md`.
 8. [Ownership: plain, heap and borrowed values](#8-ownership-plain-heap-and-borrowed-values)
 9. [Structs](#9-structs)
 10. [Choosing and repeating](#10-choosing-and-repeating)
-11. [Files and packages](#11-files-and-packages)
+11. [A program is one file](#11-a-program-is-one-file)
 12. [Putting it together](#12-putting-it-together)
 13. [Quick reference](#13-quick-reference)
 
@@ -194,9 +194,10 @@ heap, that value is freed too.
 
 ### 2.7 Writing the source **(filled in)**
 
-A source file is plain text in UTF-8, and its file name ends in `.my`.
+A program is one source file (section 11). The file is plain text in UTF-8, and its name ends
+in `.my`.
 
-**Characters.** Outside comments and text, a file uses only the letters, digits and symbols
+**Characters.** Outside comments and text, the file uses only the letters, digits and symbols
 of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.10)
 can hold any character.
 
@@ -215,23 +216,21 @@ count   total2   _spare   makePoint   Point      // five names
 2total                                           // ERROR: a name can't start with a digit
 ```
 
-**Reserved words.** Eight words belong to the language and are never names:
+**Reserved words.** Seven words belong to the language and are never names:
 
 ```
-const   var   return   void   true   false   null   package
+const   var   return   void   true   false   null
 ```
-
-`package` starts the type of a file, `package("geom")` (11.2).
 
 **Built-in names.** The built-in types and functions are ordinary names that are already
-declared when a file starts:
+declared when the file starts:
 
 | Built-in names | What they are |
 |---|---|
 | `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64` `float32` `float64` `int` `uint` `float` `bool` `char` `type` `any` | types (3.1) |
-| `convert` `wrap` `unwrap` `import` `print` `read` `join` `exit` | functions (13) |
+| `convert` `wrap` `unwrap` `print` `read` `join` `exit` | functions (13) |
 
-A name is declared only once (2.8), so a file can't declare any of them again:
+A name is declared only once (2.8), so the file can't declare any of them again:
 
 ```go
 const int: type = int8;        // ERROR: int is already declared
@@ -280,8 +279,8 @@ const square: (int)int = (const n: int){ return n * n; };          // fine: trip
 ```
 
 Two names can be spelled the same when neither can be seen from the other, like the two
-`n`s above. A name behind a `.` (`p.x`, `geom.area`, `a.length`) is found through the value in
-front of the `.`, so it never clashes with a name declared somewhere else.
+`n`s above. A name behind a `.` (`p.x`, `a.length`) is found through the value in front of the
+`.`, so it never clashes with a name declared somewhere else.
 
 **A name is used only below its declaration.** A name that is used but never declared is an
 error. The value of a declaration uses names declared above it. There are four exceptions, and
@@ -289,24 +288,22 @@ each is safe because nothing runs too early:
 
 | Exception | Why it is safe |
 |---|---|
-| a function's body can use any top-level name of its own file (11.4) | the body runs only when the function is called |
+| a function's body can use any top-level name (11.1) | the body runs only when the function is called |
 | a function's body can use the function's own name (7.8) | the same reason |
-| a type name declared at the top level can be used anywhere in its file, also in its own declaration (4.2, 4.6) | a type is known before the program runs, so nothing runs at all |
+| a type name declared at the top level can be used anywhere in the file, also in its own declaration (4.2, 4.6) | a type is known before the program runs, so nothing runs at all |
 | a type name declared inside a function can be used in its own declaration (4.6) | the same reason |
 
-A top-level name can be seen in every function body of its file, wherever it is declared. So
-no other name in that file can be spelled like it: no name in a block or in a function, no
-parameter, and no type parameter in a function type.
+A top-level name can be seen in every function body, wherever it is declared. So no other
+name in the file can be spelled like it: no name in a block or in a function, no parameter,
+and no type parameter in a function type.
 
 **How a name is found.** The compiler looks for a name in the block where it is used, then
 in each block around it, out to the top level of the file, and last among the built-in names.
-The rules above mean it finds at most one. It never looks in another file: a name from
-another file is always reached through a package, as in `geom.area` (11.2).
+The rules above mean it finds at most one.
 
 ### 2.9 Statements **(filled in)**
 
-A block holds statements, and so does the top level of the file you run
-(11.4). There are five kinds:
+A block holds statements, and so does the top level of the file (11.1). There are five kinds:
 
 | Statement | Form | Example |
 |---|---|---|
@@ -330,17 +327,13 @@ written only inside a function body.
 | an element | `scores[0] = 15;` | the array or the pair can be assigned (5.2, 5.8) |
 | a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
 | a field | `p.x = 5;` | the struct can be assigned (9.3) |
-| a name of a package | `geom.made = 1;` | the name is a `var` in its file (11.3) |
 | what a pointer leads to | `p~ = 6;` | `p` is a `var` heap owner, a `var` borrower or a `var` ownership (8.3, 8.6, 8.9) |
 | an ownership | `@q = @p;` | `q` can be assigned. This is a move (8.9) |
 
 The forms combine, read from left to right: `list~.next~.value = 3;`, `table[0][1] = 12;`,
 `both[0]~ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
 changed through that name.** So the left side of an assignment starts at a `var` name, or it
-goes through a pointer that may be changed through (8.6). A name behind a package's `.` is a
-name in its own right: a top-level name of a file, with a `const` or `var` of its own. The
-package in front only says which file it is in (11.5). So `geom.made` is a place when `made` is
-a `var` in its file, whatever word the package was declared with (11.3).
+goes through a pointer that may be changed through (8.6).
 
 ```go
 second(&list~)~.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
@@ -423,8 +416,7 @@ These are ordinary names for those types, the same as naming a type yourself (4.
 `int` and an `int64` are the same type.
 
 Two more built-in types have their own sections: `type`, the type of a type (4.1), and `any`,
-a value of any type (4.5). A file that is used from another file has a type of its own, written
-`package("geom")` (11.2).
+a value of any type (4.5).
 
 ### 3.2 Writing basic values
 
@@ -566,7 +558,7 @@ var off: uint8 = -level;       // ERROR: level is a uint8, and a uint8 is never 
 
 **(filled in) A result always fits its type.** `+`, `-`, `*`, `/`, `%` and a `-` in front
 give a number of the type that went in. When the true answer doesn't fit in that type, the
-program fails while it runs (11.7), the same as a conversion that doesn't fit (4.4). A number
+program fails while it runs (11.2), the same as a conversion that doesn't fit (4.4). A number
 never wraps around, and it never turns into another type.
 
 | Line | Fails while running when |
@@ -739,7 +731,6 @@ A type is a basic type, or a modifier followed by a type. A basic type is a buil
 | function that returns nothing | `(P1, P2)void` | `(int)void` | takes an int, returns nothing |
 | function that takes a type | `(T: type)R` | `(T: type)([]T)T` | takes a type, called `T` in the rest of the type, and returns a function for arrays of it (4.3) |
 | struct | `{a: T1, b: T2}` | `{debug: bool, size: int}` | a struct with a bool field `debug` and an int field `size` |
-| package | `package("file")` | `package("geom")` | the type of the file `geom` (11.2) |
 | on the heap | `^T` | `^int` | an int on the heap, owned by this holder (section 8) |
 | borrowed | `&T` | `&int` | an int that another holder owns (section 8) |
 | ownership | `@T` | `@int` | the ownership of an int variable (8.9) |
@@ -810,7 +801,6 @@ Type      = BasicType
           | "^" Type                          (a value on the heap, section 8)
           | "&" Type                          (a borrowed value, section 8)
           | "@" Type                          (the ownership of a variable, section 8)
-          | "package" "(" TEXT ")"            (the type of a file, 11.2)
           | "(" [ TypeList ] ")" Return       (function: parameter types, then the return type)
 Return    = Type | "void"                     (void = returns nothing)
 TypeList  = TypeItem { "," TypeItem }
@@ -826,18 +816,16 @@ A function type always ends with its return type. A function that returns nothin
 with `void`: `(int)void` takes an int and returns nothing, and `()void` takes nothing and
 returns nothing.
 
-**(filled in)** Three more lines complete it:
+**(filled in)** Two more lines complete it:
 
 ```
-BasicType = NAME { "." NAME }                 (a type's name, or one reached through a package: geom.Point)
-TEXT      = a text written in the code (5.10)
+BasicType = NAME                              (the name of a type, 4.2)
 NUMBER    = a whole number written in the code (3.2)
 ```
 
 **(filled in)** A type is written with these forms wherever a type is expected: after the `:`
 of a declaration, a parameter or a field, and inside another type. A `NAME` here is a type name
-(4.2). A type reached through a package, `geom.Point`, is the type that `Point` names in the
-file of the package's type (11.3). The full grammar of the language is in Appendix A.
+(4.2). The full grammar of the language is in Appendix A.
 
 **(filled in)** Two types are the same type when they are the same once every type name is
 replaced by what it names (4.1). The names of a struct's fields are part of its type, and so is
@@ -868,7 +856,6 @@ value it was copied from, and that one rule says what "equal" means for every ty
 | a function | its two addresses (7.7) | they are the same code, and they keep the same place |
 | a `type` | the type | they are the same type |
 | an `any` | the type inside and the value inside | the types inside are the same, and the values are equal |
-| a `package` | the address of its file (11.5) | they hold the same file |
 
 `!=` is the opposite of `==`. Comparing copies nothing and changes nothing.
 
@@ -932,8 +919,6 @@ to, returned as, held in or used as, or the other side of an operator (3.2).
 | `a[i:j]` | `a` is an `[n]T` or `[]T`. `i` and `j` are `int`s, and either can be left out | `[]T`, a copy. With `&` in front: `&[]T`, a slice (5.9) |
 | `a.length` | `a` is an array or a map | `int` (5.5, 6.3) |
 | `s.x` | `s` is a struct, and `x` is one of the fields of its type | the type of that field (9.1) |
-| `g.x` | `g` has a package type, and `x` is a top-level name of that file | the type of that name (11.3) |
-| `import("geom")` | the text is written out, and leads to a file | `package("geom")` (11.2) |
 | `x.T` | `x` is an `any` | `type` (4.5) |
 | `f(a, b)` | `f` is a `(P1, P2)R`, `a` is a `P1` and `b` is a `P2` | `R` (7.2) |
 | `^v` | `v` is a `T` | `^T` (8.3) |
@@ -1059,11 +1044,10 @@ x.T == t                       // fine: t holds a type, and so does x.T
 first(t)                       // ERROR: first's type uses the type it is handed, so write it out (4.3)
 ```
 
-**(filled in) A top-level type name can be used anywhere in its file,** above its declaration
-too (2.8). The compiler collects the top-level type names of a file before it reads anything
-else, so it always knows which names are types (3.2). It does this for the imported files
-first, and it goes on until it finds no new one, because a type name can be declared with
-another type name.
+**(filled in) A top-level type name can be used anywhere in the file,** above its declaration
+too (2.8). The compiler collects the top-level type names of the file before it reads anything
+else, so it always knows which names are types (3.2). It goes on until it finds no new one,
+because a type name can be declared with another type name.
 
 **(filled in) A type never ends too soon.** Every type is known before the program runs, and a
 `type` value is the address of something that is part of the program itself (4.3). So a type is
@@ -1254,9 +1238,8 @@ convert(int, float)(3)                 // 3.0
 var whole: int = convert(float, int)(2.0);
 ```
 
-`convert(float, int)` is a function of type `(float)int`. Like every built-in except `import`
-(11.2) **(adjusted)**, it's an ordinary first-class value, so it can be named, stored and
-passed like any other function:
+`convert(float, int)` is a function of type `(float)int`. Like every built-in, it's an
+ordinary first-class value, so it can be named, stored and passed like any other function:
 
 ```go
 const toInt: (float)int = convert(float, int);
@@ -1304,7 +1287,7 @@ convert(char, []char)                  // ERROR: a char is no number: write ['a'
 `(A: type, B: type)(A)B` (4.3). That type promises a conversion for every pair of types, and
 `convert` has one only for the pairs above. Where the compiler sees that the call runs
 `convert` (7.2), it rejects any other pair, as above. Where `convert` is reached through a
-variable, such a pair fails while the program runs (11.7):
+variable, such a pair fails while the program runs (11.2):
 
 ```go
 var change: (A: type, B: type)(A)B = convert;
@@ -1364,7 +1347,7 @@ inside (see "Underneath" below), and a value on the stack keeps its size (2.6). 
 rule for an unsized array, which keeps its first length (5.3), and it is checked the same way.
 The compiler rejects the line when it sees both types: the name was declared with a call of
 `wrap` that it sees (7.2), such as `wrap(int)(3)`, and the new value is such a call too. In
-every other case the check is made while the program runs (11.7). The value inside follows its
+every other case the check is made while the program runs (11.2). The value inside follows its
 own rule as well: an `any` that holds a `[]int` of length 3 can only be given a `[]int` of
 length 3.
 
@@ -1460,9 +1443,8 @@ Both let one function work with many types:
 
 ### 4.6 A type that names itself **(filled in)**
 
-A type declared at the top level of a file can use any top-level type of that
-file, wherever it is declared, itself included (2.8). That is how a list node names the next
-node (8.14):
+A type declared at the top level can use any top-level type, wherever it is declared, itself
+included (2.8). That is how a list node names the next node (8.14):
 
 ```go
 const Node: type = {value: int, next: ^Node};   // fine: the next node is behind a ^
@@ -1535,12 +1517,10 @@ An element can be changed when the array is a `var`.
 **(filled in) An index is an `int`, and it is checked.** The first element is at 0 and the
 last is at `length - 1`. The compiler knows the length of an array when the length is in its
 type, and also when the array is a name that was declared with an array value written out,
-because an unsized array keeps its first length (5.3). A name that is reached through a package
-whose file the compiler sees (8.12) counts like the name itself, here and for the keys of a map
-(6.2, 6.3) and the type inside an `any` (4.5). When it knows the length and the index is a
-written value (3.2), the compiler checks the index. It also rejects a written index below 0,
-whatever the length. Otherwise the check is made while the program runs, and an index out of
-range fails there (11.7):
+because an unsized array keeps its first length (5.3). When it knows the length and the index
+is a written value (3.2), the compiler checks the index. It also rejects a written index below
+0, whatever the length. Otherwise the check is made while the program runs, and an index out
+of range fails there (11.2):
 
 ```go
 primes[3]              // ERROR: primes has length 3, so its last index is 2
@@ -1573,7 +1553,7 @@ firstOf([1, 2, 3, 4])  // 1
 **(filled in) When a length is only known while running, the check is made while running.**
 The compiler rejects `a = [1, 2, 4, 5];` above because it knows both lengths: it knows the
 length of `a` (5.2), and the new value is an array value written out. In every other case,
-giving an unsized array a value of another length fails while the program runs (11.7):
+giving an unsized array a value of another length fails while the program runs (11.2):
 
 ```go
 var part: []int = a[0:2];      // length 2
@@ -1813,7 +1793,7 @@ const wrong: [3]char = "Jack";         // ERROR: "Jack" has 4 chars
 | to compare two texts | `name == "Jack"` (3.7) |
 | to compare two `char`s | `name[0] < 'a'` (3.2) |
 | to join two texts | `join(char)(name, "!")` (5.11) |
-| to print it | `print(name);` (11.8) |
+| to print it | `print(name);` (11.3) |
 | a number as text, and back | `convert(int, []char)(42)`, `convert([]char, int)("42")` |
 
 **Numbers as text.** `convert` (4.4) goes between a number or a `bool` and the text type
@@ -1910,7 +1890,7 @@ as a number.
 
 **(filled in) The keys of a map value all differ.** The compiler checks keys that are written
 values (3.2). Keys that are worked out while the program runs are checked then, and two equal
-keys fail there (11.7):
+keys fail there (11.2):
 
 ```go
 const doubled: {int}bool = {1: true, 1: false};    // ERROR: the key 1 is written twice
@@ -1935,7 +1915,7 @@ An entry can be changed when the map is a `var`.
 declared with a map value whose keys are all written values (3.2), the compiler knows them,
 and it rejects a lookup with a written value that isn't one of them. In every other case the
 check is made while the program runs, and a key that isn't in the map fails there (10.2,
-11.7):
+11.2):
 
 ```go
 seen[7]                // ERROR: 7 isn't a key of seen
@@ -1957,7 +1937,7 @@ seen.length            // 2: the number of keys
 **(filled in) A whole new value needs the same keys.** A `var` map can be given a new map
 value, and that value has to have exactly the keys the map already has, in any order. The
 compiler checks it when it knows the map's keys (6.2) and the new value is a map value whose
-keys are all written values. Otherwise the check is made while the program runs (11.7). It is
+keys are all written values. Otherwise the check is made while the program runs (11.2). It is
 the rule for an unsized array, which keeps its first length (5.3). The map keeps its keys
 where they are: each new value goes to the entry with its key, so a borrower of an entry
 still leads to the same key.
@@ -2068,7 +2048,7 @@ add(1, true)           // ERROR: the second argument is a bool, and add takes an
 ```
 
 **(filled in) Which function a call runs.** Several rules depend on whether the compiler can
-tell which function a call runs (4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.3, 11.4).
+tell which function a call runs (4.3, 4.4, 4.5, 7.8, 8.5, 8.6, 8.12, 9.3, 11.1).
 Where the docs say that a function is *called by its own name*, they mean one of these cases,
 in which the compiler sees the function:
 
@@ -2079,15 +2059,14 @@ in which the compiler sees the function:
 | a built-in, or what a built-in gives back, as in `convert(float, int)(x)` and `wrap(int)(3)` | what the built-in does |
 | what a call from this table gives back, when the function that is called gives back a function value written in its body, directly or through a `const` of the body that was declared with it: `first(int)(xs)`, `makeAdder(1)(2)` | that function value |
 | the name of a `const` that was declared with one of the rows above, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);`, `const firstInt: ([]int)int = first(int);` | the same function |
-| a name from these rows reached through an `import` that is written out, or through a `const` package that was declared with one: `import("geom").area(2.0)`, `geom.area(2.0)` (11.2) | that function |
 | a function field of a `const` struct that was declared with its block written out, when the field's value is a function value written out (9.3) | that function |
 | a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the rows above: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
 
 **(filled in)** In every other case the call goes *through a variable*: a `var`, a parameter,
 a field, any other result of a call, or a `const` that was declared in any other way. Then
 the compiler knows only the type, and a rule that needs more counts the worst case. The call
-could run any function of that type, written in any file of the program. So 4.3, 8.12 and
-11.4 read all of them, and count the worst that any of them does. A function whose type is
+could run any function of that type, anywhere in the program. So 4.3, 8.12 and
+11.1 read all of them, and count the worst that any of them does. A function whose type is
 written with a type parameter counts for every type that the parameter is handed (4.3).
 
 **(filled in)** One rule doesn't count the worst case: the rule that a `const` never changes
@@ -2276,11 +2255,11 @@ code (below) says how big its kept block is.
 | was given back by a call and keeps parameters of it (7.8) | its kept block |
 | was given back by a call and keeps one borrowed parameter, and nothing else | the address that was lent. It needs no block |
 
-**(filled in)** A top-level name needs no address. There is one instance of each file (11.2),
-so each of its top-level names has one place, and the whole program knows where it is (11.5).
-A function that uses only top-level names keeps nothing, and it can go wherever a function
-value can. A name of a block written at the top level of a file is found in the same way. A
-function that uses one keeps nothing either, but it can't outlive the block (7.8).
+**(filled in)** A top-level name needs no address. It has one place for the whole program, and
+every function knows where that is (11.1). A function that uses only top-level names keeps
+nothing, and it can go wherever a function value can. A name of a block written at the top
+level of the file is found in the same way. A function that uses one keeps nothing either, but
+it can't outlive the block (7.8).
 
 **(filled in)** A frame or a kept block also holds the address of the frame or the block
 around it, when the function uses names from there. So a function inside a function reaches
@@ -2444,7 +2423,7 @@ next()                         // 4
 
 A function that keeps nothing copies as normal. A function's type doesn't say whether it keeps
 anything, so the check follows the pattern of the `const` check (8.6): the compiler rejects the
-copy where it can see the function, and otherwise the copy fails while the program runs (11.7),
+copy where it can see the function, and otherwise the copy fails while the program runs (11.2),
 using the note beside the function's code (7.7).
 
 **(filled in)** The details of that check:
@@ -2691,7 +2670,7 @@ A value written on the spot, like `^5` or `^[1, 2, 3]`, has no original, so it's
 built on the heap.
 
 **(filled in)** When the heap has no room left for a new value, the program fails while it
-runs (11.7). That can happen at a `^v`, and where `=` copies a heap owner (8.8).
+runs (11.2). That can happen at a `^v`, and where `=` copies a heap owner (8.8).
 
 A heap value lives as long as its owner. When the owner ends, the value is freed:
 
@@ -2848,10 +2827,8 @@ An ownership (8.9) holds a variable's address too, so the same rule applies to i
 **(filled in) A value that holds a borrower follows the rule for it.** A value *holds* a
 borrower, an ownership or a function when it is one, or has one in a field, an element or an
 entry, at any depth. An `any` and a `T` (4.3) count as holding all three, because the compiler
-can't see inside them. A package holds none of them: it is the address of a file, and a file
-lasts as long as the program (11.6). What lies behind a pointer doesn't count: the compiler
-can't follow it there (8.17). The line that puts something there is checked, as said further
-down.
+can't see inside them. What lies behind a pointer doesn't count: the compiler can't follow it
+there (8.17). The line that puts something there is checked, as said further down.
 
 **(filled in)** A value that holds a borrower, an ownership or a function can't outlive what
 that part borrows or uses. It is the field-by-field rule again (8.8): the lifetime rules for a
@@ -2999,7 +2976,7 @@ through a variable it knows only the type, and the type doesn't say whether a `&
 read or changed (7.4). There the check is made at the call, while the program runs. Beside the
 code of every function, the compiler stores a note that says which of its parameters are `var`
 (7.7). A call through a variable that lends a `const` reads the note of whichever function the
-variable holds. When the parameter is a `var` borrower, the program fails (11.7):
+variable holds. When the parameter is a `var` borrower, the program fails (11.2):
 
 ```go
 var f: (&int)void = bump;      // bump's parameter is var x: &int (8.4)
@@ -3052,18 +3029,16 @@ const joined: []&int = join(&int)([c], [c]);   // fine: join only reads, and wha
 A `const` struct that holds functions needs no rule of its own. A function reaches a struct
 only through a parameter, so the rules above protect it (9.3).
 
-A `const` function and a `const` package are addresses: the name always holds the same code, or
-the same file. A function can still change a variable outside itself (7.8), and the names of a
-file follow their own `const` or `var` (11.3). Neither is an exception to the rule that a
-`const` never changes: the `const` itself, the address, stays the same.
+A `const` function is an address: the name always holds the same code. The function can still
+change a variable outside itself (7.8). That is no exception to the rule that a `const` never
+changes: the `const` itself, the address, stays the same.
 
 **(filled in)** An ownership is given only by a place that can be assigned (8.9), so there is
 never an ownership of a `const`. A `const` ownership of a `var` can only read it, like a
 `const` borrower: changing and taking through an ownership need a `var` one. So one rule covers
-every `const`: what a `const` name reaches can't be changed through that name (2.9). Three
+every `const`: what a `const` name reaches can't be changed through that name (2.9). Two
 things are not reached through a name in this sense, as said above: what a function changes
-outside itself, the names of a file behind a package, and what a borrower inside an `any`
-borrows.
+outside itself, and what a borrower inside an `any` borrows.
 
 ### 8.7 Converting between the three
 
@@ -3106,7 +3081,6 @@ never changed.
 | a function | the same code, when the function keeps nothing. Copying a function that keeps parameters is an error (7.8) |
 | a `type` **(filled in)** | the same type |
 | an `any` **(filled in)** | its own copy of the type and the value inside |
-| a package | the address of the same file: a copy reaches the same file (11.2) |
 
 ```go
 var a: int = 3;
@@ -3385,7 +3359,7 @@ Following it fails in the same way.
 
 **(filled in)** `null` is "no address" (8.18), so it fits all three pointer types: a `^T`, an
 `&T` and an `@T`. Following any of them when it is `null` fails while the program runs
-(11.7). So does a move or a call that takes a value through an ownership that is `null`, as in
+(11.2). So does a move or a call that takes a value through an ownership that is `null`, as in
 `var @q: ^int = h;`. Nothing else can be `null`:
 
 ```go
@@ -3437,15 +3411,6 @@ be changed.** The compiler raises the error at the line that would change it.
 later in the text is later in time. **(adjusted)** Two things widen this, and both are said
 further down: a call below to a function that uses the pointer is a use of it, and a pointer in
 an outside variable is still in use when the function ends.
-
-**(filled in) A file's variable is one owner, however it is reached.** A package is not an
-owner in this rule: it is the address of a file, and a file is never freed (11.5), so giving a
-`var` package another file changes no owner. The top-level variables of a file are owners like
-any others, and there is one instance of each file. So `counter.list` and the `list` that the
-functions of the file `counter` use are the same owner, through whichever package the line
-reaches it. The compiler sees which file a package holds when the package is an `import` that
-is written out, or a `const` that was declared with one. For any other package, `g.list` counts
-as the `list` of every file of the program that has the package's type (11.3).
 
 **(filled in)** A function counts as a pointer in this rule when it keeps a place that was
 reached by following an owner, or a pointer that followed one. A function that a call gave
@@ -3581,7 +3546,7 @@ uses it without declaring it (7.8). These are all the kinds:
 
 | An outside variable of a function | Where a call of the function reaches it |
 |---|---|
-| a top-level `var` of a file: of its own file, or of another file that it reaches through a package | under the same name in that file, and through every package that holds the file (above) |
+| a top-level `var` | under the same name, from anywhere in the file |
 | a name of a function or a block around the function | under the same name, for a call written inside that function or block. A call written anywhere else can't name it (below) |
 | a parameter that the function keeps (7.8) | no caller can name it (below) |
 
@@ -3595,8 +3560,8 @@ and a call counts as doing each of them at its line:
 | uses a pointer in an outside variable | is a use of that pointer: "still used below" includes every call below to a function that uses it |
 
 **(filled in)** What the functions it calls do counts as done by the function itself. For a
-call through a variable, the compiler reads every function of that type, in every file of the
-program, and the call counts as doing all that any of them does.
+call through a variable, the compiler reads every function of that type in the program, and the
+call counts as doing all that any of them does.
 
 ```go
 var b: &int = &p~;               // b followed p
@@ -3637,8 +3602,8 @@ const runRefill: ()int = (){
 outside variable is a *shared* pointer. Every function that reaches it can follow it, whenever
 that function runs. The compiler can't see when that is: it can be after the function that
 aimed the pointer has ended, or inside a call it can't see. So two things hold for a shared
-pointer, in every function body and at the top level of every file. For this rule the top
-level of a file counts as a body, and the variables of the other files are outside it:
+pointer, in every function body and at the top level of the file. For this rule the top level
+counts as a body:
 
 - **It is still in use when the body ends,** as long as the pointer itself lives on. Whatever
   runs next may follow it.
@@ -4373,7 +4338,7 @@ settings.size = 5;          // fine: settings is a var
 ### 9.6 Functions inside a struct
 
 A function written in a struct value is an ordinary function. It sees only what any function
-sees: its own parameters, the top-level names of its file, and the parameters it keeps from the
+sees: its own parameters, the top-level names of the file, and the parameters it keeps from the
 call around it (7.8). A function that works on its struct takes the struct as a parameter, like
 any other function. There is no `this`:
 
@@ -4416,9 +4381,6 @@ other.add(&counter);                 // counter.count is now 2: add works on the
   is in use.
 - The function may even give `c~.add` a new value while it runs. The code that is running is
   part of the program, so nothing it uses is lost.
-
-A function in a file is different. It sees the file's top-level names, because there is one
-instance of each file (11.3).
 
 ### 9.7 A struct is copied, like every value
 
@@ -4568,7 +4530,7 @@ sumFrom(&scores, 0)    // 60
 
 Every call that hasn't ended holds its parameters and names on the stack
 (2.6). The stack has a limit, set by the system the program runs on. A program that calls
-deeper than the stack allows fails while it runs (11.7), like any other check. A declaration
+deeper than the stack allows fails while it runs (11.2), like any other check. A declaration
 needs room on the stack too, and it fails the same way when there is none left. `sumFrom` above
 has one call on the stack for each element, because every call still has an addition to do
 when the next call comes back.
@@ -4611,235 +4573,47 @@ left to do when a call comes back. `values` and `v` borrow the caller's array, n
 
 ---
 
-## 11. Files and packages
+## 11. A program is one file
 
-### 11.1 A file is a package
+A program is one file. Its top-level declarations are the program's names. So you can always
+tell where a name comes from: it is declared in this file, or it is a built-in name (2.7).
 
-Every file is a package. Its top-level declarations are the package's names, and a file sees
-only its own names until it imports another file. So you can always tell where a name comes
-from: it is declared in this file, or it is reached through a package this file imported.
+Inside the file, `{ }` blocks still make smaller scopes (2.6).
 
-Inside a file, `{ }` blocks still make smaller scopes (2.6).
+### 11.1 Order, where statements go, and `main`
 
-**(filled in)** The file you run is a file like every other. There is one instance of it
-(11.2), and it is set up when the program starts, after the files it imports (11.4). No file of
-the program can import it: those imports would go in a circle.
-
-### 11.2 Using another file: `import`
-
-A file brings in another file with an ordinary declaration:
-
-```go
-// the file geom
-const Point: type = {x: float, y: float};
-const area: (float)float = (const side: float){
-    return side * side;
-};
-var made: int = 0;
-```
-
-```go
-// the file main
-const geom: package("geom") = import("geom");
-
-geom.area(2.0)                         // 4.0
-const Point: type = geom.Point;        // a type from geom, named here too
-geom.made = geom.made + 1;             // made is a var in the file geom, so it can change (11.3)
-```
-
-| Piece | What it is |
-|---|---|
-| `import("geom")` | a built-in that gives the file `geom` as a value |
-| `package("geom")` | the type of that value: the type of the file `geom` |
-| `geom.area` | one of the package's names, reached with `.` like a struct field |
-
-- **`import` is a built-in, like `convert` and `wrap` (4.4, 4.5),** so the line is an ordinary
-  declaration in the one shape every name uses (2.1).
-- **A package is a pointer to its file.** There is one instance of each file, and a package
-  value is that file's address, held like a function value (11.5). Importing the same file
-  twice gives the same file both times, so both names reach the same variables (11.3).
-- **A package's type is its file.** `package("geom")` is the type of the file `geom`: its
-  top-level names, each with its `const` or `var` and its type. It is a type form, written
-  where a type goes, like `[3]int` or `?int`. It is not a call: a type is still never called
-  (4.1). The text has to be written out, the same as for `import`, so the type is known before
-  the program runs. There is no plain type `package`: every package has its own exact type.
-- **A package can be a `const` or a `var`,** like a function. `const` means that the name
-  always holds the same file. The file's own names follow their own `const` or `var` (11.3).
-- **A package value is always the address of the one instance of its file, so a copy of it
-  reaches the same file.** `var p: package("geom") = geom;` is fine: the type only ever means
-  "that file", and a file can't exist twice, so nothing is hidden. This is different from
-  copying a function with kept state (7.8), where the type `()int` doesn't say that anything
-  would be shared.
-- **The name in `import` is the file's path from the importing file's folder:**
-  `import("shapes/geom")`. A folder only organises files.
-- **A file is set up once, before any file that imports it** (11.4). Two files can't import
-  each other, directly or through other files, so that order always exists.
-
-**(filled in) What `import` takes.** `import` takes one text, and the text is written out in
-the code, so the compiler knows every file of a program before it runs:
-
-```go
-const deep: package("shapes/geom") = import("shapes/geom");          // shapes/geom.my
-const util: package("../common/util") = import("../common/util");    // ../common/util.my: .. is the folder above
-const which: package("geom") = import(fileName);                     // ERROR: the file has to be written out
-```
-
-- The text is the file's path without the `.my` (2.7). Its parts are joined with `/`. A text
-  that leads to no file is an error.
-- Two texts that lead to the same file name the same file, however they are written:
-  `"geom"` and `"shapes/../geom"`.
-- The text in a package type is read in the same way, from the folder of the file that writes
-  it.
-- A file can't import itself, at its top level or inside a function: it is the smallest
-  circle of imports.
-- An `import` that is written inside a function counts like one at the top level, for the
-  circle rule and for the order in which the files are set up (11.4). It makes no difference
-  whether that line ever runs.
-- `import("geom")` has the type `package("geom")`. So `import` has no single type of its own.
-  Unlike the other built-ins, it is always called by its own name with its text written out,
-  because a file that is only named while the program runs couldn't be checked.
-
-**(filled in) What an import does when it runs.** An import is a call, and all it does is give
-the address of its file. Nothing of the file runs at that line: every file is set up when the
-program starts, before the first line of the file you run (11.4). So an `import` can be written
-at the top level or inside a function, and it can run any number of times. Each time it gives
-the same file.
-
-### 11.3 What a file can use from another
-
-Everything at the top level of an imported file can be used: its types, functions and
-variables. A file's variables live as long as the program, and a call that changes them counts
-as changing them (8.12).
-
-**There is one instance of each file.** Every package that holds a file reaches the same
-variables, and a function of the file uses those, whoever calls it:
-
-```go
-// the file counter
-var count: int = 0;
-const bump: ()void = (){
-    count = count + 1;
-};
-```
-
-```go
-// the file you run
-const a: package("counter") = import("counter");
-const b: package("counter") = import("counter");
-
-a.bump();
-a.bump();
-a.count                // 2
-b.count                // 2: a and b hold the same file, so it is the same count
-a == b                 // true: the same file (3.7)
-
-const readCount: ()int = (){
-    const c: package("counter") = import("counter");   // an import inside a function gives the same file again
-    return c.count;
-};
-readCount()            // 2
-```
-
-**`const` on a package means the name always holds the same file.** The file's own names follow
-their own `const` or `var`. A `var` of the file can be given a new value through any package
-that holds the file, and a `const` of the file through none:
-
-```go
-a.count = 5;                   // fine: count is a var in the file counter
-a.bump = a.bump;               // ERROR: bump is a const in the file counter
-a = import("counter");         // ERROR: a is const, so it always holds the same file
-```
-
-It is the same as a `const` function that changes a variable outside itself (7.8): the function
-never changes, and neither does the package. So this is no exception to the rule that a `const`
-never changes (8.6).
-
-**Two package types are the same when the files have the same names, kinds and types.** So
-giving a `var` package another file is an ordinary type check, and a function can take a
-package of a given shape:
-
-```go
-var shapes: package("geom") = import("geom");
-shapes = import("geomFast");      // fine only if geomFast has exactly geom's names, kinds and types
-shapes.area(2.0)                  // checked from the type alone
-
-const draw: (package("geom"))void = (const g: package("geom")){ ... };
-draw(shapes);                     // fine: shapes has the type the parameter asks for
-```
-
-**A package type can be named once and reused,** as any type can:
-
-```go
-const Geom: type = package("geom");
-var fast: Geom = import("geomFast");
-```
-
-**(filled in) What "the same names, kinds and types" covers.** Two files have the same package
-type when each top-level name of the one is a top-level name of the other, with the same
-`const` or `var` and the same type (3.6). A type name also has to name the same type in both.
-The order of the declarations makes no difference, and neither do the values. So `g.name` is
-checked from the type of `g` alone: `name` has to be a top-level name of that file, it has the
-type it has there, and it can be assigned when it is a `var` there. `g.Point` is the type that
-`Point` names in the file, whichever file of that type `g` holds.
-
-**(filled in)** A package type can name any file, also one that the file doesn't import. The
-compiler reads such a file for its names, and the file is set up only when some `import` names
-it (11.4). Two files can name each other's types: only imports can't go in a circle.
-
-### 11.4 Order, where statements go, and `main`
-
-- **A function's body can use any top-level name of its own file,** wherever in the file it is
-  declared. A body runs only when the function is called, so two functions can call each
-  other. The value in a top-level declaration still uses only names declared above it.
-- **Statements that run, such as `countUp();`, go only in the file you run.** An imported file
-  holds only declarations. **(adjusted)** All that runs for an imported file is the working
-  out of those declarations' values, once, when the file is set up (below). Nothing runs at
-  the line of an `import`. So the order the program runs in is fixed before it starts: every
-  imported file is set up first, and then the file you run goes from the top.
-
-```go
-// the file geom
-area(1.0);             // ERROR: geom is imported, so it holds only declarations
-```
+- **A function's body can use any top-level name,** wherever in the file it is declared. A
+  body runs only when the function is called, so two functions can call each other. The value
+  in a top-level declaration still uses only names declared above it.
+- **Statements that run, such as `countUp();`, can stand at the top level of the file,**
+  between the declarations, as well as inside a function. The file runs from the top.
 
 **It is good practice to put what the program does in a `const main: ()int`.** It isn't required,
 and code can still go outside it:
 
 ```go
-// the file you run
-const geom: package("geom") = import("geom");
+const area: (float)float = (const side: float){
+    return side * side;
+};
 
 const main: ()int = (){
-    const size: float = geom.area(2.0);
+    const size: float = area(2.0);
     return 0;
 };
 ```
 
-When the file you run declares `main`, the program runs that file's statements from the top,
-then calls `main`. The `int` it returns is the program's result, `0` when everything went well.
+When the file declares `main`, the program runs the file's statements from the top, then calls
+`main`. The `int` it returns is the program's result, `0` when everything went well.
 
-**(filled in) When a file's names are set up.** The top-level declarations of a file are
-worked out in order, from the top down, each value when its line is reached. That is the
-file's set-up, and it happens once (11.2). A program is the file you run and every file that is
-reached from it through imports. It starts by setting up all of them:
-
-1. A file's imports are all the `import`s written in it, at its top level and inside its
-   functions (11.2).
-2. Before a file is set up, the files it imports are set up, in the order in which its text
-   first names them in an `import`. A file that is already set up is left as it is.
-3. The file you run comes last. Its set-up is its top-level lines, declarations and statements
-   together, in the order written.
+**(filled in) When the top-level names are set up.** The top-level lines of the file are
+worked out in order, from the top down, declarations and statements together. The value of a
+declaration is worked out when its line is reached:
 
 ```go
-// the file you run
-const a: package("counter") = import("counter");   // counter is set up before this file, and so is every file it imports
-const g: package("geom") = import("geom");         // geom is set up after counter, because this file names it second
-print("start\n");                                  // by the time this line runs, every file of the program is set up
+var count: int = 0;
+print("start\n");                  // runs after count is set up, and before total
+var total: int = count + 1;
 ```
-
-**(filled in)** So every file is set up before any file that imports it, and all of them before
-the first line of the file you run. A name that is reached through a package is always set up
-already.
 
 **(filled in)** Three kinds of top-level name are ready from the start, because nothing has to
 run to make them: a `const` whose value is a function value written out, a `const` whose value
@@ -4851,11 +4625,9 @@ value has to be worked out.
 **(filled in)** A function's body can use top-level names declared below it, so a call could
 reach a name that isn't set up yet. The compiler rejects that call: **a call at the top level
 can run only when every top-level name its function uses is ready, or is declared above the
-call.** The compiler reads the function for this, and the functions it calls, as in 8.12. Only
-the names of the file that is being set up can be missing: the names of every other file that
-the call can reach are set up already. A call through a variable (7.2) could run any function
-of its type, so it counts as using what every function of that type uses in the file whose top
-level is being set up.
+call.** The compiler reads the function for this, and the functions it calls, as in 8.12. A call
+through a variable (7.2) could run any function of its type, so it counts as using what every
+function of that type uses.
 
 ```go
 const readLate: ()int = (){ return late; };
@@ -4867,141 +4639,23 @@ const onTime: int = readLate();    // fine: late is set up by now
 
 **(filled in) The rules for `main`.**
 
-- `main` matters only in the file you run. If that file declares a top-level `main`, it has to
-  be a `const` of type `()int`. In an imported file `main` is an ordinary name, and nothing
-  calls it.
-- The program sets up the imported files, runs the top-level lines of the file you run from
-  the top down, and then calls `main`.
+- If the file declares a top-level `main`, it has to be a `const` of type `()int`.
+- The program runs the top-level lines of the file from the top down, and then calls `main`.
 - The `int` that `main` returns is the program's status. A status is a number from 0 to 255:
   the `int` is converted the way `convert(int, uint8)` converts it (4.4), and a number outside
-  that range fails in the same way (11.7).
+  that range fails in the same way (11.2).
 - A file with no `main` ends after its last line, with status 0.
-- `exit` ends a program before that (11.8).
+- `exit` ends a program before that (11.3).
 
-### 11.5 Underneath: a package value is an address
+**(filled in) Where the top-level names live.** The top level of the file has a frame of its
+own, like a call (7.7). It is on the stack, like every value whose type has no `^` (2.6), below
+everything that runs afterwards, and it lasts until the program ends. Every top-level `var`
+lives there, and so does every `const` that isn't ready from the start, and every kept block of
+a call made at the top level (7.8). A name that is ready from the start is part of the program
+itself. So nothing goes on the heap out of sight, and a top-level value with no size in its
+type (5.3) takes its size from its first value, like any other.
 
-A package value is the address of its file, the way a function value is the address of its
-code (7.7). There is one instance of each file: its variables are held once, for the whole
-program, and every package that holds the file leads to them. Copying a package value copies
-the address, and nothing else (8.8).
-
-So a package can be held like a function. It can be a `const` or a `var`, passed to a function
-or kept in an array, and a `var` one can be given another file of the same type, as a `var`
-function can be given another function (7.5):
-
-```go
-var shapes: package("geom") = import("geom");
-shapes.area(2.0)               // 4.0, from geom
-
-shapes = import("geomFast");   // shapes now holds the file geomFast, and the file geom is untouched
-shapes.area(2.0)               // 4.0, from geomFast
-```
-
-The new file has to have the type of `shapes`: exactly the names, kinds and types of `geom`
-(11.3). So the compiler checks every `shapes.area` from the type, and nothing is looked up
-while the program runs.
-
-**(filled in)** This is how that works underneath. For each file the compiler writes a table
-into the program, with one entry for each of the file's top-level names. A package value is the
-address of that table, so every package value has the same size, whichever file it holds. Files
-of one package type have their tables laid out alike, so `shapes.area` reads the entry at the
-same position, whichever of them `shapes` holds. The entry leads to the name's value:
-
-| The name | Where its value is |
-|---|---|
-| is ready from the start (11.4): a function value written out, a value made of written values, a type | in the program itself |
-| is worked out when the file is set up: every `var`, and every `const` that isn't ready from the start | in the file's own place |
-
-**(filled in)** The file's own place is the frame of the file's top level. It also holds the
-kept blocks of the calls made there (7.8). It is on the stack, like every value whose type has
-no `^` (2.6). The files are set up one after another when the program starts, and what each one
-works out stays where it is put, below everything that runs afterwards, until the program ends.
-So a file puts nothing on the heap out of sight, and a top-level value with no size in its type
-(5.3) takes its size from its first value, like any other.
-
-### 11.6 Ownership and borrowing work on a package like on any variable
-
-A package is a value like any other, so everything in section 8 applies to it. The value is the
-file's address (11.5), so each of these passes the address around, and the file itself stays
-where it is:
-
-| You write | What happens, the same as for any variable |
-|---|---|
-| `var p: package("geom") = geom;` | `p` gets its own copy of the address, so `p` and `geom` hold the same file (8.8) |
-| `var b: &package("geom") = &geom;` | `b` borrows the name `geom`: nothing is copied, and through `b` the name can be read, or given another file (8.4) |
-| `var h: ^package("geom") = ^geom;` | a copy of the address on the heap (8.3) |
-| `var @mine: package("geom") = @geom;` | `mine` takes `geom`'s value over. An address owns nothing on the heap, so this is the same as a copy (8.9) |
-| `take(@geom)` | a parameter that asks for an ownership takes it at the call, in the same way (8.13) |
-
-**(filled in)** The rules for `const` hold here too, for the name that holds the package. A
-`var` borrower borrows only a `var` package (8.6), and only a `var` package has an ownership to
-give (8.9). So the second, fourth and fifth lines need `geom` to be a `var`. Through a `const`
-borrower the package can be read, and it can't be given another file. None of this touches the
-file's own names: they follow their own `const` or `var` through every one of these (11.3).
-
-Everything that holds a package shares the one file. So a function that is handed a package
-changes the same variables as its caller, with no borrow:
-
-```go
-const counter: package("counter") = import("counter");
-
-const bumpTwice: (package("counter"))void = (const p: package("counter")){
-    p.bump();
-    p.bump();
-};
-
-bumpTwice(counter);
-counter.count                  // 2: p holds the same file, so it is the one count that went up
-```
-
-A borrower of a package is for the name itself. It lets a function give the caller's package
-another file:
-
-```go
-const useFast: (&package("geom"))void = (var p: &package("geom")){
-    p~ = import("geomFast");
-};
-
-var shapes: package("geom") = import("geom");
-useFast(&shapes);              // shapes now holds the file geomFast
-```
-
-The borrowing rules hold too: a borrower of a package can't outlive the name it borrows (8.5).
-
-**One element of a package is just an ordinary declaration,** with no new syntax:
-
-```go
-const area: (float)float = geom.area;                  // a function
-const Point: type = geom.Point;                        // a type
-const area2: (float)float = import("geom").area;       // in one line
-const count: &int = &import("counter").count;          // a var, live: borrow it
-var snapshot: int = import("counter").count;           // a copy of the value now
-```
-
-A file lasts the whole program, so borrowing its variable is always fine.
-
-**(filled in) A file lasts as long as the program.** A name that is reached through a package
-is a top-level name of a file, wherever the line that reaches it is written. So:
-
-- A borrower of a file's variable never outlives what it borrows, and neither does a function
-  of the file: the file outlasts both (7.8, 8.5). A function still can't give such a borrower
-  back, because a borrower that is given back comes from a parameter (8.13). A package holds
-  nothing that can end, so it can go anywhere.
-- What is put into a file's variable has to last as long as the program, as for every top-level
-  variable (8.5).
-- For rule 8.12, a file's variable is one owner, through whichever package it is reached.
-  Giving a `var` package another file frees nothing and changes no owner.
-
-```go
-var late: &int = null;
-{
-    const c: package("counter") = import("counter");
-    late = &c.count;           // fine: count is a variable of the file counter, which is always there
-}
-late~                          // the count of the file counter: c has ended, and the file has not
-```
-
-### 11.7 When a check fails while the program runs **(filled in)**
+### 11.2 When a check fails while the program runs **(filled in)**
 
 The compiler catches most mistakes. A mistake that depends on a value the
 program only has while it runs is checked at the line where it happens, and Appendix B lists
@@ -5010,18 +4664,18 @@ every such check. All of them fail in the same way:
 1. **The program stops at once.** Nothing after the failing step runs: not the rest of the
    line, and not the rest of `main`.
 2. **One line goes to the error output,** saying what failed and where. Its form is
-   `error: FILE:LINE: REASON`. `FILE` is the name of the source file with its `.my`, as its
-   path from the folder of the file you run. `LINE` is the line, counted from 1, of the
-   operator, bracket or call that failed. For a failed assignment it is the line of the `=`,
+   `error: FILE:LINE: REASON`. `FILE` is the name of the source file, with its `.my` and
+   without the folders in front of it. `LINE` is the line, counted from 1, of the operator,
+   bracket or call that failed. For a failed assignment it is the line of the `=`,
    and for the status of `main` it is the line of the `return` that gave the number:
 
    ```
-   error: geom.my:12: division by zero
+   error: sums.my:12: division by zero
    ```
 
 3. **The program ends with status 1.**
 
-- Text that was printed before the failure has been written out (11.8).
+- Text that was printed before the failure has been written out (11.3).
 - The program's heap values are not freed one by one. All of its memory goes back to the
   system together.
 - A failure can't be caught, and a program never goes on after one. A program that isn't sure
@@ -5035,7 +4689,7 @@ every such check. All of them fail in the same way:
 | an `any` holds the type | `x.T == int` (4.5) |
 | a key is in a map | compare with the keys, which the code that made the map knows (6.3) |
 
-### 11.8 Output, input and ending the program **(filled in)**
+### 11.3 Output, input and ending the program **(filled in)**
 
 Three built-in functions connect a program to the outside. Like `convert`,
 each one is an ordinary function value (4.4):
@@ -5067,17 +4721,17 @@ empty result always means the end:
 | `end`, and then the input ends without a line break | `"end"` |
 | nothing more | `""` |
 
-When the output can't be written, or the input can't be read, the program fails (11.7).
+When the output can't be written, or the input can't be read, the program fails (11.2).
 
 **`exit` ends the program at once,** with the status it is given. `exit(0);` says that
 everything went well. The status is a number from 0 to 255, by the same rule as for `main`
-(11.4). Nothing after an `exit` runs. The compiler doesn't treat `exit` as special, so a
+(11.1). Nothing after an `exit` runs. The compiler doesn't treat `exit` as special, so a
 function that returns a value still ends in a `return` (7.1).
 
 A whole program that uses all of this:
 
 ```go
-// the file you run: it asks for a number and prints the number doubled
+// the whole file: it asks for a number and prints the number doubled
 const main: ()int = (){
     print("Number: ");
     const line: []char = read();                                        // for example "21\n"
@@ -5087,7 +4741,7 @@ const main: ()int = (){
 };
 ```
 
-If what was typed isn't a whole number, the conversion fails (11.7): the program writes its
+If what was typed isn't a whole number, the conversion fails (11.2): the program writes its
 error line and ends with status 1.
 
 ---
@@ -5156,7 +4810,6 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `char` | one character |
 | `type` | the type of a type |
 | `any` | a value of any type, with its type inside |
-| `package("geom")` | the type of the file `geom` (11.2) |
 | `[n]T` | fixed array of `n` `T`s |
 | `[]T` | unsized array of `T`s: the length comes from the first value |
 | `&a[i:j]` | a slice: borrows elements `i` up to `j` of `a`, as an `&[]T` (5.9) |
@@ -5221,18 +4874,16 @@ to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 | `convert(float, int)` | `(float)int` | converts a value from the first type to the second (4.4) |
 | `wrap(int)` | `(int)any` | wraps a value in an `any` (4.5) |
 | `unwrap(int)` | `(any)int` | takes the value back out of an `any`, checked while running (4.5) |
-| `import("geom")` | `package("geom")` | gives the file `geom` as a package (11.2) |
 | `convert(int, []char)`, `convert([]char, int)` **(filled in)** | `(int)[]char`, `([]char)int` | writes a number as text, and reads one back (5.10) |
 | `join(char)` **(filled in)** | `([]char, []char)[]char` | joins two unsized arrays into a new one (5.11) |
-| `print` **(filled in)** | `([]char)void` | writes a text to the output (11.8) |
-| `read` **(filled in)** | `()[]char` | gives the next line of the input (11.8) |
-| `exit` **(filled in)** | `(int)void` | ends the program with a status (11.8) |
+| `print` **(filled in)** | `([]char)void` | writes a text to the output (11.3) |
+| `read` **(filled in)** | `()[]char` | gives the next line of the input (11.3) |
+| `exit` **(filled in)** | `(int)void` | ends the program with a status (11.3) |
 
 Built-ins are first-class values like everything else: they can be named, stored and
-passed. **(adjusted)** The one exception is `import`, which is always called by its own name
-with its text written out (11.2). **(filled in)** The built-ins that take a type have these types
-themselves: `convert` is an `(A: type, B: type)(A)B`, `wrap` a `(T: type)(T)any`, `unwrap` a
-`(T: type)(any)T` and `join` a `(T: type)([]T, []T)[]T` (4.3).
+passed. **(filled in)** The built-ins that take a type have these types themselves: `convert`
+is an `(A: type, B: type)(A)B`, `wrap` a `(T: type)(T)any`, `unwrap` a `(T: type)(any)T` and
+`join` a `(T: type)([]T, []T)[]T` (4.3).
 
 ### Values written in the code
 
@@ -5276,10 +4927,6 @@ their type from the place they are written for (3.8).
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
 | `var again: ()int = next;` where `next` keeps parameters | an error: a copy would share them. To share the function, borrow it: `var again: &()int = &next;` (7.8) |
 | `var keep: ^(int)int = ^makeAdder(five);` | the function goes on the heap, kept block included (7.8) |
-| `var p: package("geom") = geom;` | `p` holds the same file as `geom`: a package is the file's address, and a copy of it reaches the same file (11.2) |
-| `import("geom")` twice | the same file both times: there is one instance of each file (11.2) |
-| `const area: (float)float = geom.area;` | one element of a package, declared like any name (11.6) |
-| `&geom`, `^geom`, `@geom` | borrows, puts on the heap or moves the address that a package holds, like any variable (11.6) |
 
 ### What never changes
 
@@ -5292,7 +4939,6 @@ their type from the place they are written for (3.8).
 | the keys of a map | its first value |
 | what a `const` borrower borrows | its declaration |
 | the type inside an `any` **(filled in)** | its first value (4.5) |
-| the file a `const` package holds | its declaration (11.3) |
 
 ### What the compiler rejects
 
@@ -5310,11 +4956,6 @@ their type from the place they are written for (3.8).
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `?int` | a pair is looked up with a `bool` |
 | `var sizes: [bool]int = [3, 10];` | the size of an array is a number (5.1) |
-| `shapes = import("other");` where `other` doesn't have exactly the names, kinds and types of `geom` | the two package types differ, so it is an ordinary type error (11.3) |
-| `geom = import("other");` where `geom` is a `const` package | a `const` package always holds the same file (11.3) |
-| `a.bump = a.bump;` where `bump` is a `const` in its file | a name of a file follows its own `const` or `var`, whatever the package is (11.3) |
-| two files that import each other | imports can't go round in a circle: a file is set up before any file that imports it (11.2) |
-| a statement such as `countUp();` in a file another file imports | an imported file holds only declarations (11.4) |
 | `count && ready` and `!count` where `count` is an `int` | `&&`, `\|\|` and `!` work on `bool`s: write `count != 0`, `count == 0` |
 | a function of type `(int)int` whose body runs to its end without meeting a `return` | a function that returns a value has to run into a `return` (7.1) |
 | `return 5;` in a function of type `()void` | a function that returns nothing gives no value back (7.3) |
@@ -5373,13 +5014,12 @@ their type from the place they are written for (3.8).
 | `x = wrap(bool)(true);` where `x` was declared with `wrap(int)(3)` | an `any` keeps the type of its first value (4.5) |
 | `kept = b;` where `b` is a parameter and `kept` outlasts the call | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `twice(addFive, 3)` where `addFive` keeps parameters | the argument would be a copy of a function that keeps parameters (7.8) |
-| `import(fileName)` | the file is written out in the code (11.2) |
-| `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.4) |
+| `const early: int = readLate();` where `readLate` uses a name declared below | a top-level call can't reach a name that isn't set up yet (11.1) |
 
 **(filled in)** The full list for ownership is in 8.16, and every check is in Appendix B.
 
 **(adjusted)** These checks happen while the program runs. A check that fails stops the
-program (11.7), and Appendix B lists all of them with what each one prints:
+program (11.2), and Appendix B lists all of them with what each one prints:
 
 | Line | Fails when |
 |---|---|
@@ -5396,8 +5036,8 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | giving a new value to an unsized array, a map or an `any` **(filled in)** | the length, the keys or the type inside differ from the first value's (5.3, 6.3, 4.5) |
 | a map value with keys worked out while running **(filled in)** | two keys are equal (6.1) |
 | `^v`, `=` where it copies a heap owner, any call, and a declaration **(filled in)** | the heap or the stack is full (8.3, 10.4) |
-| the `int` that `main` returns, and `exit(n)` **(filled in)** | the number isn't from 0 to 255 (11.4, 11.8) |
-| `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.8) |
+| the `int` that `main` returns, and `exit(n)` **(filled in)** | the number isn't from 0 to 255 (11.1, 11.3) |
+| `print(t)`, `read()` **(filled in)** | the output can't be written, or the input can't be read (11.3) |
 | a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
 | `var g: ()int = f;`, a copy of a function that the compiler can't see | the function keeps something (7.8) |
@@ -5433,10 +5073,10 @@ Character = any character except a line break, "\" and the quote that closes it
 Spaces, tabs, line breaks and comments (`//` to the end of the line) can stand between any
 two of these (2.7).
 
-### A.2 Files and statements
+### A.2 The file and its statements
 
 ```
-File        = { Statement }                         (an imported file holds only Declarations, 11.4)
+File        = { Statement }                         (the top level of the file, 11.1)
 
 Statement   = Declaration
             | Assignment
@@ -5464,7 +5104,7 @@ Front       = ( "!" | "-" | "^" | "&" | "@" ) Front                     (step 2:
 Behind      = Simple { "~"                                              (step 1: behind a value)
                      | "[" Value "]"                                    (an index or a lookup)
                      | "[" [ Value ] ":" [ Value ] "]"                  (a slice, 5.9)
-                     | "." NAME                                         (a field, a package's name, .length, .T)
+                     | "." NAME                                         (a field, .length, .T)
                      | "(" [ Value { "," Value } ] ")"                  (a call)
                      }
 Simple      = NAME | NUMBER | FLOAT | CHAR | TEXT
@@ -5482,26 +5122,22 @@ FunctionValue = "(" [ Param { "," Param } ] ")" Block
 Param         = Kind [ "@" ] NAME ":" Type
 ```
 
-`Type`, `Return`, `TypeList`, `TypeItem`, `FieldList` and `BasicType` are in 3.6. A package
-type, `package("geom")`, is one of the forms of `Type`.
+`Type`, `Return`, `TypeList`, `TypeItem`, `FieldList` and `BasicType` are in 3.6.
 
 ### A.4 Telling the forms apart
 
 Some forms start with the same symbol. The compiler knows which names are types: it collects
-the top-level type names of a file before it reads anything else (4.2). "A type" below is a
+the top-level type names of the file before it reads anything else (4.2). "A type" below is a
 type that is written out, with type names and the forms of 3.6. With that, these rules
-always decide. Two kinds of name are settled only once the declarations of the program have
-been read: `g.Name`, which is a type when `g` has a package type and `Name` is a type name in
-that file (11.3), and a `const` parameter of type `type`, which is a type name when its
-function's type names it (4.3). A form that starts with such a name is told apart at that
-point:
+always decide. One kind of name is settled only once its function's type has been read: a
+`const` parameter of type `type`, which is a type name when its function's type names it
+(4.3). A form that starts with such a name is told apart at that point:
 
 | What is read | It is |
 |---|---|
 | `&&` where a `Front` can start, or in a type | two `&` marks (3.2) |
 | `^`, `&` or `@` in front of a type | the type `^T`, `&T` or `@T`. In front of any other value it is the mark from 8.2. So a mark never puts a type on the heap or borrows one: `^int` is always a type |
 | `[n]` or `[]` straight in front of a type | an array type. Otherwise `[ … ]` is an array value |
-| `package` followed by `(` and a text | the type of a file (3.6). `package` is a reserved word, so nothing else starts with it |
 | `(` | a call, a function value, a function type or a group, by the table in 3.2 |
 | `(` followed by `NAME :` | a function type whose first parameter is a named type parameter, as in `(T: type)([]T)T` (4.3). The parameters of a function value start with `const` or `var` |
 | `()` followed by `{` | a function type when the braces hold fields written `name: Type`, or one type: `(){x: int, y: int}`, `(){int}bool`. Otherwise a function value with no parameters (3.2) |
@@ -5533,10 +5169,10 @@ program runs. The rules themselves are in the sections named.
 | an escape that doesn't exist | `'\q'` | 3.2 |
 | a `char` that isn't exactly one byte | `'ab'`, `'é'`, `''` | 3.2 |
 | a text that isn't closed on its line | `"Jack` | 5.10 |
-| a name declared where the same name can already be seen, or spelled like a top-level name of its file | a second `var count`, a parameter or a name in a block spelled like a top-level name, `const int: type = int8;` | 2.8 |
+| a name declared where the same name can already be seen, or spelled like a top-level name | a second `var count`, a parameter or a name in a block spelled like a top-level name, `const int: type = int8;` | 2.8 |
 | a name that isn't declared | `total = 1;` with no `total` | 2.8 |
 | a name used above its declaration | `var a: int = b;` and below it `var b: int = 1;` | 2.8 |
-| a top-level call that reaches a top-level name that isn't set up yet | `const early: int = readLate();` | 11.4 |
+| a top-level call that reaches a top-level name that isn't set up yet | `const early: int = readLate();` | 11.1 |
 
 ### B.2 Declarations and statements
 
@@ -5546,12 +5182,11 @@ program runs. The rules themselves are in the sections named.
 | an assignment used as a value | `a = b = 3;` | 2.9 |
 | a left side that isn't a place | `makePoint(1, 2).x = 5;`, `3 = count;` | 2.9 |
 | assigning a length | `scores.length = 4;` | 5.5 |
-| a `return` outside a function body | `return 1;` at the top level of a file | 2.9 |
+| a `return` outside a function body | `return 1;` at the top level of the file | 2.9 |
 | a function that returns a value, with a body that runs to its end without meeting a `return` | a `(int)int` whose body is only `show(1);` | 7.1 |
 | a value given back by a function that returns nothing | `return 5;` in a `()void` | 7.3 |
 | no value given back by a function that returns one | `return;` in an `(int)int` | 7.3 |
 | a call that has no value, used as a value | `var x: int = show(5);`, `return hello();` | 3.8, 7.3 |
-| a statement that isn't a declaration, in an imported file | `area(1.0);` in `geom` | 11.4 |
 
 ### B.3 The types of values
 
@@ -5636,8 +5271,6 @@ check these rules:
 | through a pointer that came in from outside, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or a kept block. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
 | a borrower that is given back comes from a parameter, and is a `const` borrower when what it comes from is a `const` | 8.13 |
-| a top-level variable of a file counts as one owner, through whichever package it is reached. Where the compiler doesn't see which file a package holds, a name counts as that name in every file of the program that has the package's type | 8.12, 11.6 |
-| what is put into a variable of a file, through a package or not, lasts as long as the program | 8.5, 11.6 |
 | both sides of a move are ownerships, and the one on the right comes from a `var` owner, not from a borrower | 8.9 |
 | `null` is given only to a `^T`, an `&T` or an `@T` | 8.10 |
 | an owner isn't changed while a pointer made by following it is still used below, and a call to a function that uses the pointer is such a use | 8.12 |
@@ -5661,23 +5294,15 @@ check these rules:
 | a struct type that names a field twice | `{x: int, x: bool}` | 9.1 |
 | a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 4.3 |
 
-### B.8 Files and packages
+### B.8 The program
 
 | The compiler rejects | Example | Rule |
 |---|---|---|
-| an `import` whose text isn't written out, or whose file doesn't exist | `import(fileName)`, `import("missing")` | 11.2 |
-| `import` used in any way but a call by its own name | `const load: ([]char)package("geom") = import;` | 11.2 |
-| a package type whose text isn't written out, or leads to no file. `package` with nothing after it is no type | `var g: package = import("geom");` | 11.2 |
-| files that import each other, directly or through other files, and a file that imports itself. An `import` inside a function counts | `a` imports `b`, and `b` imports `a` | 11.2 |
-| a name that the file of a package's type doesn't have | `geom.volume` when the file `geom` declares no `volume` | 11.3 |
-| a package given a file of another package type | `shapes = import("other");` when `other` doesn't have exactly the names, kinds and types of `geom` | 11.3 |
-| a new value for a `const` name of a file | `a.bump = a.bump;` | 11.3 |
-| a `const` package given another file | `a = import("counter");` for a `const a` | 11.3 |
-| a top-level `main` in the file you run that isn't a `const` of type `()int` | `var main: int = 0;` | 11.4 |
+| a top-level `main` that isn't a `const` of type `()int` | `var main: int = 0;` | 11.1 |
 
 ### B.9 Checks made while the program runs
 
-Every one of these stops the program as 11.7 says. The last column is the `REASON` in the
+Every one of these stops the program as 11.2 says. The last column is the `REASON` in the
 error line.
 
 | Line | Fails when | Reason printed | Rule |
@@ -5703,9 +5328,9 @@ error line.
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
 | any call, and a declaration that needs more stack than is left | there is no room left on the stack | `out of stack` | 10.4 |
-| `print(t)` | the output can't be written | `output failed` | 11.8 |
-| `read()` | the input can't be read | `input failed` | 11.8 |
-| the `int` that `main` returns, and `exit(n)` | the number isn't from 0 to 255 | `conversion out of range` | 11.4, 11.8 |
+| `print(t)` | the output can't be written | `output failed` | 11.3 |
+| `read()` | the input can't be read | `input failed` | 11.3 |
+| the `int` that `main` returns, and `exit(n)` | the number isn't from 0 to 255 | `conversion out of range` | 11.1, 11.3 |
 
 For some of these rows the compiler rejects the line instead when it sees the values involved,
 as their sections say: the sums of 3.2, a new value for an `any` (4.5), an index (5.2), a new
