@@ -243,7 +243,7 @@ var print: int = 3;            // ERROR: print is already declared
 ```
 =   ;   :   ,   .   (   )   [   ]   {   }
 +   -   *   /   %   ==   !=   <   >   <=   >=   &&   ||   !
-^   &   @   ?   "   '   //
+^   &   @   ~   ?   "   '   //
 ```
 
 Where two symbols could be read as one longer symbol, the longer one is read: `<=` is one
@@ -331,11 +331,11 @@ written only inside a function body.
 | a map entry | `seen[4] = true;` | the map can be assigned, and the key is in it (6.3) |
 | a field | `p.x = 5;` | the struct can be assigned (9.3) |
 | a name of a package | `geom.made = 1;` | the name is a `var` in its file (11.3) |
-| what a pointer leads to | `p^ = 6;` | `p` is a `var` heap owner, a `var` borrower or a `var` ownership (8.3, 8.6, 8.9) |
+| what a pointer leads to | `p~ = 6;` | `p` is a `var` heap owner, a `var` borrower or a `var` ownership (8.3, 8.6, 8.9) |
 | an ownership | `@q = @p;` | `q` can be assigned. This is a move (8.9) |
 
-The forms combine, read from left to right: `list^.next^.value = 3;`, `table[0][1] = 12;`,
-`both[0]^ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
+The forms combine, read from left to right: `list~.next~.value = 3;`, `table[0][1] = 12;`,
+`both[0]~ = 7;`. The rule for all of them is one rule: **what a `const` name reaches can't be
 changed through that name.** So the left side of an assignment starts at a `var` name, or it
 goes through a pointer that may be changed through (8.6). A name behind a package's `.` is a
 name in its own right: a top-level name of a file, with a `const` or `var` of its own. The
@@ -343,7 +343,7 @@ package in front only says which file it is in (11.5). So `geom.made` is a place
 a `var` in its file, whatever word the package was declared with (11.3).
 
 ```go
-second(&list^)^.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
+second(&list~)~.value = 5;     // fine: the call gives a borrower, and the place is behind it (8.13)
 makePoint(1, 2).x = 5;         // ERROR: a place starts at a name, or goes through a pointer
 scores[1:3] = [0, 0];          // ERROR: scores[1:3] is a copy, not a place (5.9)
 scores.length = 4;             // ERROR: a length never changes (5.5)
@@ -648,7 +648,7 @@ const empty: bool = !count;            // ERROR: count is an int, not a bool: wr
 `||` already makes it `true`, so in those two cases the right side is skipped:
 
 ```go
-const big: bool = p != null && p^ > 10;    // p^ is followed only when p isn't null (8.10)
+const big: bool = p != null && p~ > 10;    // p~ is followed only when p isn't null (8.10)
 ```
 
 `&&` between two values is *and*. In front of a value or inside a type it is two borrow
@@ -659,7 +659,7 @@ Each row of this table goes before the rows below it:
 
 | Step | What | Examples |
 |---|---|---|
-| 1 | what is behind a value: following, indexing, calling, a field (8.2) | `p^` `a[0]` `f(1)` `pt.x` |
+| 1 | what is behind a value: following, indexing, calling, a field (8.2) | `p~` `a[0]` `f(1)` `pt.x` |
 | 2 | what is in front of a value: `!`, `-` and the marks (8.2) **(adjusted: `-` added)** | `!ready` `-count` `^v` `&x` `@x` |
 | 3 | `*` `/` `%` **(adjusted: `/` and `%` added)** | `limit * 2` `total / 2` |
 | 4 | `+` `-` | `count + 1` |
@@ -793,10 +793,10 @@ The heap and borrow marks work the same way (8.2):
 
 ```go
 // p: ^[3]int
-p^[0]                  // follow, index → an int
+p~[0]                  // follow, index → an int
 
 // ps: [3]^int
-ps[0]^                 // index, follow → an int
+ps[0]~                 // index, follow → an int
 ```
 
 ### 3.6 Grammar
@@ -882,10 +882,10 @@ a == b                         // false: the first elements differ
 var p: ^int = ^5;
 var q: ^int = p;               // q owns its own heap int, holding 5
 p == q                         // true: = copied the value, so == compares the values
-var r: &int = &p^;
-var s: &int = &q^;
+var r: &int = &p~;
+var s: &int = &q~;
 r == s                         // false: two different places
-r^ == s^                       // true: both places hold 5
+r~ == s~                       // true: both places hold 5
 
 "Jack" == "Jack"               // true: two texts with the same chars
 p == null                      // false: p owns a value
@@ -898,7 +898,7 @@ p == null                      // false: p owns a value
 - Two floats are equal when they are the same number. Every float is an ordinary number
   (3.2), so a float always equals itself. `0.0` and `-0.0` are equal.
 - Comparing two big values looks at every part, the way `=` copies every part. To ask
-  whether two borrowers lead to equal values, compare what they lead to: `r^ == s^`.
+  whether two borrowers lead to equal values, compare what they lead to: `r~ == s~`.
 
 ### 3.8 The type of every value **(filled in)**
 
@@ -939,7 +939,7 @@ to, returned as, held in or used as, or the other side of an operator (3.2).
 | `^v` | `v` is a `T` | `^T` (8.3) |
 | `&x` | `x` is a `T` | `&T` (8.4) |
 | `@x` | `x` is a `T` | `@T` (8.9) |
-| `p^` | `p` is a `^T`, an `&T` or an `@T` | `T` (8.2) |
+| `p~` | `p` is a `^T`, an `&T` or an `@T` | `T` (8.2) |
 
 Three rules go with the table:
 
@@ -1633,7 +1633,7 @@ sumCopy(scores);       // copies all of scores, like every declaration (2.4)
 sumBorrow(&scores);    // no copy: v borrows scores (8.4)
 ```
 
-Inside `sumBorrow` the array is `v^`: `v^[0]` is its first element and `v^.length` is its
+Inside `sumBorrow` the array is `v~`: `v~[0]` is its first element and `v~.length` is its
 length.
 
 ### 5.7 Underneath: an array is like a struct
@@ -1726,8 +1726,8 @@ takes an `&[]int` takes either:
 var scores: []int = [10, 20, 30, 40];
 
 const middle: &[]int = &scores[1:3];   // borrows 20 and 30
-middle^[0]                             // 20
-middle^.length                         // 2
+middle~[0]                             // 20
+middle~.length                         // 2
 
 sumBorrow(&scores[1:3])                // 50: no copy (5.6)
 ```
@@ -1746,10 +1746,10 @@ used further down (8.12) **(adjusted)**:
 
 ```go
 var front: &[]int = &scores[:2];
-front^[0] = 99;                        // scores is now [99, 20, 30, 40]
+front~[0] = 99;                        // scores is now [99, 20, 30, 40]
 ```
 
-A slice of a slice borrows from the same array: `&middle^[1:]` borrows `30`.
+A slice of a slice borrows from the same array: `&middle~[1:]` borrows `30`.
 
 **(filled in)** The two bounds are `int`s, like an index (5.2). A bound that is left out is
 0 at the start and the length at the end.
@@ -1887,8 +1887,8 @@ declaration. A list that grows is a heap owner that is given a new, longer array
 
 ```go
 var all: ^[]int = ^[1, 2];
-all = ^join(int)(all^, [3]);           // a new heap array [1, 2, 3]: the old one is freed (8.8)
-all^.length                            // 3
+all = ^join(int)(all~, [3]);           // a new heap array [1, 2, 3]: the old one is freed (8.8)
+all~.length                            // 3
 ```
 
 ---
@@ -2406,10 +2406,10 @@ var keep: (int)int = double;
 var keepLong: ^(int)int = ^makeAdder(five);    // on the heap, kept block included
 var topStep: int = 5;
 
-keepLong^(2)                       // 7: the function that keepLong owns
+keepLong~(2)                       // 7: the function that keepLong owns
 
 const adderOn: (&int)(int)int = (const step: &int){
-    return (const n: int){ return n + step^; };   // keeps step: a borrower of what the caller lends
+    return (const n: int){ return n + step~; };   // keeps step: a borrower of what the caller lends
 };
 
 const install: ()void = (){
@@ -2438,7 +2438,7 @@ value:
 ```go
 var again: ()int = next;       // ERROR: next keeps parameters, so a copy would share them
 var again: &()int = &next;     // fine: again borrows next, and both use one counter
-again^()                       // 3
+again~()                       // 3
 next()                         // 4
 ```
 
@@ -2470,7 +2470,7 @@ twice(double, 3)               // 12: double keeps nothing, so it is copied into
 twice(addFive, 3)              // ERROR: addFive keeps step, and the argument would be a copy
 twice(makeAdder(5), 3)         // 13: the new function is taken, not copied
 
-const twiceLent: (&(int)int, int)int = (const f: &(int)int, const x: int){ return f^(f^(x)); };
+const twiceLent: (&(int)int, int)int = (const f: &(int)int, const x: int){ return f~(f~(x)); };
 twiceLent(&addFive, 3)         // 13: addFive is lent
 ```
 
@@ -2481,7 +2481,7 @@ spot and handed straight over with `@` (8.9), and the kept block then owns it **
 
 ```go
 const makeLookup: (@^[3]int)(int)int = (var @data: ^[3]int){
-    return (const i: int){ return data^[i]; };    // fine: data is a parameter, so it's kept
+    return (const i: int){ return data~[i]; };    // fine: data is a parameter, so it's kept
 };
 
 var look: (int)int = makeLookup(@^[10, 20, 30]);  // the array is made on the spot and handed
@@ -2493,8 +2493,8 @@ To keep a local, use a helper whose parameter takes the value:
 ```go
 const countFrom: (@^int)()int = (var @count: ^int){
     return (){
-        count^ = count^ + 1;
-        return count^;
+        count~ = count~ + 1;
+        return count~;
     };
 };
 
@@ -2603,7 +2603,7 @@ owner decides how long the value lives. A value's type says which of three cases
 ```go
 var count: int = 3;                 // plain: count holds the 3 itself
 var big: ^[1000]int = ^[...];       // heap: big owns an array kept on the heap
-var view: &[1000]int = &big^;       // borrowed: view uses big's array, and big still owns it
+var view: &[1000]int = &big~;       // borrowed: view uses big's array, and big still owns it
 ```
 
 A type with no mark is always the first case. Nothing is left unsaid: the other two cases
@@ -2625,46 +2625,50 @@ to the variable that is allowed to take its value (8.9).
 | `^v` | in front of a value | a new value on the heap, holding a copy of `v` |
 | `&x` | in front of a variable | a borrower of `x` |
 | `@x` | in front of a variable | the ownership of `x` |
-| `p^` | behind a heap owner, a borrower or an ownership | what it leads to |
+| `p~` | behind a heap owner, a borrower or an ownership | what it leads to |
 
 What **makes** a marked value goes in front, like the mark in its type: `^5` is a `^int`,
 `&count` is an `&int`, and `@p` is an `@^int`. What **uses** one goes behind, like `a[0]` and
-`f(1)`.
+`f(1)`: `p~` follows the pointer `p`.
+
+**`~` follows a pointer.** It is the one use-mark for following any pointer: a heap owner, a
+borrower and an ownership are all followed with `~`. So `^` only means the heap: `^int` is the
+type, and `^5` makes one.
 
 What is behind a name is read first, from left to right. What is in front is applied after
 it. So a chain of marks never needs brackets:
 
 ```go
-&big^[0]               // follow big, take element 0, then borrow it
-^p^                    // follow p, then make a new heap value from what's there
-list^.next^.value      // follow, field, follow, field
-@list^.next            // follow, field, then the ownership of that field
+&big~[0]               // follow big, take element 0, then borrow it
+^p~                    // follow p, then make a new heap value from what's there
+list~.next~.value      // follow, field, follow, field
+@list~.next            // follow, field, then the ownership of that field
 ```
 
-The marks in a type and the `^`s in its use come in the same order (3.5):
+The marks in a type and the `~`s in its use come in the same order (3.5):
 
 | Type | It is | Used as |
 |---|---|---|
-| `[3]^int` | three ints, each on the heap | `a[0]^` |
-| `^[3]int` | one array of three ints on the heap | `a^[0]` |
-| `[2]&int` | two borrowers | `a[1]^` |
-| `&[2]int` | one borrower of a whole array | `a^[1]` |
-| `&^int` | a borrower of a heap owner | `a^^` |
-| `@^int` | the ownership of a heap owner | `a^^` |
+| `[3]^int` | three ints, each on the heap | `a[0]~` |
+| `^[3]int` | one array of three ints on the heap | `a~[0]` |
+| `[2]&int` | two borrowers | `a[1]~` |
+| `&[2]int` | one borrower of a whole array | `a~[1]` |
+| `&^int` | a borrower of a heap owner | `a~~` |
+| `@^int` | the ownership of a heap owner | `a~~` |
 
 ### 8.3 A value on the heap: `^T`
 
-`^` in front of a value puts a copy of it on the heap. `p^` is the value there:
+`^` in front of a value puts a copy of it on the heap. `p~` is the value there:
 
 ```go
 var p: ^int = ^5;          // 5 is an int, and ^5 is a ^int
-p^                         // 5
-p^ = 6;                    // changes the value on the heap
-var x: int = p^;           // x is a plain copy: 6
+p~                         // 5
+p~ = 6;                    // changes the value on the heap
+var x: int = p~;           // x is a plain copy: 6
 
 var big: ^[1000]int = ^[...];
-big^[3] = 7;               // follow, then index
-big^.length                // 1000
+big~[3] = 7;               // follow, then index
+big~.length                // 1000
 ```
 
 The types are strict. An `int` and a `^int` are different types, and a value never changes
@@ -2672,7 +2676,7 @@ type by itself (3.2):
 
 ```go
 var bad: ^int = 5;         // ERROR: 5 is an int, not a ^int: write ^5
-var y: int = p;            // ERROR: p is a ^int, not an int: write p^
+var y: int = p;            // ERROR: p is a ^int, not an int: write p~
 ```
 
 `^v` always makes a copy. The value it's made from stays as it is:
@@ -2680,7 +2684,7 @@ var y: int = p;            // ERROR: p is a ^int, not an int: write p^
 ```go
 var n: int = 3;
 var h: ^int = ^n;          // the heap gets its own 3
-h^ = 5;                    // n is still 3
+h~ = 5;                    // n is still 3
 ```
 
 A value written on the spot, like `^5` or `^[1, 2, 3]`, has no original, so it's simply
@@ -2694,7 +2698,7 @@ A heap value lives as long as its owner. When the owner ends, the value is freed
 ```go
 const work: (int)void = (const x: int){
     var three: ^[3]int = ^[x, x, x];
-    three^[0] = 9;
+    three~[0] = 9;
 };                         // work ends, so three ends, and its array is freed
 ```
 
@@ -2702,20 +2706,20 @@ A `const` owner keeps its value, like every `const`:
 
 ```go
 const table: ^[3]int = ^[1, 2, 3];
-table^[0] = 9;             // ERROR: table is const, so its value can't change
+table~[0] = 9;             // ERROR: table is const, so its value can't change
 ```
 
 ### 8.4 A borrowed value: `&T`
 
 `&` in front of a variable makes a borrower of it. A borrower is the same memory as what it
-borrows: `b^` reads that value, and assigning to `b^` changes it.
+borrows: `b~` reads that value, and assigning to `b~` changes it.
 
 ```go
 var count: int = 3;
 var b: &int = &count;      // b borrows count
-b^                         // 3
-b^ = 5;                    // count is now 5
-count = 8;                 // b^ is now 8 too: it is the same memory
+b~                         // 3
+b~ = 5;                    // count is now 5
+count = 8;                 // b~ is now 8 too: it is the same memory
 ```
 
 Nothing is copied, and nothing changes owner. `count` still owns its value, and `b` never
@@ -2728,15 +2732,15 @@ value has no owner and is gone at the end of its statement (2.6):
 ```go
 var scores: []int = [10, 20, 30];
 var top: &int = &scores[0];
-top^ = 99;                 // scores is now [99, 20, 30]
+top~ = 99;                 // scores is now [99, 20, 30]
 
 var seen: {int}bool = {1: true, 4: false};
 var four: &bool = &seen[4];
-four^ = true;              // seen[4] is now true
+four~ = true;              // seen[4] is now true
 
-var view: &[1000]int = &big^;      // the whole array big owns
-var first: &int = &big^[0];        // one element of it
-view^[1] = 2;                      // big's array changes
+var view: &[1000]int = &big~;      // the whole array big owns
+var first: &int = &big~[0];        // one element of it
+view~[1] = 2;                      // big's array changes
 
 var bad: &int = &3;        // ERROR: the 3 is gone after this line, and bad would still be there
 var worse: &int = count;   // ERROR: count is an int, not an &int: write &count
@@ -2749,14 +2753,14 @@ into a function.
 var left: int = 1;
 var right: int = 2;
 var both: [2]&int = [&left, &right];
-both[0]^ = 7;              // left is now 7
+both[0]~ = 7;              // left is now 7
 ```
 
 A function borrows through its parameter, and the call shows it:
 
 ```go
 const bump: (&int)void = (var x: &int){
-    x^ = x^ + 1;
+    x~ = x~ + 1;
 };
 
 var n: int = 3;
@@ -2765,9 +2769,9 @@ bump(&scores[1]);          // scores[1] goes up by 1
 bump(n);                   // ERROR: n is an int, not an &int: write &n
 
 const swap: (&int, &int)void = (var a: &int, var c: &int){
-    var t: int = a^;
-    a^ = c^;
-    c^ = t;
+    var t: int = a~;
+    a~ = c~;
+    c~ = t;
 };
 swap(&left, &right);       // the two values change places
 ```
@@ -2776,18 +2780,18 @@ swap(&left, &right);       // the two values change places
 statement (2.6), and the call is over by then, so the parameter never outlives it (8.5):
 
 ```go
-look(&makeBig(1)^);        // fine: look borrows the new array, which is freed at the end
+look(&makeBig(1)~);        // fine: look borrows the new array, which is freed at the end
                            // of this line (8.13)
 bump(&3);                  // fine: bump changes a 3 that nothing else can read
 ```
 
-`b = …` changes **what** a borrower borrows, and `b^ = …` changes **the value** it borrows:
+`b = …` changes **what** a borrower borrows, and `b~ = …` changes **the value** it borrows:
 
 ```go
 var b: &int = &left;
-b^ = 10;                   // left is now 10
+b~ = 10;                   // left is now 10
 b = &right;                // b now borrows right; left is untouched
-b^ = 20;                   // right is now 20
+b~ = 20;                   // right is now 20
 ```
 
 ### 8.5 A borrower can't outlive what it borrows
@@ -2801,7 +2805,7 @@ var x: int = 3;
 var a: &int = &x;          // fine: a and x end together, at the same }
 {
     var y: &int = &x;      // fine: y ends at this block's }, before x does
-    y^ = 4;                // x is now 4
+    y~ = 4;                // x is now 4
 }
 
 bump(&x);                  // fine: bump's parameter ends when the call ends,
@@ -2836,7 +2840,7 @@ and again each time it's pointed at something else with `b = &…`.
 A borrower of a heap value is measured against the variable that owns it:
 
 ```go
-var view: &[1000]int = &big^;      // fine: view ends no later than big
+var view: &[1000]int = &big~;      // fine: view ends no later than big
 ```
 
 An ownership (8.9) holds a variable's address too, so the same rule applies to it.
@@ -2906,13 +2910,13 @@ const boxed: ()^&int = (){
 
 const leak: (&&int)void = (var slot: &&int){
     var local: int = 5;
-    slot^ = &local;            // ERROR: slot^ lies in the caller, and local ends with this call
+    slot~ = &local;            // ERROR: slot~ lies in the caller, and local ends with this call
 };
 
 const outer: (&&int)void = (var slot: &&int){
     var local: int = 5;
     const inner: (&&int)void = (var s: &&int){
-        s^ = &local;           // ERROR: s came in from outside, and local ends with the call of outer
+        s~ = &local;           // ERROR: s came in from outside, and local ends with the call of outer
     };
     inner(slot);
 };
@@ -2947,13 +2951,13 @@ Whether a borrower can change the value it borrows depends on how the borrower i
 const limit: int = 10;
 var a: &int = &limit;      // ERROR: limit is const, so its borrower has to be const
 const c: &int = &limit;    // fine
-c^                         // 10
-c^ = 11;                   // ERROR: c is a const borrower, so it can only read
+c~                         // 10
+c~ = 11;                   // ERROR: c is a const borrower, so it can only read
 
 var count: int = 3;
 const look: &int = &count; // fine: look can read count but not change it
-count = 4;                 // look^ is now 4
-look^ = 5;                 // ERROR: look is a const borrower
+count = 4;                 // look~ is now 4
+look~ = 5;                 // ERROR: look is a const borrower
 look = &limit;             // ERROR: look is const, so it always borrows count
 ```
 
@@ -3069,23 +3073,23 @@ Going from one case to another is always written out:
 |---|---|---|---|
 | a plain value | a heap value | `^v` | yes: the heap gets its own copy |
 | a plain value | a borrower | `&x` | no |
-| a heap value | a plain value | `p^` | yes, when it's put in a plain holder |
-| a borrowed value | a plain value | `b^` | yes, when it's put in a plain holder |
-| a heap value | a borrower | `&p^` | no |
-| a borrowed value | a heap value | `^b^` | yes: a borrower can't become an owner, so this makes a new heap copy |
+| a heap value | a plain value | `p~` | yes, when it's put in a plain holder |
+| a borrowed value | a plain value | `b~` | yes, when it's put in a plain holder |
+| a heap value | a borrower | `&p~` | no |
+| a borrowed value | a heap value | `^b~` | yes: a borrower can't become an owner, so this makes a new heap copy |
 
 ```go
 var p: ^int = ^5;
-var b: &int = &p^;         // borrow the value p owns
-var x: int = b^;           // a plain copy of it
-var q: ^int = ^b^;         // a new heap value holding a copy
+var b: &int = &p~;         // borrow the value p owns
+var x: int = b~;           // a plain copy of it
+var q: ^int = ^b~;         // a new heap value holding a copy
 
 var bad1: ^int = 5;        // ERROR: write ^5
-var bad2: int = p;         // ERROR: write p^
-var bad3: &int = p;        // ERROR: write &p^
-var bad4: &int = &p;       // ERROR: &p is an &^int, a borrower of the owner itself: write &p^
-var bad5: ^int = b;        // ERROR: a borrower can't become an owner: write ^b^ for a copy
-var bad6: int = x^;        // ERROR: x is a plain int, so there is nothing to follow
+var bad2: int = p;         // ERROR: write p~
+var bad3: &int = p;        // ERROR: write &p~
+var bad4: &int = &p;       // ERROR: &p is an &^int, a borrower of the owner itself: write &p~
+var bad5: ^int = b;        // ERROR: a borrower can't become an owner: write ^b~ for a copy
+var bad6: int = x~;        // ERROR: x is a plain int, so there is nothing to follow
 ```
 
 ### 8.8 `=` always makes a copy
@@ -3110,7 +3114,7 @@ var b: int = a;            // b is a copy
 
 var p: ^int = ^5;
 var q: ^int = p;           // q gets its own heap int holding 5
-q^ = 9;                    // p^ is still 5
+q~ = 9;                    // p~ is still 5
 
 var r: &int = &a;
 var s: &int = r;           // s borrows a too
@@ -3122,7 +3126,7 @@ so the copy shares nothing with the original:
 ```go
 var rows: [2]^int = [^1, ^2];
 var copy: [2]^int = rows;  // two new heap ints
-copy[0]^ = 9;              // rows[0]^ is still 1
+copy[0]~ = 9;              // rows[0]~ is still 1
 ```
 
 Copying the first node of a linked list therefore copies every node behind it (8.14).
@@ -3137,8 +3141,8 @@ have the fields `a` and `b`:
 |---|---|
 | `foo = boo;` | `foo.a = boo.a; foo.b = boo.b;` |
 | `@foo = @boo;` | `@foo.a = @boo.a; @foo.b = @boo.b;` (8.9) |
-| `var h: ^Boo = ^boo;` | one new heap value, then `h^.a = boo.a; h^.b = boo.b;` |
-| `var r: &Boo = &boo;` | `r^.a` is `boo.a`, and `r^.b` is `boo.b`: the same memory |
+| `var h: ^Boo = ^boo;` | one new heap value, then `h~.a = boo.a; h~.b = boo.b;` |
+| `var r: &Boo = &boo;` | `r~.a` is `boo.a`, and `r~.b` is `boo.b`: the same memory |
 | `var o: @Boo = @boo;` | `o` is the ownership of `boo.a` and of `boo.b` together |
 
 This is why a copy is complete. A field that is a heap owner gets its own heap value, and
@@ -3175,7 +3179,7 @@ gives that ownership as a value of its own, with its own type.
 | Written | What it is |
 |---|---|
 | `@p` | `p`'s ownership. When `p` is a `^int`, its type is `@^int` |
-| `h^` | follow an ownership: the variable it is the ownership of |
+| `h~` | follow an ownership: the variable it is the ownership of |
 | `@q = h;` | set `q`'s ownership: `q` takes the value over, and the old variable lets go |
 | `var @q: ^int = h;` | the same, for a new variable |
 
@@ -3183,10 +3187,10 @@ gives that ownership as a value of its own, with its own type.
 var p: ^int = ^5;
 
 var h: @^int = @p;         // h is p's ownership. Nothing has moved: p still owns the 5
-h^                         // p itself, a ^int
-h^^                        // 5
+h~                         // p itself, a ^int
+h~~                        // 5
 
-var c: ^int = h^;          // a copy, like every = (8.8). This is not a move
+var c: ^int = h~;          // a copy, like every = (8.8). This is not a move
 var @q: ^int = h;          // the move: q owns the 5 now, and p is left null (8.10)
 ```
 
@@ -3194,18 +3198,18 @@ var @q: ^int = h;          // the move: q owns the 5 now, and p is left null (8.
 
 | Type | Made with | Followed with | Following gives |
 |---|---|---|---|
-| `^T` | `^v` | `p^` | the value on the heap |
-| `&T` | `&x` | `b^` | the variable it borrows |
-| `@T` | `@x` | `h^` | the variable it is the ownership of |
+| `^T` | `^v` | `p~` | the value on the heap |
+| `&T` | `&x` | `b~` | the variable it borrows |
+| `@T` | `@x` | `h~` | the variable it is the ownership of |
 
 It works on every variable, and on a field or an element, not only on heap owners:
 
 ```go
 var x: int = 3;
 var o: @int = @x;          // @x is an @int
-o^                         // x itself: 3
+o~                         // x itself: 3
 
-@list^.next                // the ownership of a field: an @^Node (8.14)
+@list~.next                // the ownership of a field: an @^Node (8.14)
 ```
 
 **(filled in)** A map entry is a holder like an array element (6.4), so `@` works on it too:
@@ -3281,7 +3285,7 @@ The rules for an ownership and a move:
 
   ```go
   var b: &^int = &p;
-  var @t: ^int = @b^;        // ERROR: b only borrows p
+  var @t: ^int = @b~;        // ERROR: b only borrows p
   ```
 
 - **A `const` has no ownership to give,** because an ownership allows changing it and
@@ -3295,7 +3299,7 @@ The rules for an ownership and a move:
 - **Copying an ownership copies the address,** like copying a borrower. `var h2: @^int = h;`
   is a second ownership of the same variable. The value still has one owner: the variable.
 - **After a move, an ownership still points at the old variable,** which is now `null`.
-  `h^ == null` is `true` after `var @q: ^int = h;`.
+  `h~ == null` is `true` after `var @q: ^int = h;`.
 - **A value can be moved only when nothing still in use points at it** (8.12).
 - **The new owner decides how long the value lives from then on:**
 
@@ -3311,8 +3315,8 @@ A heap owner `p` can be used in four ways, and each is written differently:
 
 | Written | What it gives | `p` afterwards |
 |---|---|---|
-| `p^` | the value | unchanged |
-| `&p^` | a borrower of the value | unchanged |
+| `p~` | the value | unchanged |
+| `&p~` | a borrower of the value | unchanged |
 | `p` | a copy of the value, in a new place on the heap | unchanged |
 | `@p` | `p`'s ownership | unchanged, until that ownership is set into another variable: then `null` |
 
@@ -3355,23 +3359,23 @@ is handed an owner to test borrows the owner itself:
 ```go
 const valueOr: (&^int, int)int = (const owner: &^int, const fallback: int){
     const cases: ?(&^int, int)int = [
-        (const o: &^int, const f: int){ return o^^; },     // false: it owns a value, so read it
+        (const o: &^int, const f: int){ return o~~; },     // false: it owns a value, so read it
         (const o: &^int, const f: int){ return f; }        // true: it is null
     ];
-    return cases[owner^ == null](owner, fallback);
+    return cases[owner~ == null](owner, fallback);
 };
 
 valueOr(&p, 0)             // p's value, or 0 when p is null
 ```
 
-`&p` borrows the owner itself, so its type is `&^int`. `owner^` is the owner, and `owner^^`
+`&p` borrows the owner itself, so its type is `&^int`. `owner~` is the owner, and `owner~~`
 is the value it owns.
 
 **Following a `null` fails while the program runs:**
 
 ```go
 var none: ^int = null;
-none^                      // fails while running: none owns nothing
+none~                      // fails while running: none owns nothing
 ```
 
 A copy of a `null` owner is `null` as well, because there is nothing to copy.
@@ -3400,7 +3404,7 @@ A heap value is freed at the moment it has no owner left:
 | its owner is given a new value with `=` | `q = p;` frees what `q` owned before |
 | its owner takes another value over in a move | `@q = @p;` frees what `q` owned before |
 | its owner is set to `null` | `r = null;` |
-| it has no name and nothing receives it | `makeBig(1);` on its own, or only lent as in `look(&makeBig(1)^);`: freed at the end of the statement (2.6) |
+| it has no name and nothing receives it | `makeBig(1);` on its own, or only lent as in `look(&makeBig(1)~);`: freed at the end of the statement (2.6) |
 | the value that owns it is freed | a list node's `next`: freeing a node frees every node behind it |
 | its kept block ends | a heap value owned by a parameter that a function given back keeps: the block ends with the frame that holds it, or with the heap value it is part of (7.8) |
 
@@ -3452,22 +3456,22 @@ back followed what a borrower given back by that call would have (8.13).
 | The pointer | Owners it followed | So these can't be changed while it is used below |
 |---|---|---|
 | `&p` | none: it points at `p` itself | none |
-| `&p^` | `p` | `p` |
-| `@list^.next` | `list` | `list` |
-| `&list^.next^` | `list`, then `list^.next` | `list` and `list^.next` |
-| `&b^.value`, where `b` is a borrower | the ones `b` followed | the same as for `b` |
+| `&p~` | `p` | `p` |
+| `@list~.next` | `list` | `list` |
+| `&list~.next~` | `list`, then `list~.next` | `list` and `list~.next` |
+| `&b~.value`, where `b` is a borrower | the ones `b` followed | the same as for `b` |
 
 ```go
 var p: ^int = ^5;
-var b: &int = &p^;               // b followed p
+var b: &int = &p~;               // b followed p
 p = ^6;                          // ERROR: b is used below, and this frees what p owns
-b^
+b~
 ```
 
-To change the value where it is, so that `b` sees it, write `p^ = 6;`.
+To change the value where it is, so that `b` sees it, write `p~ = 6;`.
 
 ```go
-var h: @^Node = @list^.next;     // h followed list
+var h: @^Node = @list~.next;     // h followed list
 list = makeNode(9);              // ERROR: h is used below, and this frees the first node
 var @n: ^Node = h;
 ```
@@ -3475,7 +3479,7 @@ var @n: ^Node = h;
 Taking the node out first makes both lines fine, because `h` isn't used after that:
 
 ```go
-var h: @^Node = @list^.next;
+var h: @^Node = @list~.next;
 var @n: ^Node = h;
 list = makeNode(9);              // fine
 ```
@@ -3486,9 +3490,9 @@ list = makeNode(9);              // fine
 pointer into a list can change what comes after it:
 
 ```go
-var cur: &Node = &list^.next^;   // cur followed list and list^.next
-cur^.next = makeNode(9);         // fine: cur^.next is beyond cur
-cur^.value
+var cur: &Node = &list~.next~;   // cur followed list and list~.next
+cur~.next = makeNode(9);         // fine: cur~.next is beyond cur
+cur~.value
 ```
 
 **A value may be moved anywhere.** A move changes the owner it empties, so it is allowed
@@ -3497,11 +3501,11 @@ including into an owner that ends sooner:
 
 ```go
 var data: ^[1000]int = ^[...];
-var b: &[1000]int = &data^;          // b followed data
+var b: &[1000]int = &data~;          // b followed data
 {
     var @inner: ^[1000]int = @data;  // ERROR: b is used below, and this moves what data owns
 }
-b^[0]
+b~[0]
 ```
 
 Without the last line it is fine: the array is freed at the `}`, and nothing leads to it any
@@ -3520,7 +3524,7 @@ each argument lets it (8.9):
 | an argument that is, holds or lends a function **(filled in)** | call it | what that function changes or takes, as said below |
 
 "Another pointer in use" is one that is used below in the caller, or another argument of the
-same call: `f(&list^.next^, @list)` hands the list over while the first argument points into
+same call: `f(&list~.next~, @list)` hands the list over while the first argument points into
 it. **(filled in)** The function that is called is in use during the call as well, when it
 counts as a pointer. All of them are in use for everything the call does: for what each
 argument lets its function do, and for what the function changes from outside itself (below).
@@ -3534,13 +3538,13 @@ later part can't change that owner. A value is different: it is read when it is 
 ```go
 var p: ^int = ^5;
 const renewP: ()int = (){ p = ^6; return 0; };
-const addTo: (&int, int)int = (const b: &int, const n: int){ return b^ + n; };
+const addTo: (&int, int)int = (const b: &int, const n: int){ return b~ + n; };
 
-addTo(&p^, renewP())             // ERROR: &p^ is worked out first, and renewP then frees what it points at
-p^ + renewP()                    // 5: p^ is a value, read before renewP runs
+addTo(&p~, renewP())             // ERROR: &p~ is worked out first, and renewP then frees what it points at
+p~ + renewP()                    // 5: p~ is a value, read before renewP runs
 ```
 
-**(filled in)** The same goes for a place: in `big^[pick()]` the array is reached before
+**(filled in)** The same goes for a place: in `big~[pick()]` the array is reached before
 `pick()` runs, so `pick` can't change `big`.
 
 A function's type doesn't say whether a `&T` parameter is read or changed (7.4). For a
@@ -3562,9 +3566,9 @@ const reset: ()void = (){
     list = makeNode(9);
 };
 
-var b: &Node = &list^;           // b followed list
+var b: &Node = &list~;           // b followed list
 reset();                         // ERROR: b is used below, and reset changes list
-b^.value
+b~.value
 ```
 
 A call through a variable (7.2) could run any function of the variable's type. It counts as
@@ -3595,8 +3599,8 @@ call through a variable, the compiler reads every function of that type, in ever
 program, and the call counts as doing all that any of them does.
 
 ```go
-var b: &int = &p^;               // b followed p
-const peekB: ()int = (){ return b^; };
+var b: &int = &p~;               // b followed p
+const peekB: ()int = (){ return b~; };
 p = ^6;                          // ERROR: peekB is called below, and it uses b
 peekB()
 ```
@@ -3604,11 +3608,11 @@ peekB()
 ```go
 var q: ^int = ^5;                // three top-level names
 var watch: &int = null;
-const aim: ()void = (){ watch = &q^; };
+const aim: ()void = (){ watch = &q~; };
 
 aim();                           // watch now counts as having followed q
 q = ^6;                          // ERROR: watch is used below, and this frees what q owns
-watch^
+watch~
 ```
 
 **(filled in) A function that is handed over may be called.** An argument that is, holds or
@@ -3618,14 +3622,14 @@ sees which function is handed over (7.2), it reads that function. Otherwise it c
 function of that type, as for a call through a variable.
 
 ```go
-const run: (&()void)void = (const f: &()void){ f^(); };
+const run: (&()void)void = (const f: &()void){ f~(); };
 
 const runRefill: ()int = (){
     var box: ^int = ^5;
     const refill: ()void = (){ box = ^6; };
-    var inBox: &int = &box^;     // inBox followed box
+    var inBox: &int = &box~;     // inBox followed box
     run(&refill);                // ERROR: inBox is used below, and run may call refill, which frees what box owns
-    return inBox^;
+    return inBox~;
 };
 ```
 
@@ -3673,13 +3677,13 @@ worst case:
 | one that is reached through a pointer from outside, and one of the same type that is reached through another pointer from outside, or that is an outside variable or lies inside one | one owner: a change to either is a change to both |
 | two elements of one array, or two entries of one map | one owner, unless both are picked by written values (3.2) that differ |
 | two owners of different types | two owners. Inside a generic function, a type with a `T` in it counts as the same type as every type |
-| two owners that are reached along different ways from one pointer, when the ways differ by more than an index or a key | two owners: `o^` and `o^^.next` in 8.15 are never the same. Ways that differ only by an index or a key follow the second row |
+| two owners that are reached along different ways from one pointer, when the ways differ by more than an index or a key | two owners: `o~` and `o~~.next` in 8.15 are never the same. Ways that differ only by an index or a key follow the second row |
 
 ```go
 const renewBoth: (&^int, &^int)int = (var a: &^int, var c: &^int){
-    var r: &int = &a^^;          // r followed a^, the owner that a borrows
-    c^ = ^6;                     // ERROR: r is used below, and c may borrow the same owner as a
-    return r^;
+    var r: &int = &a~~;          // r followed a~, the owner that a borrows
+    c~ = ^6;                     // ERROR: r is used below, and c may borrow the same owner as a
+    return r~;
 };
 ```
 
@@ -3694,9 +3698,9 @@ compiler counts every function of that type.
 
 ```go
 const useAfter: (&^int, &()void)int = (const o: &^int, const f: &()void){
-    const r: &int = &o^^;        // r followed o^, an owner that is reached through a pointer from outside
-    f^();                        // ERROR: r is used below, and swapOwn, a ()void function, changes a ^int this line can't name
-    return r^;
+    const r: &int = &o~~;        // r followed o~, an owner that is reached through a pointer from outside
+    f~();                        // ERROR: r is used below, and swapOwn, a ()void function, changes a ^int this line can't name
+    return r~;
 };
 
 const lendBoth: ()int = (){
@@ -3721,7 +3725,7 @@ const look: (&[1000]int)void = (const a: &[1000]int){ ... };    // a borrows, to
 const take: (@^[1000]int)void = (var @a: ^[1000]int){ ... };    // a takes the caller's array over
 
 use(big);              // use gets its own copy on the heap, and big is unchanged
-look(&big^);           // look borrows the array: nothing is copied and nothing changes owner
+look(&big~);           // look borrows the array: nothing is copied and nothing changes owner
 take(@big);            // take's parameter takes the array over, and big is left null
 ```
 
@@ -3729,7 +3733,7 @@ take(@big);            // take's parameter takes the array over, and big is left
 |---|---|---|
 | `int` | `f(n)` | its own copy |
 | `^[1000]int` | `use(big)` | its own copy, in a new place on the heap |
-| `&[1000]int` | `look(&big^)` | the caller's array, borrowed: it can read it, and change it when the parameter is a `var` |
+| `&[1000]int` | `look(&big~)` | the caller's array, borrowed: it can read it, and change it when the parameter is a `var` |
 | `@^[1000]int` | `take(@big)` | the caller's array itself: the parameter takes it over at the call, and the caller's variable is left `null` |
 
 **A parameter that asks for an ownership takes it.** The parameter is written like the moving
@@ -3738,7 +3742,7 @@ parameter's ownership is set from. The function's type lists `@^[1000]int`, whic
 the call has to give. So the move happens at the call itself:
 
 - after `take(@big)`, `big` is always `null`;
-- inside the function, `a` is an ordinary `^[1000]int` that owns the array, and `a^[0]` is
+- inside the function, `a` is an ordinary `^[1000]int` that owns the array, and `a~[0]` is
   its first element;
 - when the call ends, `a` ends, and the array is freed unless the function moved it on,
   returned it, or gave back a function that uses `a` (7.8).
@@ -3748,7 +3752,7 @@ An ownership held in a variable is given the same way: `take(h)`, where `h` is a
 `take(@makeBig(1));` (8.9). A parameter is never declared with the type `@T` itself, so a
 function that is given an ownership can't leave the value where it was.
 
-A value made on the spot can be lent as well, with `&` in front: `look(&makeBig(1)^);`. The
+A value made on the spot can be lent as well, with `&` in front: `look(&makeBig(1)~);`. The
 parameter borrows the new array for the call, nothing takes it over, and it is freed at the
 end of the statement (8.4).
 
@@ -3761,18 +3765,18 @@ over don't get in each other's way:
 const both: (@^int, int)void = (var @owned: ^int, const was: int){ ... };
 
 var x: ^int = ^5;
-both(@x, x^);
+both(@x, x~);
 ```
 
 | Step | What happens |
 |---|---|
 | 1 | `@x` is worked out: it is `x`'s ownership. Nothing moves yet (8.9) |
-| 2 | `x^` is worked out: it is 5 |
+| 2 | `x~` is worked out: it is 5 |
 | 3 | `owned` is set: it takes the heap int over, and `x` is left `null` |
 | 4 | `was` is set: it gets the 5 from step 2 |
 
 If each parameter were set as soon as its argument was worked out, step 3 would come before
-step 2, and `x^` would follow a `null`. With this order, `both(@x, x^)` and a function that
+step 2, and `x~` would follow a `null`. With this order, `both(@x, x~)` and a function that
 takes the same two things the other way round both work.
 
 A function gives a heap value back by returning it. Its type ends in a `^`, so the caller
@@ -3785,7 +3789,7 @@ const makeBig: (int)^[1000]int = (const x: int){
 };
 
 var mine: ^[1000]int = makeBig(1);     // mine owns the array
-var flat: [1000]int = makeBig(1)^;     // flat is a plain copy; the heap array is freed at the
+var flat: [1000]int = makeBig(1)~;     // flat is a plain copy; the heap array is freed at the
                                        // end of this line, because nothing owns it
 makeBig(1);                            // nothing receives it, so it is freed right away
 ```
@@ -3799,7 +3803,7 @@ it, and gives the result back:
 
 ```go
 const dropFirst: (@^Node)^Node = (var @first: ^Node){
-    var @rest: ^Node = @first^.next;   // rest takes everything behind the first node
+    var @rest: ^Node = @first~.next;   // rest takes everything behind the first node
     return rest;                       // rest ends here, so the caller owns it
 };                                     // first ends here too, and the first node is freed
 
@@ -3815,15 +3819,15 @@ into lives in the caller:
 
 ```go
 const firstValue: (&Node)&int = (var n: &Node){
-    return &n^.value;                // fine: it comes from n
+    return &n~.value;                // fine: it comes from n
 };
 
 const second: (&Node)&Node = (var n: &Node){
-    return &n^.next^;                // fine: the node after the one n borrows
+    return &n~.next~;                // fine: the node after the one n borrows
 };
 
 const bad: (&Node)&int = (var n: &Node){
-    var local: int = n^.value;
+    var local: int = n~.value;
     return &local;                   // ERROR: local ends with the call, and the result lives on
 };
 ```
@@ -3837,16 +3841,16 @@ because the caller only sees the type:
   inside it, because the compiler doesn't know how deep the function went (8.12).
 
 ```go
-var v: &int = firstValue(&list^);    // v comes from list's data
+var v: &int = firstValue(&list~);    // v comes from list's data
 list = makeNode(9);                  // ERROR: v is used below
-v^
+v~
 ```
 
 A returned borrower can still change what lies beyond itself:
 
 ```go
-var cur: &Node = second(&list^);
-cur^.next = makeNode(9);             // fine: reached through cur itself
+var cur: &Node = second(&list~);
+cur~.next = makeNode(9);             // fine: reached through cur itself
 ```
 
 With two borrowed arguments the type can't say which one the result came from, so it counts
@@ -3856,7 +3860,7 @@ The same holds when an argument borrows a value made on the spot (8.4). That val
 at the end of the statement, so the result can't be kept past it:
 
 ```go
-var gone: &int = firstValue(&makeNode(1)^);   // ERROR: the new node is freed at the end of
+var gone: &int = firstValue(&makeNode(1)~);   // ERROR: the new node is freed at the end of
                                               // this line, but gone would still be there
 ```
 
@@ -3906,7 +3910,7 @@ arguments, and it counts as having followed what they followed (8.12). What lies
 in the variable doesn't count, as for a result.
 
 ```go
-const aim: (&&int, &int)void = (var slot: &&int, var v: &int){ slot^ = v; };
+const aim: (&&int, &int)void = (var slot: &&int, var v: &int){ slot~ = v; };
 
 var b: &int = null;
 {
@@ -3921,7 +3925,7 @@ gave back, and a function that it gave back, are still there when the call is ov
 
 - An owner that is reached through such a borrower counts as what was lent to the call, or
   any owner inside it. The borrower itself never followed what lies beyond it, so
-  `cur^.next = makeNode(9);` above is fine. Another pointer that came from the same list may
+  `cur~.next = makeNode(9);` above is fine. Another pointer that came from the same list may
   have followed it.
 - A call of such a function counts as lending the same things again, to the same parameters.
   It may change what a `var` parameter was lent, and it is a use of every pointer that was
@@ -3946,10 +3950,10 @@ to `list`:
 
 ```go
 var list: ^Node = makeNode(1);         // list owns the node holding 1
-list^.next = makeNode(2);              // that node's next owns the node holding 2
-list^.next^.next = makeNode(3);        // and that node's next owns the node holding 3
+list~.next = makeNode(2);              // that node's next owns the node holding 2
+list~.next~.next = makeNode(3);        // and that node's next owns the node holding 3
 
-list^.next^.next^.value                // 3
+list~.next~.next~.value                // 3
 ```
 
 When `list` ends, the first node is freed, and every node behind it with it.
@@ -3957,18 +3961,18 @@ When `list` ends, the first node is freed, and every node behind it with it.
 **Removing a node.** The node holding 3 moves up into the place of the node holding 2:
 
 ```go
-@list^.next = @list^.next^.next;
+@list~.next = @list~.next~.next;
 ```
 
 Both sides are the ownership of a `next` field, so both are `@^Node`.
 
 1. The right side is taken first: the node holding 3 leaves the second node's `next`,
    which is left `null`.
-2. `list^.next` takes it over. Its old value, the node holding 2, has no owner now, so it
+2. `list~.next` takes it over. Its old value, the node holding 2, has no owner now, so it
    is freed. Its `next` is already `null`, so nothing else goes with it.
 3. The list is now 1, 3.
 
-The same line with no marks, `list^.next = list^.next^.next;`, ends with the same list but
+The same line with no marks, `list~.next = list~.next~.next;`, ends with the same list but
 does more work: it copies the node holding 3, and then frees the node holding 2 together
 with the original node holding 3.
 
@@ -3976,14 +3980,14 @@ with the original node holding 3.
 everything behind it:
 
 ```go
-list^.next = makeNode(9);              // the old second node, and all the nodes behind it, are freed
+list~.next = makeNode(9);              // the old second node, and all the nodes behind it, are freed
 ```
 
 **Adding a node at the front.**
 
 ```go
 var first: ^Node = makeNode(0);
-@first^.next = @list;                  // first's next takes over the whole old list, and list is null
+@first~.next = @list;                  // first's next takes over the whole old list, and list is null
 @list = @first;                        // list takes over the new first node, and first is null
 ```
 
@@ -3999,16 +4003,16 @@ on the next one:
 ```go
 const length: (&^Node)int = (const owner: &^Node){
     const cases: ?(&^Node)int = [
-        (const o: &^Node){ return 1 + length(&o^^.next); },    // false: count this node, go on
+        (const o: &^Node){ return 1 + length(&o~~.next); },    // false: count this node, go on
         (const o: &^Node){ return 0; }                          // true: no node here, so stop
     ];
-    return cases[owner^ == null](owner);
+    return cases[owner~ == null](owner);
 };
 
 length(&list)                          // the number of nodes
 ```
 
-`o^` is the owner and `o^^` is the node it owns, so `&o^^.next` borrows the next owner.
+`o~` is the owner and `o~~` is the node it owns, so `&o~~.next` borrows the next owner.
 Nothing is copied and nothing changes owner on the way.
 
 ### 8.15 Two links to one value
@@ -4021,9 +4025,9 @@ points back at its parent.
 const Link: type = {value: int, next: ^Link, prev: &Link};    // next is owned, prev is borrowed
 
 var a: ^Link = ^{ value: int = 1; next: ^Link = null; prev: &Link = null; };
-a^.next = ^{ value: int = 2; next: ^Link = null; prev: &Link = &a^; };
+a~.next = ^{ value: int = 2; next: ^Link = null; prev: &Link = &a~; };
 
-a^.next^.prev^.value                           // 1: forward to the second node, back to the first
+a~.next~.prev~.value                           // 1: forward to the second node, back to the first
 ```
 
 The second node is owned by the first node's `next`, and its `prev` borrows the first
@@ -4041,16 +4045,16 @@ function makes the plain copy, then sets every `prev` inside it:
 const linkBack: (&^Link, &Link)void = (var owner: &^Link, var before: &Link){
     const cases: ?(&^Link, &Link)void = [
         (var o: &^Link, var back: &Link){
-            o^^.prev = back;                  // this node's prev borrows the node before it
-            linkBack(&o^^.next, &o^^);        // go on: the next owner, with this node before it
+            o~~.prev = back;                  // this node's prev borrows the node before it
+            linkBack(&o~~.next, &o~~);        // go on: the next owner, with this node before it
         },
         (var o: &^Link, var back: &Link){ }   // no node here, so stop
     ];
-    cases[owner^ == null](owner, before);
+    cases[owner~ == null](owner, before);
 };
 
 const copyLinks: (&^Link)^Link = (var from: &^Link){
-    var made: ^Link = from^;                  // field by field: every node is copied
+    var made: ^Link = from~;                  // field by field: every node is copied
     linkBack(&made, null);                    // set every prev inside the copy
     return made;
 };
@@ -4070,29 +4074,29 @@ is copied this way is a `var`.
 | Line | Reason |
 |---|---|
 | `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
-| `var x: int = p;` where `p` is a `^int` | write `p^` |
+| `var x: int = p;` where `p` is a `^int` | write `p~` |
 | `var b: &int = count;` and `bump(n);` | an `int` is not an `&int`: write `&count`, `&n` |
-| `var b: &int = &p;` where `p` is a `^int` | `&p` borrows the owner itself (`&^int`): write `&p^` |
-| `var q: ^int = b;` where `b` is an `&int` | a borrower can't become an owner: `^b^` makes a copy |
-| `x^` where `x` is a plain `int` | there is nothing to follow |
+| `var b: &int = &p;` where `p` is a `^int` | `&p` borrows the owner itself (`&^int`): write `&p~` |
+| `var q: ^int = b;` where `b` is an `&int` | a borrower can't become an owner: `^b~` makes a copy |
+| `x~` where `x` is a plain `int` | there is nothing to follow |
 | `var b: &int = &3;` | the `3` is gone after its statement, so it can be borrowed only as an argument (8.4) |
 | `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
 | `a = &inner;` where `inner` is in an inner block | the borrower would outlive what it borrows |
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
-| `c^ = 11;` where `c` is a `const` borrower | a `const` borrower can only read |
+| `c~ = 11;` where `c` is a `const` borrower | a `const` borrower can only read |
 | `look = &limit;` where `look` is `const` | a `const` borrower always borrows the same thing |
-| `table^[0] = 9;` where `table` is a `const` owner | a `const` owner's value can't change |
+| `table~[0] = 9;` where `table` is a `const` owner | a `const` owner's value can't change |
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
-| `var @t: ^int = @b^;` where `b` is a borrower | a borrower can read and change, but not take |
+| `var @t: ^int = @b~;` where `b` is a borrower | a borrower can read and change, but not take |
 | `return @local;` | the ownership would outlive its variable |
 | `var h: @^Node = @makeNode(1);` | the value has no variable, so the ownership would outlive it |
-| `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
-| `var @inner: ^T = @data;` where a borrower of `data^` is used below | it would move what the borrower points at (8.12) |
+| `p = ^6;` where a borrower made with `&p~` is used below | it would free what the borrower points at (8.12) |
+| `var @inner: ^T = @data;` where a borrower of `data~` is used below | it would move what the borrower points at (8.12) |
 | `take(@list);` or `reset();` where a pointer into `list` is used below | the call takes or changes what the pointer points at (8.12) |
 | `return &local;` | the borrower would outlive the local (8.13) |
 | `return (){ return x; };` where `x` is declared inside the function | `x` would die before the function that uses it (7.8) |
-| `var v: &int = firstValue(&makeNode(1)^);` | the result would outlive the node made on the spot (8.13) |
+| `var v: &int = firstValue(&makeNode(1)~);` | the result would outlive the node made on the spot (8.13) |
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
 | `var mine: [2]&int = views;` where `views` is a `const` **(filled in)** | the borrowers inside a `const` can only read (8.6) |
@@ -4101,14 +4105,14 @@ is copied this way is a `var`.
 | `first(@^int)` and `wrap(@^int)` **(filled in)** | a type parameter is never handed an ownership type itself (4.3) |
 | `run(&refill);` where `refill` changes an owner that a pointer used below followed **(filled in)** | a function that is handed over may be called (8.12) |
 | `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns **(filled in)** | a pointer that function bodies share is still in use when the function ends (8.12) |
-| `c^ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below **(filled in)** | two pointers from outside may lead to the same owner (8.12) |
-| `addTo(&p^, renewP())` where `renewP` changes `p` **(filled in)** | a statement is still using what it has worked out (8.12) |
-| `return ^&local;`, and `slot^ = &local;` where `slot` came in through a parameter **(filled in)** | the line that stores a borrower behind a pointer is checked: the place may outlast `local`, whether `local` is a name of this call or of a call around it (8.5) |
+| `c~ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below **(filled in)** | two pointers from outside may lead to the same owner (8.12) |
+| `addTo(&p~, renewP())` where `renewP` changes `p` **(filled in)** | a statement is still using what it has worked out (8.12) |
+| `return ^&local;`, and `slot~ = &local;` where `slot` came in through a parameter **(filled in)** | the line that stores a borrower behind a pointer is checked: the place may outlast `local`, whether `local` is a name of this call or of a call around it (8.5) |
 | `aim(&b, &x);` where `aim` may store its second argument through its first, and `b` outlasts `x` **(filled in)** | a variable that is lent for change can be given what else was lent (8.13) |
 | `f();` where `f` is a parameter, a borrower made through another parameter is used below, and a function of `f`'s type changes an owner of that type which the line can't name **(filled in)** | an owner that a caller can't name counts as one reached through a pointer from outside (8.12) |
 | `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
-| `return &list^;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
-| `p = ^6;` where a function called below uses a borrower made with `&p^` **(filled in)** | the call is a use of that borrower (8.12) |
+| `return &list~;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
+| `p = ^6;` where a function called below uses a borrower made with `&p~` **(filled in)** | the call is a use of that borrower (8.12) |
 | `var @t: ^int = h;` where `h` is a `const` ownership **(filled in)** | a `const` ownership can only read (8.6) |
 | `var n: int = null;` **(filled in)** | `null` fits only a `^T`, an `&T` or an `@T` (8.10) |
 | `both[0] = &inner;` where `both` outlives `inner` **(filled in)** | a value that holds a borrower can't outlive what the borrower borrows (8.5) |
@@ -4119,8 +4123,8 @@ is copied this way is a `var`.
 
 | Line | Fails when |
 |---|---|
-| `p^`, for a heap owner or a borrower | `p` is `null` |
-| `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
+| `p~`, for a heap owner or a borrower | `p` is `null` |
+| `h~`, for an ownership **(filled in)** | `h` is `null` (8.10) |
 | `var @q: ^int = h;`, `@q = h;`, `take(h)`: taking a value through an ownership **(filled in)** | `h` is `null` (8.10) |
 | `^v`, and `=` where it copies a heap owner **(filled in)** | there is no room left on the heap (8.3) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
@@ -4178,23 +4182,23 @@ at:
 | can point at | only a value on the heap | anything that has an owner: a variable, an array element, a map entry, a field, or a value on the heap | a variable, a field, an element or a map entry **(filled in: a map entry)** |
 | frees what it points at | yes | never | never, but the value can be taken out through it |
 | made with | `^v` | `&x` | `@x` |
-| followed with | `p^` | `p^` | `p^` |
+| followed with | `p~` | `p~` | `p~` |
 
 An owning pointer can only point at the heap, because a value on the stack already has an
 owner: the holder it lives in.
 
 - **A `^T` holder** has a place on the stack like every name. That place holds the
-  **address** of the value on the heap, and `p^` goes to that address.
+  **address** of the value on the heap, and `p~` goes to that address.
 - **A `&T` holder** holds the address of what it borrows: a variable, an array element, a
   map entry, a field, or a value on the heap.
 - **`null`** is "no address".
 - **`=` between two heap owners** makes room on the heap and copies the value into it.
 - **An `@T` holder** holds the address of the variable it is the ownership of. For
-  `h: @^int` that is a pointer to a pointer, and each `^` in `h^^` is one jump.
+  `h: @^int` that is a pointer to a pointer, and each `~` in `h~~` is one jump.
 - **A move** copies the heap address out of the old owner into the new one and sets the old
   owner to `null`. The value itself doesn't move.
 - **A link to an unsized array** (`^[]int`, `&[]int`) holds two things: where the elements
-  start, and how many there are. That is how `v^.length` works.
+  start, and how many there are. That is how `v~.length` works.
 - **(filled in) A link to a map or an `any`** holds one address, and the value there holds its
   own size: a map the number of its entries (6.4), an `any` its type (4.5). An ownership of an
   unsized array, `@[]T`, holds the address of the variable, like every ownership, and the
@@ -4244,7 +4248,7 @@ var span: Span = { a: int = 1; b: int = a + 1; };   // ERROR: b can't see a
 ```
 
 **A field name never clashes with any other name.** A field is only ever reached with a dot
-(`p.x`, `c^.count`), so it is not a name in scope, and it can't shadow anything (2.8):
+(`p.x`, `c~.count`), so it is not a name in scope, and it can't shadow anything (2.8):
 
 ```go
 var x: int = 5;                              // a top-level x
@@ -4327,7 +4331,7 @@ that is an error when `counter` is `const` (8.6):
 ```go
 const fixed: Counter = {
     count: int = 0;
-    add: (&Counter)void = (var c: &Counter){ c^.count = c^.count + 1; };
+    add: (&Counter)void = (var c: &Counter){ c~.count = c~.count + 1; };
 };
 
 fixed.count = 9;               // ERROR: fixed is const
@@ -4379,7 +4383,7 @@ const Counter: type = {count: int, add: (&Counter)void};
 var counter: Counter = {
     count: int = 0;
     add: (&Counter)void = (var c: &Counter){
-        c^.count = c^.count + 1;     // fine: reaches count through its parameter
+        c~.count = c~.count + 1;     // fine: reaches count through its parameter
     };
 };
 
@@ -4388,7 +4392,7 @@ counter.add(&counter);               // count is now 1
 var bad: Counter = {
     count: int = 0;
     add: (&Counter)void = (var c: &Counter){
-        count = count + 1;           // ERROR: fields aren't names in scope; use c^.count
+        count = count + 1;           // ERROR: fields aren't names in scope; use c~.count
     };
 };
 ```
@@ -4410,7 +4414,7 @@ other.add(&counter);                 // counter.count is now 2: add works on the
   the function (7.7). The call uses the function where it sits, and doesn't copy it.
 - `&counter` points at `counter` itself, so it followed no owner (8.12), and no other pointer
   is in use.
-- The function may even give `c^.add` a new value while it runs. The code that is running is
+- The function may even give `c~.add` a new value while it runs. The code that is running is
   part of the program, so nothing it uses is lost.
 
 A function in a file is different. It sees the file's top-level names, because there is one
@@ -4429,7 +4433,7 @@ To use the same struct instead of a copy, borrow it (section 8):
 
 ```go
 var same: &Point = &p;
-same^.x = 9;           // p.x is now 9
+same~.x = 9;           // p.x is now 9
 ```
 
 A struct can hold heap owners and borrowers as fields. A linked list is built that way
@@ -4548,10 +4552,10 @@ The same shape goes through an array, one index at a time:
 ```go
 const sumFrom: (&[]int, int)int = (const values: &[]int, const i: int){
     const cases: ?(&[]int, int)int = [
-        (const v: &[]int, const k: int){ return v^[k] + sumFrom(v, k + 1); },   // false: add this one, go on
+        (const v: &[]int, const k: int){ return v~[k] + sumFrom(v, k + 1); },   // false: add this one, go on
         (const v: &[]int, const k: int){ return 0; }                            // true: past the end, so stop
     ];
-    return cases[i == values^.length](values, i);
+    return cases[i == values~.length](values, i);
 };
 
 var scores: []int = [10, 20, 30];
@@ -4592,10 +4596,10 @@ case the call is an ordinary one, and the names end after it, as in 2.6.
 ```go
 const sumTo: (&[]int, int, int)int = (const values: &[]int, const i: int, const total: int){
     const cases: ?(&[]int, int, int)int = [
-        (const v: &[]int, const k: int, const t: int){ return sumTo(v, k + 1, t + v^[k]); },   // false: go on
+        (const v: &[]int, const k: int, const t: int){ return sumTo(v, k + 1, t + v~[k]); },   // false: go on
         (const v: &[]int, const k: int, const t: int){ return t; }                              // true: past the end
     ];
-    return cases[i == values^.length](values, i, total);
+    return cases[i == values~.length](values, i, total);
 };
 
 sumTo(&scores, 0, 0)   // 60, and the stack stays as small for a million elements
@@ -4955,7 +4959,7 @@ another file:
 
 ```go
 const useFast: (&package("geom"))void = (var p: &package("geom")){
-    p^ = import("geomFast");
+    p~ = import("geomFast");
 };
 
 var shapes: package("geom") = import("geom");
@@ -4994,7 +4998,7 @@ var late: &int = null;
     const c: package("counter") = import("counter");
     late = &c.count;           // fine: count is a variable of the file counter, which is always there
 }
-late^                          // the count of the file counter: c has ended, and the file has not
+late~                          // the count of the file counter: c has ended, and the file has not
 ```
 
 ### 11.7 When a check fails while the program runs **(filled in)**
@@ -5105,7 +5109,7 @@ var table: [2]Row = [[1, 2], [3, 4]];
 
 // a function that takes a function and borrows an int
 const applyTo: (Op, &int, int)void = (const f: Op, var target: &int, const by: int){
-    target^ = f(target^, by);
+    target~ = f(target~, by);
 };
 
 applyTo(ops[1], &table[0][1], 10);  // table[0][1] is now 12
@@ -5121,7 +5125,7 @@ const makePoint: (int, int)Point = (const x: int, const y: int){
 
 var corner: Point = makePoint(table[0][1], table[1][0]);   // x is 12, y is 6
 var c: &Point = &corner;
-c^.x = 0;                           // corner.x is now 0
+c~.x = 0;                           // corner.x is now 0
 
 // a value on the heap: copied with =, moved by setting an ownership
 var big: ^Row = ^[1, 2];
@@ -5179,7 +5183,7 @@ var @mine: ^Row = @big;             // mine takes big's array over, and big is l
 | `!` | one `bool` | a `bool`: not |
 | `( )` around a value | any value that isn't a type | the same value, worked out first |
 
-The order of operations is the usual one: what is behind a value (`p^`, `a[0]`, `f(1)`,
+The order of operations is the usual one: what is behind a value (`p~`, `a[0]`, `f(1)`,
 `pt.x`), then what is in front of it (`!`, `-`, `^`, `&`, `@`), then `*`, `/` and `%`, then `+`
 and `-`, then the comparisons, then `&&`, then `||`. Operators in the same step go from left
 to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
@@ -5191,7 +5195,7 @@ to right, and brackets go first (3.2). **(adjusted: `-`, `/` and `%` added)**
 | `^v` | puts a copy of `v` on the heap: a `^T` |
 | `&x` | borrows `x`: an `&T` |
 | `@x` | the ownership of `x`: an `@T` |
-| `p^` | what a heap owner, a borrower or an ownership leads to |
+| `p~` | what a heap owner, a borrower or an ownership leads to |
 | `n = p;` | copies: `n` gets its own value, and `p` is unchanged |
 | `@n = @p;` | moves: `n` takes over what `p` owns, and `p` is left `null` |
 | `var @n: ^int = @p;` | the same, for a new variable |
@@ -5259,12 +5263,12 @@ their type from the place they are written for (3.8).
 | `f(a)` with a `const` or `var` parameter | the parameter is a copy |
 | `var q: ^int = p;` | `q` gets its own copy, in a new place on the heap |
 | `var h: ^int = ^a;` | the heap gets a copy of `a` |
-| `var x: int = p^;` | `x` is a plain copy of the heap value |
+| `var x: int = p~;` | `x` is a plain copy of the heap value |
 | `var b: &int = &a;` | `b` borrows `a`: no copy |
 | `f(&a)` with an `&int` parameter | the parameter borrows the caller's `a`: no copy |
 | `var s: &[]int = &a[1:3];` | `s` borrows two elements of `a`: no copy (5.9) |
 | `var part: []int = a[1:3];` | `part` is a copy of two elements of `a` (5.9) |
-| `look(&makeBig(1)^)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
+| `look(&makeBig(1)~)` | the parameter borrows the value made on the spot: no copy, and it is freed at the end of the statement |
 | `var h: @^int = @p;` | `h` is `p`'s ownership: no copy, and nothing moves |
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
@@ -5320,14 +5324,14 @@ their type from the place they are written for (3.8).
 | `&primes[2:1]` and `&primes[0:5]` where `primes` is a `[3]int` | a slice's start can't be after its end, or its end past the length (5.9) |
 | `seen[7] = true;` | `7` isn't a key, and a map can't grow |
 | `var p: ^int = 5;` | `5` is an `int`, not a `^int`: write `^5` |
-| `var x: int = p;` where `p` is a `^int` | write `p^` |
+| `var x: int = p;` where `p` is a `^int` | write `p~` |
 | `var b: &int = count;` and `bump(n);` | an `int` is not an `&int`: write `&count`, `&n` |
 | `var b: &int = &3;` | the `3` is gone after its statement: it can be borrowed only as an argument (8.4) |
 | `var top: &int = &three(7)[0];` | the borrower would outlive what it borrows |
 | `var a: &int = &limit;` where `limit` is `const` | a borrower of a `const` has to be `const` |
 | `q = @p;` and `@q = p;` | the two sides have different types: a move has an ownership on both sides |
 | `var @t: ^int = @fixed;` where `fixed` is `const` | a `const` has no ownership to give |
-| `p = ^6;` where a borrower made with `&p^` is used below | it would free what the borrower points at (8.12) |
+| `p = ^6;` where a borrower made with `&p~` is used below | it would free what the borrower points at (8.12) |
 | returning a function that uses a variable declared inside the function around it | that variable would die before the function (7.8) |
 | `keep = makeAdder(five);` inside a function, where `keep` is a top-level `var` | `keep` outlasts the frame that holds the kept block: a function with kept state is a borrower of that block (7.8) |
 | `var again: ()int = next;` where `next` keeps parameters | copying a function that keeps parameters is an error: borrow it with `&next` (7.8) |
@@ -5336,7 +5340,7 @@ their type from the place they are written for (3.8).
 | `var u: Point = { a: int = 1; b: int = 2; };` | the fields of a `Point` are `x` and `y`: a struct value is checked against the names and types of its type (9.2) |
 | `p.z` where `p` is a `Point` | a `Point` has the fields `x` and `y`: a field name comes from the struct's type (9.1) |
 | `origin.x = 1;` | `origin` is `const`, so none of its fields can change |
-| `count = count + 1;` in a function written in a struct value with a field `count` | fields aren't names in scope: the function takes the struct as a parameter and writes `c^.count` (9.6) |
+| `count = count + 1;` in a function written in a struct value with a field `count` | fields aren't names in scope: the function takes the struct as a parameter and writes `c~.count` (9.6) |
 | `var span: Span = { a: int = 1; b: int = a + 1; };` | a field's value can't see the other fields (9.2) |
 | `fixed.add(&fixed);` where `fixed` is a `const` struct and `add`'s parameter is a `var` borrower | the normal `const` rule: a `const` isn't lent to a `var` borrower (9.3) |
 
@@ -5363,9 +5367,9 @@ their type from the place they are written for (3.8).
 | `first(@^int)` | a type parameter is never handed an ownership type itself (4.3) |
 | `run(&refill);` where `refill` changes an owner that a pointer used below followed | a function that is handed over may be called (8.12) |
 | `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns | a pointer that function bodies share is still in use when the function ends (8.12) |
-| `c^ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below | two pointers from outside may lead to the same owner (8.12) |
-| `addTo(&p^, renewP())` where `renewP` changes `p` | a statement is still using what it has worked out (8.12) |
-| `return ^&local;`, and `slot^ = &local;` where `slot` came in through a parameter | the line that stores a borrower behind a pointer is checked (8.5) |
+| `c~ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below | two pointers from outside may lead to the same owner (8.12) |
+| `addTo(&p~, renewP())` where `renewP` changes `p` | a statement is still using what it has worked out (8.12) |
+| `return ^&local;`, and `slot~ = &local;` where `slot` came in through a parameter | the line that stores a borrower behind a pointer is checked (8.5) |
 | `x = wrap(bool)(true);` where `x` was declared with `wrap(int)(3)` | an `any` keeps the type of its first value (4.5) |
 | `kept = b;` where `b` is a parameter and `kept` outlasts the call | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `twice(addFive, 3)` where `addFive` keeps parameters | the argument would be a copy of a function that keeps parameters (7.8) |
@@ -5382,8 +5386,8 @@ program (11.7), and Appendix B lists all of them with what each one prints:
 | `convert(int, int8)(n)` and other conversions to a smaller or differently signed type | the value doesn't fit |
 | `unwrap(bool)(x)` and other unwraps of an `any` | `x` holds a different type |
 | `cases[op]` and other map lookups | the key isn't in the map |
-| `p^`, for a heap owner or a borrower | `p` is `null` |
-| `h^`, for an ownership **(filled in)** | `h` is `null` (8.10) |
+| `p~`, for a heap owner or a borrower | `p` is `null` |
+| `h~`, for an ownership **(filled in)** | `h` is `null` (8.10) |
 | `var @q: ^int = h;`, `@q = h;`, `take(h)`: taking a value through an ownership **(filled in)** | `h` is `null` (8.10) |
 | `&a[i:j]`, or the copy `a[i:j]` **(filled in: the copy)**, with `i` or `j` worked out while running | the slice is out of range (5.9) |
 | `a + b`, `a / b` and the other sums **(filled in)** | the answer doesn't fit the type, or a number is divided by zero (3.2) |
@@ -5457,7 +5461,7 @@ Sum         = Product { ( "+" | "-" ) Product }                         (step 4)
 Product     = Front { ( "*" | "/" | "%" ) Front }                       (step 3)
 Front       = ( "!" | "-" | "^" | "&" | "@" ) Front                     (step 2: in front of a value)
             | Behind
-Behind      = Simple { "^"                                              (step 1: behind a value)
+Behind      = Simple { "~"                                              (step 1: behind a value)
                      | "[" Value "]"                                    (an index or a lookup)
                      | "[" [ Value ] ":" [ Value ] "]"                  (a slice, 5.9)
                      | "." NAME                                         (a field, a package's name, .length, .T)
@@ -5578,7 +5582,7 @@ program runs. The rules themselves are in the sections named.
 | a plain value where an `any` is asked for, or an `any` where another type is | `describe(3);`, `double(x);` | 4.5 |
 | a name declared with a call of `wrap` that the compiler sees, given such a call for another type | `x = wrap(bool)(true);` for an `x` declared with `wrap(int)(3)` | 4.5 |
 | a type that holds itself without a pointer or a function type between | `const Bad: type = {value: int, next: Bad};` | 4.6 |
-| following something that isn't a pointer | `x^` for a plain `int` | 8.7 |
+| following something that isn't a pointer | `x~` for a plain `int` | 8.7 |
 | a `.name` on a value that has none | `count.length`, `sizes.length` for a pair | 3.8, 5.8 |
 
 ### B.4 Arrays, pairs, text and maps
@@ -5622,7 +5626,7 @@ check these rules:
 
 | The compiler checks that | Rule |
 |---|---|
-| each of `T`, `^T`, `&T` and `@T` is used only as itself: `^5` for a `^int`, `p^` for the value, `&count` for a borrower, `@p` for an ownership | 8.3, 8.4, 8.7, 8.9 |
+| each of `T`, `^T`, `&T` and `@T` is used only as itself: `^5` for a `^int`, `p~` for the value, `&count` for a borrower, `@p` for an ownership | 8.3, 8.4, 8.7, 8.9 |
 | a borrower, an ownership, or a value that holds one, doesn't outlive what it points at | 8.5 |
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
 | a `var` borrower is made only from a place that can be assigned, a value made on the spot, another borrower that isn't read-only, the result of a call that was lent nothing read-only, or `null`, wherever the compiler sees both | 8.6 |
@@ -5652,7 +5656,7 @@ check these rules:
 | a struct value that doesn't have the fields of its type: their number, their order, their names and their types | `var q: Point = { x: int = 1; };`, `var u: Point = { a: int = 1; b: int = 2; };` | 9.2 |
 | a struct of one type where another is asked for | `var box: Size = p;` for a `p` that is a `Point` | 9.1, 9.2 |
 | a field's value that uses another field of its block as a name | `var span: Span = { a: int = 1; b: int = a + 1; };` | 9.2 |
-| a function written in a struct value that uses a field as a name | `count = count + 1;` where `count` is a field: write `c^.count` | 9.6 |
+| a function written in a struct value that uses a field as a name | `count = count + 1;` where `count` is a field: write `c~.count` | 9.6 |
 | a field name that the struct's type doesn't have | `p.z` for a `Point` | 9.1 |
 | a struct type that names a field twice | `{x: int, x: bool}` | 9.1 |
 | a field name used on a `T` or on an `any` | `v.x` for a `v` of type `T` | 4.3 |
@@ -5695,7 +5699,7 @@ error line.
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
 | `f(&limit)`, a call through a variable that hands over something read-only: `&limit`, a read-only borrower, or a value with one inside it. Inside a generic function, a `T` counts when the type it stands for has a borrower in it | the parameter it goes to is a `var` in the function that runs | `const lent to a var parameter` | 8.6 |
 | `var g: ()int = f;`, `twice(f, 3)`: a copy of a function that the compiler can't see, by itself or inside a bigger value that is copied | the function keeps something | `copy of a function that keeps parameters` | 7.8 |
-| `p^`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
+| `p~`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
 | any call, and a declaration that needs more stack than is left | there is no room left on the stack | `out of stack` | 10.4 |

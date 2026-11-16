@@ -15,8 +15,8 @@ helper function. The local goes on the heap, and the helper's parameter takes it
 ```go
 const countFrom: (@^int)()int = (var @count: ^int){
     return (){
-        count^ = count^ + 1;
-        return count^;
+        count~ = count~ + 1;
+        return count~;
     };
 };
 
@@ -33,8 +33,8 @@ a `;` in its own brackets:
 const newCounter: ()()int = (){
     var total: ^int = ^0;
     return (; var @count: ^int = @total){     // count takes total's heap int as the function
-        count^ = count^ + 1;                  // is made; total is left null
-        return count^;
+        count~ = count~ + 1;                  // is made; total is left null
+        return count~;
     };
 };
 ```
@@ -160,6 +160,6 @@ Several tests go in one condition with `&&`, `||` and `!` (3.2):
 
 ```go
 if (count > 0 && count < 10) { ... }       // both tests have to be true
-if (p == null || p^ == 0) { ... }          // p^ is followed only when p isn't null
+if (p == null || p~ == 0) { ... }          // p~ is followed only when p isn't null
 if (!ready) { ... }                        // runs when ready is false
 ```

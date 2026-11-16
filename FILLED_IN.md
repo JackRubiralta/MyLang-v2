@@ -26,12 +26,12 @@ runs. Those gaps are filled now:
   section 4: which calls the compiler can see into, with what a call through a variable counts
   as doing, and what a function given back can't outlive.
 - **Nothing waits on `UNDECIDED.md`** (section 5).
-- **Ten rules are Jack's own decisions,** not mine: a `var` can hold a type, a `const` never
+- **Eleven rules are Jack's own decisions,** not mine: a `var` can hold a type, a `const` never
   changes, a struct type has its field names, a package is a pointer to its file, copying a
   function that keeps parameters is an error, a struct value is just a bundle of values, a field
   name never clashes with another name, a function with kept state is a borrower of its kept
-  block, a package's type is its file, and importing one element is an ordinary declaration.
-  Section 6 lists them with the rules I added so that they work.
+  block, a package's type is its file, importing one element is an ordinary declaration, and
+  `~` follows a pointer. Section 6 lists them with the rules I added so that they work.
 
 What was added, in short: the source text and every literal; a full grammar (Appendix A); `/`,
 `%` and a minus in front; one rule for results that don't fit; equality for every type; the type
@@ -197,7 +197,7 @@ This list was written before anything was decided. Each group was then decided a
 #### Group E: statements and assignment (touches F and L)
 - the full list of statement forms
 - which expressions can stand alone
-- every form of assignment: a name, an element, an entry, a field, through `^`, and `@`
+- every form of assignment: a name, an element, an entry, a field, through `~`, and `@`
 - whether an assignment is a value
 - what can stand on the left of `=`
 - code after a `return`; `return f();` in a function that returns nothing
@@ -360,7 +360,7 @@ happens underneath.
 | 5.3 | 56 | Giving an unsized array a value of another length is rejected when the compiler knows both lengths, and otherwise fails while running | The compiler can't always know both lengths | 8 |
 | 5.3 | 57 | Every holder of a type with no size in it (a name, a field, an element, a map entry, a value of a pair, a heap value) takes its size from its own first value and keeps it. Elements of such an array each hold their own size | The rule of 5.3, said once for every holder and every such type | 7, 12 |
 | 5.3 | 58 | A fixed array becomes an unsized one through a slice: `primes[:]`, `&primes[:]` | They are different types, and the slice form already exists | 4, 6 |
-| 5.5, 6.3 | 59 | A length is an `int` | `i == values^.length` then needs no conversion | 4 |
+| 5.5, 6.3 | 59 | A length is an `int` | `i == values~.length` then needs no conversion | 4 |
 | 5.8 | 60 | A pair value has exactly two values, a pair has no `.length`, and its two values can be assigned and borrowed like elements | A pair always has both values, and underneath it is an array of two | 4, 7 |
 | 5.9 | 61 | Slice bounds are `int`s. A bound left out is 0 or the length, and the start can't be below 0. A written start below 0, or after a written end, is rejected whatever the length | Like an index | 7 |
 | 5.10 | 62 | Text is written `"Jack"`, which is the array value `['J', 'a', 'c', 'k']`. There is no text type and no end marker | "Text is an array of chars" (5.1). Length, indexing, slices, `==` and copying come from arrays | 6, 1 |
@@ -470,7 +470,7 @@ section 13 has the same list.
 | A8 | 5.9 | "When both are written as numbers and the length is in the type, the compiler checks them." | "When both are written values and the compiler knows the length (5.2), the compiler checks them, and a bound that is left out counts as written." | The docs already reject `a = [1, 2, 4, 5];` for an unsized `a` declared with three elements, so the compiler knows that length. Under the old wording an assignment and an index would use it, and a slice of the same array would not |
 | A9 | 13, 4.4 | In 13: "Built-ins are first-class values like everything else: they can be named, stored and passed." In 4.4: "Like every built-in, it's an ordinary first-class value" | The same, with one exception: `import` is always called by its own name with its text written out. In 4.4: "Like every built-in except `import` (11.2)" | The compiler has to know every file of a program before it runs |
 | A10 | 8.15 | "`const copyLinks: (&^Link)^Link = (const from: &^Link){`" | "`(var from: &^Link){`", with a sentence that says why | The copy's `prev` links borrow nodes of the original until `linkBack` has set them. Through a read-only borrower, that would put borrowers of a list that may be a `const` into a `var` (rule 87) |
-| A11 | 5.9 | "and the array can't be given a new value or moved while the slice is used further down (8.12)" | "and an array on the heap can't be freed or moved away while a slice of it is used further down (8.12)" | 8.12 protects what an owner on the heap holds. A plain array stays where it is when it is given a new value, and a slice then sees the new elements, as `b^` sees `count = 8;` in 8.4 |
+| A11 | 5.9 | "and the array can't be given a new value or moved while the slice is used further down (8.12)" | "and an array on the heap can't be freed or moved away while a slice of it is used further down (8.12)" | 8.12 protects what an owner on the heap holds. A plain array stays where it is when it is given a new value, and a slice then sees the new elements, as `b~` sees `count = 8;` in 8.4 |
 | A12 | 4.5 | "Everything that doesn't touch an `any` is checked before the program runs." | "The type of everything that doesn't touch an `any` is checked before the program runs." The checks about values are listed in Appendix B | The docs already had checks while running that touch no `any`: a `null` that is followed, a map key, a conversion that doesn't fit, a slice. The sentence is about types, and now it says so |
 | A13 | 8.12 | "'Still used below' means written anywhere further down the function." | The same, with two things added: a call further down to a function that uses the pointer is a use of it, and a pointer in an outside variable is still in use when the function ends | A function can use a pointer in a variable from outside itself, and a pointer that function bodies share can be followed after the function that aimed it has ended. With the old wording alone, freeing what such a pointer points at would go unnoticed (rules 94 and 97) |
 | A14 | 3.2 | "The compiler knows which values are types, because their type is `type` (4.1). So `(a)` starts a function type when `a` is a type, and a group when it isn't." | The same sentences, followed by: in these rules "a type" means a type that is written out, with type names and the forms of 3.6. A value that only holds a type, such as a `var` of type `type` or `x.T`, is an ordinary value, so `(x.T)` is a group | The type of `x.T` and of a `var` that holds a type is `type` too, and neither can be written where a type is expected. Only a type that is written out is known before the program runs (rule 33) |
@@ -616,7 +616,7 @@ those two rules.
 
 ## 6. Jack's own changes
 
-Ten rules in `DOCS.md` are decisions Jack made himself. They carry no mark there, and each has a
+Eleven rules in `DOCS.md` are decisions Jack made himself. They carry no mark there, and each has a
 row in `DECISIONS.md` in his words. They are listed here apart from my work, with the rules I
 added so that each one works.
 
@@ -632,3 +632,4 @@ added so that each one works.
 | **A function value is two addresses; its kept block lives in the frame of the call that receives it,** and a function with kept state is a borrower of that block, so the borrower rules decide where it can go. Returning it hands the block back one frame, and `^` keeps it longer: `^makeAdder(five)` puts the function on the heap, kept block included | 7.7, 7.8, with 2.6, 8.5, 8.11, 8.16, 10.4 and 13 | Rule 76 says what the second address is for each kind of function, and rule 77 makes `keep = adderOn(&topStep);` work. Rule 83 says which frame receives the block when the call is an argument or stands under a `^`. Rule 80 gives one call one block, rule 81 covers a function that a kept function gives back, and rule 82 says which results have a block. Rule 78 puts the block's size in the note. One adjustment follows from the rule, and it is a bigger change: A16, in section 4.2 |
 | **A package's type is its file: `package("geom")`.** It is a type form written where a type goes, and not a call. There is no plain type `package`. Two package types are the same when the files have the same names, kinds and types, so giving a `var` package another file is an ordinary type check. A copy of a package reaches the same file | 11.2, 11.3, 11.5, 11.6, with 2.7, 3.6, 3.8, 13 and Appendices A and B | Rule 7 makes `package` a reserved word. Rule 110 says what "the same names, kinds and types" covers, and that a package type can name a file that isn't imported. Rule 34 makes `geom.Point` a type through any package of that type. Rule 108 gives `import("geom")` its type, rule 113 lays the tables of one package type out alike, and rule 115 says what a name counts as where the compiler doesn't see which file a package holds |
 | **Importing one element is an ordinary declaration:** `const area: (float)float = geom.area;`, and `const count: &int = &import("counter").count;` for a variable that stays live | 11.6 | Nothing new. Rule 115 already says that a borrower of a file's variable never outlives the file |
+| **`~` follows a pointer, and `^` only means the heap.** `count~` is what `count` leads to, and `c~.count` reaches a field through a pointer. `^int` is still the type, and `^5` still makes one. `~` is the use-mark behind a value for following any pointer: a heap owner, a borrower or an ownership | 8.2, with 2.7, 3.2, 3.5, 8.3, 8.4, 8.7, 8.9, 8.18, 13 and Appendix A | Nothing. Every follow was rewritten, and no rule changed |
