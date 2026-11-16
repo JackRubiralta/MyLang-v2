@@ -200,8 +200,7 @@ statement (10.4).
 
 ### 2.7 Writing the source **(filled in)**
 
-A program is one source file (section 11). The file is plain text in UTF-8, and its name ends
-in `.my`.
+A program is one source file (section 11). The file is plain text in UTF-8.
 
 **Characters.** Outside comments and text, the file uses only the letters, digits and symbols
 of ASCII, with spaces, tabs and line breaks between them. A comment or a piece of text (5.10)
@@ -1203,9 +1202,10 @@ wrap(@^int)                    // ERROR: the same for the built-in wrap (4.5)
 parameter in it is one type. A type written with a type parameter in it, such as `[]T`, is one
 type for each type the parameter is ever handed. The compiler finds them all. It starts at the
 calls that hand a function a type with no type parameter in it, puts that type in the place of
-the parameter, and follows the calls inside the function in the same way. A call through a
-variable (7.2) counts as a call of every function of that type. It can do this because a type
-parameter that is a type name is always handed a type that is written out.
+the parameter, and follows the calls inside the function in the same way. For a call through a
+variable (7.2) it follows every function of that type. That only decides which types the
+program has, and it never turns a line away. It can do this because a type parameter that is a
+type name is always handed a type that is written out.
 
 **(filled in)** This has to come to an end. It is an error when a function is reached again,
 through its own calls, and one of its type parameters is handed a type that has strictly
@@ -1218,6 +1218,25 @@ const wrapMore: (T: type)(T)any = (const T: type){
     };
 };
 ```
+
+**(filled in)** A call through a variable can't be followed to one function, so for this rule
+it counts the worst case: it may reach every function again. The compiler doesn't look at which
+functions of that type the program has, so a function written somewhere else never makes a line
+an error (7.2). Two things follow:
+
+- Through a variable, a type parameter is handed only a type parameter as it is, or a type with
+  no type parameter in it.
+- A call that hands a type parameter a type with a type parameter strictly inside it is an
+  error when the function it calls hands one of its own type parameters on through a variable,
+  in its own body or in a function it reaches through calls the compiler sees.
+
+```go
+const viaVar: (T: type)(T)any = (const T: type){
+    return (const v: T){ return pick([1]T)([v]); };   // ERROR: pick is a variable, and [1]T has T strictly inside it
+};
+```
+
+(`pick` is a top-level `var` of type `(T: type)(T)any`.)
 
 **(filled in) Underneath, a `type` value is the address of a description of the type.** The
 compiler writes one description into the program for every type the program has. It holds the
@@ -1366,7 +1385,7 @@ x = wrap(int)(4);                  // fine: x still holds an int
 x = wrap(bool)(true);              // ERROR: x was declared with an int inside
 var y: any = wrap(bool)(true);     // fine: a new declaration, with its own first value
 
-const tryInt: (any)void = (const v: any){
+const tryInt: (any)void = (var v: any){
     var held: any = wrap(int)(0);
     held = v;                      // checked while running: fails unless v holds an int
 };
@@ -2071,25 +2090,29 @@ in which the compiler sees the function:
 | what a call from this table gives back, when the function that is called gives back a function value written in its body, directly or through a `const` of the body that was declared with it: `first(int)(xs)`, `makeAdder(1)(2)` | that function value |
 | the name of a `const` that was declared with one of the rows above, or with another name of this row: `const plus: Op = add;`, `const wrapInt: (int)any = wrap(int);`, `const firstInt: ([]int)int = first(int);` | the same function |
 | a function field of a `const` struct that was declared with its block written out, when the field's value is a function value written out (9.3) | that function |
-| a lookup in a `const` array, pair or map that was declared with every element written out, each one a function value or a name from the rows above: `cases[n == 0](n)` | every function the lookup could give. It counts the worst that any of them does |
+
+A lookup is a call the compiler sees too: a lookup in a `const` array, pair or map that was
+declared with every element written out, each one a function value or a name from the table,
+such as `cases[n == 0](n)`. The compiler sees every function the lookup could give, and it
+counts the worst that any of them does. Every choice is a lookup (section 10), so choosing this
+way costs nothing in what the compiler knows.
 
 **(filled in)** In every other case the call goes *through a variable*: a `var`, a parameter,
 a field, any other result of a call, or a `const` that was declared in any other way. Then
-the compiler knows only the type, and a rule that needs more counts the worst case. The call
-could run any function of that type, anywhere in the program. So 4.3, 8.12 and
-11.1 read all of them, and count the worst that any of them does. A function whose type is
-written with a type parameter counts for every type that the parameter is handed (4.3).
+the compiler knows only the type.
 
-**(filled in)** One rule doesn't count the worst case: the rule that a `const` never changes
-(8.6). Counting it would turn away every call through a variable that is lent a `const`, also
-the many that only read. There the check is made while the program runs instead (8.6). A copy
-of a function that keeps something is checked in the same way (7.8).
+A call through a variable is checked while the program runs, the same way as a `const` that is
+lent to one (8.6): the call reads the note beside the code of the function that the variable
+really holds (7.7). A function written somewhere else never makes a line a compile error.
 
-**(adjusted)** Two things here change how 8.12 counts a call. The last row of the table makes
-a choice a call the compiler sees, and it matters because every choice is a lookup (section
-10): a pair or a map of functions that is written out in a `const` is seen, so choosing this
-way costs nothing in what the compiler knows. And a call through a variable counts what the
-functions of its type do, where 8.12 used to count every outside variable as changed.
+**(filled in)** That is how four rules are checked at such a call: a `const` that would change
+(8.6), a copy of a function that keeps something (7.8), what the call does to the variables
+outside it (8.12), and a top-level name that isn't set up yet (11.1). What the line and the
+type decide by themselves is still counted before the program runs, as the worst case: a `&`
+argument counts as one that may change (8.12), and a result whose type can hold a function
+counts as having a kept block (7.8). So is the rule that every type is known before the program
+runs (4.3), which can't wait for it. None of these looks at which functions of that type the
+program has.
 
 ### 7.3 A function that returns nothing
 
@@ -2266,7 +2289,10 @@ unsized array holds its length (5.7).
 | uses only its own parameters and names, built-ins, types, top-level names and names of a block written at the top level | empty: it keeps nothing |
 | uses names of a function call around it that is still running (7.8) | that call's frame |
 | was given back by a call and keeps parameters of it (7.8) | its kept block |
-| was given back by a call and keeps only one borrower, under the conditions of 7.8 | the address that was lent. It needs no block |
+
+A function given back that keeps only one borrower, under the conditions of 7.8, has no kept
+block: its second address is the address that was lent, and a function that it gives back holds
+the same address.
 
 **(filled in)** A top-level name needs no address. It has one place for the whole program, and
 every function knows where that is (11.1). A function that uses only top-level names keeps
@@ -2275,8 +2301,7 @@ level of the file is found in the same way. A function that uses one keeps nothi
 it can't outlive the block (7.8).
 
 **(filled in)** A frame or a kept block also holds the address of the frame or the block
-around it, when the function uses names from there. Where the function around it has no kept
-block (7.8), it holds the address that function holds. So a function inside a function reaches
+around it, when the function uses names from there. So a function inside a function reaches
 everything it can see through one address.
 
 **(filled in)** A type parameter that is a type name (4.2) takes no room in a kept block. The
@@ -2291,8 +2316,19 @@ reads the note of whichever function the variable holds (8.6), and so does a cop
 function that the compiler can't see (7.8). The note is stored with the code, not in the
 value, so a function value is still two addresses.
 
+The note also says which outside variables the function changes, takes, gives a new target to
+or follows, so that a call through a variable can check what it does (8.12). For a function
+that itself calls through a variable, the note is fail safe.
+
 **(filled in)** The note says the same for every other parameter, because a value with a
-borrower inside it follows the rule for a borrower (8.6).
+borrower inside it follows the rule for a borrower (8.6). It counts what the functions it calls
+by name do, the way 8.12 reads them, and it says which top-level names the function uses
+(11.1). A function that calls through a variable can't know what that call does, unless the
+function it calls came in through a parameter (8.5): then its caller counts that function
+itself (8.12). In every other case the note is fail safe: on top of what the function's own
+lines do, it says that the function changes, takes and follows every variable outside it, of
+every type, and that it uses every top-level name. So is the note of a function that calls
+such a function by name.
 
 ### 7.8 Using a variable from outside the function
 
@@ -2425,7 +2461,7 @@ At the top level, storing the function is fine for the same reason that borrowin
 variable is: that frame lasts the whole program. It is one rule, and not a rule that depends on
 where the line is.
 
-**(filled in) A function that keeps only one borrower has no kept block.** `adderOn(&topStep)`
+**A function that keeps only one borrower has no kept block.** `adderOn(&topStep)`
 gives back a function that keeps nothing of its own: all it keeps is the address that was lent.
 That address is its second address (7.7). So the function is a borrower of `topStep`, and not of
 a block in a frame, and it can go wherever a borrower of `topStep` can. That is why `install`
@@ -2437,7 +2473,7 @@ can store it in `keep`. It holds when all of these do:
 - No line points the parameter at something else: not in this function, and not in any other
   function that uses the parameter. A `const` parameter never is.
 
-**(filled in)** In every other case the function has a kept block, as `makeAdder(five)` has,
+In every other case the function has a kept block, as `makeAdder(five)` has,
 and it can't be stored where it outlasts the frame that holds the block. A function that keeps
 two borrowers is such a case, and so is one whose borrower is a `var` that it points at
 something else:
@@ -2475,7 +2511,7 @@ anything, so the check follows the pattern of the `const` check (8.6): the compi
 copy where it can see the function, and otherwise the copy fails while the program runs (11.2),
 using the note beside the function's code (7.7).
 
-**(filled in)** The details of that check:
+The details of that check:
 
 - **What keeps something.** A function keeps something when its second address isn't empty
   (7.7): it keeps parameters, or it uses names of a function call around it. The second kind
@@ -2557,7 +2593,11 @@ const linked: (int, &int)()int = (var n: int, var b: &int){
 ```
 
 **(filled in)** A heap value that a kept parameter owns stays where it is when the block is
-handed back, so a kept parameter can borrow that.
+handed back, so a kept parameter can borrow that. And as for a borrower that is given back
+(8.13), what a kept parameter borrows never comes from a variable outside the function that
+keeps it. No line can give it a target there, a line of a function given back included. The
+block goes where no one can see those variables, so nothing there could keep them from being
+changed while the parameter points into them (8.12).
 
 The rule is only for a function the call gives back with `return`. A local is never kept by
 using it in the body: returning a function that does that is an error, as above.
@@ -3070,27 +3110,32 @@ bump(&limit);                  // ERROR: the same mistake, where the compiler se
 read-only borrower held in a name, and a value with one inside it. Each fails when the
 parameter it goes to is a `var`.
 
-**(filled in) Nothing read-only goes into an `any`.** The compiler can't follow a borrower
-inside an `any`. So the parameter of `wrap` counts as a `var` parameter for this rule (4.5).
-Nothing inside an `any` is ever read-only then, and an `any` can always be copied into a `var`.
-Every other built-in only reads what it is handed, so its parameters count as `const`, and
-what it gives back follows the rule for a result (8.13). So a borrower that is unwrapped from a
-`const` `any` can still change what it borrows: it was made from a place that can be assigned,
-and that place is no part of the `any`. The `any` itself never changes.
+A borrower unwrapped from a `const` `any` is a `const` borrower, so it can only read. That
+follows from "a `const` never changes".
 
-**(filled in) A `T` counts as a value with a borrower inside it.** A generic function is
-checked once, for every type (4.3), and a `T` can stand for a type that has a borrower in it.
-So inside a generic function, a value of type `T` that is read from a place that can't be
-assigned goes only into a `const`, into a `const` parameter, or back as a result. The check
-while running goes by the type that `T` really stands for: a `T` that a generic function hands
-to a call through a variable is read-only only when that type has a borrower in it.
+**(filled in) An `any` and a `T` count as a value with a borrower inside it.** The compiler
+can't see what an `any` holds, and a generic function is checked once, for every type (4.3), so
+a `T` can stand for a type that has a borrower in it. For both, the compiler counts the worst
+case: an `any`, or a value of type `T`, that is read from a place that can't be assigned goes
+only into a `const`, into a `const` parameter, or back as a result. What `unwrap` takes out of
+such an `any` is read-only when it has a borrower in it, which is the rule above. Every
+built-in only reads what it is handed, `wrap` included, so its parameters count as `const`, and
+what it gives back follows the rule for a result (8.13). The check while running goes by the
+type that is really there: an `any` that is handed to a call through a variable is read-only
+only when the value inside has a borrower in it, and a `T` only when the type it stands for has
+one.
 
 ```go
 const c: &int = &limit;
 
-wrap(&int)(c)                              // ERROR: c can only read, and what goes into an any may be changed through later
+const sealed: any = wrap(&int)(c);         // fine: the any is read-only, because c is
+var loose: any = wrap(&int)(c);            // ERROR: the result can only read, because c can
+var copied: any = sealed;                  // ERROR: sealed is a const, and an any may hold a borrower
+const back: &int = unwrap(&int)(sealed);   // fine: a const borrower, so it can only read
+var changer: &int = unwrap(&int)(sealed);  // ERROR: unwrapped from a const any, so it can only read
+const num: any = wrap(int)(5);
+var n: int = unwrap(int)(num);             // fine: an int has no borrower in it
 const viaFirst: &int = first(&int)([c]);   // fine: the result is read-only, because c is
-var changer: &int = first(&int)([c]);      // ERROR: the result can only read
 first(int)([limit])                        // 10: an int has no borrower in it
 const joined: []&int = join(&int)([c], [c]);   // fine: join only reads, and what it gives is read-only
 ```
@@ -3108,9 +3153,9 @@ changes: the `const` itself, the address, stays the same.
 **(filled in)** An ownership is given only by a place that can be assigned (8.9), so there is
 never an ownership of a `const`. A `const` ownership of a `var` can only read it, like a
 `const` borrower: changing and taking through an ownership need a `var` one. So one rule covers
-every `const`: what a `const` name reaches can't be changed through that name (2.9). Two
-things are not reached through a name in this sense, as said above: what a function changes
-outside itself, and what a borrower inside an `any` borrows.
+every `const`: what a `const` name reaches can't be changed through that name (2.9). One
+thing is not reached through a name in this sense, as said above: what a function changes
+outside itself.
 
 ### 8.7 Converting between the three
 
@@ -3591,10 +3636,9 @@ p~ + renewP()                    // 5: p~ is a value, read before renewP runs
 
 A function's type doesn't say whether a `&T` parameter is read or changed (7.4). For a
 function called by its own name, the compiler looks at the function. For one called through
-a variable (7.2), every `&` argument counts as one that may change **(adjusted: "through a
-variable" is the case of 7.2)**.
+a variable (7.2), every `&` argument counts as one that may change.
 
-**(adjusted)** "Called by its own name" and "through a variable" are the two cases of 7.2. A
+"Called by its own name" and "through a variable" are the two cases of 7.2. A
 lookup in a `const` array, pair or map whose functions are written out is one the compiler
 sees: it looks at every function the lookup could give, and counts the worst of them. So a
 choice made with `cases[…](…)` (section 10) is not a call through a variable.
@@ -3613,11 +3657,12 @@ reset();                         // ERROR: b is used below, and reset changes li
 b~.value
 ```
 
-A call through a variable (7.2) could run any function of the variable's type. It counts as
-changing every outside variable that a function of that type changes or takes, because the
-compiler can't tell which of them runs. **(adjusted: "through a variable" is the case of 7.2,
-and only the functions of that type count)** So a function that is added anywhere in the
-program can turn such a call into an error.
+A call through a variable (7.2) is checked while the program runs, the same way 8.6 checks a
+`const` that is lent to one. The note beside each function's code also says which outside
+variables the function changes, takes, gives a new target to or follows (7.7). The call reads
+the note of the function the variable really holds, and fails at that call if it touches
+something that a pointer still used below depends on. A function written somewhere else never
+makes a line a compile error.
 
 **(filled in) Outside variables.** A variable is *outside* a function when the function's body
 uses it without declaring it (7.8). These are all the kinds:
@@ -3637,9 +3682,8 @@ and a call counts as doing each of them at its line:
 | gives a pointer in an outside variable a new target | makes that pointer at the call line, with the owners that the function's own line followed |
 | uses a pointer in an outside variable | is a use of that pointer: "still used below" includes every call below to a function that uses it |
 
-**(filled in)** What the functions it calls do counts as done by the function itself. For a
-call through a variable, the compiler reads every function of that type in the program, and the
-call counts as doing all that any of them does.
+**(filled in)** What the functions it calls by name do counts as done by the function itself,
+and so does what a function that is handed to it does (below).
 
 ```go
 var b: &int = &p~;               // b followed p
@@ -3658,11 +3702,35 @@ q = ^6;                          // ERROR: watch is used below, and this frees w
 watch~
 ```
 
+**(filled in) The check at a call through a variable.** The note of the function that the
+variable holds is read at the call, and the call fails in these cases:
+
+| The note says that the function | The call fails when |
+|---|---|
+| changes or takes an outside variable | a pointer in use at the call followed it, or followed an owner that counts as the same one (below) |
+| gives a pointer in a top-level variable a new target | the new target followed an owner that the caller doesn't already count that pointer as having followed |
+| follows a pointer in an outside variable | the pointer may point at something gone: an owner that it followed was changed after it followed it, and it hasn't been given a new target since |
+
+"In use at the call" means what it means for a call by name: a pointer that is used below,
+another argument, and the function itself when it counts as a pointer. A function that is
+handed to the call and that the compiler doesn't see is checked by its note in the same way.
+The failure prints `call touches what a pointer depends on` (11.2). What the caller then counts
+for a pointer in another kind of outside variable is in the rule for a shared pointer (below).
+
+**(filled in)** A function whose note is fail safe (7.7) counts as changing, taking and
+following every variable outside it, on top of what its own lines do. So a call through a
+variable that holds one fails when a pointer in use at the call followed any owner other than a
+name of the caller's own call that no function written inside the caller uses, or an owner
+inside such a name. It fails too when a shared pointer (below) may point at something gone. A
+call inside such a function that gives a pointer a new target is checked where it is made, by
+the table above.
+
 **(filled in) A function that is handed over may be called.** An argument that is, holds or
 lends a function lets the function that is called run it. So the call counts as a call of the handed
 function too: it does what that function does to its outside variables. Where the compiler
-sees which function is handed over (7.2), it reads that function. Otherwise it counts every
-function of that type, as for a call through a variable.
+sees which function is handed over (7.2), it reads that function. Otherwise the check is made
+while the program runs, with the note of the function that is handed over, as for a call
+through a variable.
 
 ```go
 const run: (&()void)void = (const f: &()void){ f~(); };
@@ -3678,35 +3746,44 @@ const runRefill: ()int = (){
 
 **(filled in) A pointer that function bodies share.** A pointer that is, or is held in, an
 outside variable is a *shared* pointer. Every function that reaches it can follow it, whenever
-that function runs. The compiler can't see when that is: it can be after the function that
-aimed the pointer has ended, or inside a call it can't see. So two things hold for a shared
-pointer, in every function body and at the top level of the file. For this rule the top level
-counts as a body:
+that function runs. For this rule the top level of the file counts as a body too. Two things
+hold for a shared pointer:
 
-- **It is still in use when the body ends,** as long as the pointer itself lives on. Whatever
+- **It is still in use when a body ends,** as long as the pointer itself lives on. Whatever
   runs next may follow it.
-- **At the first line of a body that doesn't declare it, it counts as having followed every
-  owner that any line of the program has it follow.** The compiler reads all those lines.
+- **What it followed before a body began depends on where it is declared,** as the two
+  paragraphs below say.
 
-**(filled in)** So a body can change an owner that a shared pointer may point into only below
-a line of its own that gives the pointer another target:
+**(filled in) A name of a function or a block, and a parameter that functions given back
+keep** (7.8), can only be reached by lines that are written inside that function or block. At
+the first line of a body that doesn't declare such a pointer, it counts as having followed every
+owner that one of those lines has it follow: the compiler reads them all together. In the body
+that declares it, it counts the same after a call that the compiler doesn't see into: a call
+through a variable, or a call of a function whose note is fail safe (7.7). A caller can't see
+kept parameters at all, and it can call the functions that share them in any order, so the
+check is made where those functions are written, and they are safe in every order.
+
+**(filled in) A pointer in a top-level variable** can be reached by every function in the file.
+Reading all of them would let a function written somewhere else turn a line away. So the top
+level protects such a pointer instead: every function runs inside a call that the top level
+makes, `main` included (11.1), and the top level checks each of those calls by what it does,
+as above. At the first line of a function's body, a pointer in a top-level variable counts as
+having followed nothing. A call that changes what it may point into is an error where the
+pointer is known:
 
 ```go
 const renew: ()void = (){
-    q = ^6;                      // ERROR: watch may point at what q owns, and it is still there when renew ends
+    q = ^6;                      // fine: no line of renew gives watch a target
 };
 
-const renewSafely: ()void = (){
-    watch = null;                // watch points at nothing now
-    q = ^6;                      // fine
-};
+aim();                           // watch now counts as having followed q
+renew();                         // ERROR: watch is still in use, and renew changes q
+watch = null;                    // watch points at nothing now
+renew();                         // fine
 ```
 
-(`q`, `watch` and `aim` are the three top-level names above.)
-
-**(filled in)** The parameters that functions given back keep are shared in this way (7.8). A
-caller can't see kept parameters at all, and it can call the functions that share them in any
-order. This check is made where those functions are written, so they are safe in every order.
+(`q`, `watch` and `aim` are the three top-level names above, and these lines are at the top
+level.)
 
 **(filled in) Owners the compiler can't tell apart.** The compiler sees which owner a pointer
 leads to when the pointer was made in the function that uses it, and is held in a name. A
@@ -3763,12 +3840,13 @@ function keeps leads to. Each of these counts for
 the caller as an owner that is reached through a pointer from outside, by the first row of the
 table. A top-level variable that the function changes is an outside variable for the caller in
 that row, also when the caller's own lines don't use it. For a call through a variable, the
-compiler counts every function of that type.
+note says which such owners the function changes or takes, with their types, and the check is
+made while the program runs.
 
 ```go
 const useAfter: (&^int, &()void)int = (const o: &^int, const f: &()void){
     const r: &int = &o~~;        // r followed o~, an owner that is reached through a pointer from outside
-    f~();                        // ERROR: r is used below, and swapOwn, a ()void function, changes a ^int this line can't name
+    f~();                        // fails while running: r is used below, and swapOwn, which f holds, changes a ^int this line can't name
     return r~;
 };
 
@@ -3819,7 +3897,7 @@ the call has to give. So the move happens at the call itself:
 An ownership held in a variable is given the same way: `take(h)`, where `h` is an
 `@^[1000]int`. A value made on the spot is handed straight over with `@` in front:
 `take(@makeBig(1));` (8.9). A parameter is never declared with the type `@T` itself, so a
-function that is given an ownership can't leave the value where it was. **(adjusted)** That is
+function that is given an ownership can't leave the value where it was. That is
 about an ownership that is the whole argument. One that sits inside another value, as in
 `f([@x, @y])`, is lent and not taken (below).
 
@@ -4173,16 +4251,17 @@ is copied this way is a `var`.
 | `take(big);` where the parameter asks for an ownership | `big` is a `^[1000]int`, not an `@^[1000]int`: write `@big` |
 | `var y: &int = x;` where `x` is a `const` borrower **(filled in)** | a copy of a `const` borrower can only read (8.6) |
 | `var mine: [2]&int = views;` where `views` is a `const` **(filled in)** | the borrowers inside a `const` can only read (8.6) |
-| `wrap(&int)(c)` where `c` is a `const` borrower **(filled in)** | nothing read-only goes into an `any` (8.6) |
+| `var loose: any = wrap(&int)(c);` where `c` is a `const` borrower **(filled in)** | the result can only read, because `c` can (8.6) |
+| `var copied: any = sealed;` where `sealed` is a `const` **(filled in)** | an `any` counts as holding a borrower, and a `const` one can only be read (8.6) |
+| `var changer: &int = unwrap(&int)(sealed);` where `sealed` is a `const` `any` | a borrower unwrapped from a `const` `any` is a `const` borrower (8.6) |
 | `var x: T = v[0];` in a generic function, where `v` is a `const` **(filled in)** | a `T` may have a borrower in it, and `v` can only be read (8.6) |
 | `first(@^int)` and `wrap(@^int)` **(filled in)** | a type parameter is never handed an ownership type itself (4.3) |
 | `run(&refill);` where `refill` changes an owner that a pointer used below followed **(filled in)** | a function that is handed over may be called (8.12) |
-| `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns **(filled in)** | a pointer that function bodies share is still in use when the function ends (8.12) |
+| `renew();` where `renew` changes `q`, and `watch`, a pointer in a top-level variable, followed `q` **(filled in)** | a pointer that function bodies share is still in use when the body ends (8.12) |
 | `c~ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below **(filled in)** | two pointers from outside may lead to the same owner (8.12) |
 | `addTo(&p~, renewP())` where `renewP` changes `p` **(filled in)** | a statement is still using what it has worked out (8.12) |
 | `return ^&local;`, and `slot~ = &local;` where `slot` came in through a parameter **(filled in)** | the line that stores a borrower behind a pointer is checked: the place may outlast `local`, whether `local` is a name of this call or of a call around it (8.5) |
 | `aim(&b, &x);` where `aim` may store its second argument through its first, and `b` outlasts `x` **(filled in)** | a variable that is lent for change can be given what else was lent (8.13) |
-| `f~();` where `f` borrows a function and came in through a parameter, a borrower made through another parameter is used below, and a function of `f`'s type changes an owner of that type which the line can't name **(filled in)** | an owner that a caller can't name counts as one reached through a pointer from outside (8.12) |
 | `kept = b;` and `keep = f;` where `b` and `f` are parameters, and `kept` and `keep` outlast the call **(filled in)** | what comes in through a parameter is only known to last as long as the call (8.5) |
 | `return &list~;` where `list` is a top-level `var` **(filled in)** | a borrower that is given back comes from a parameter (8.13) |
 | `p = ^6;` where a function called below uses a borrower made with `&p~` **(filled in)** | the call is a use of that borrower (8.12) |
@@ -4202,6 +4281,7 @@ is copied this way is a `var`.
 | `^v`, and `=` where it copies a heap owner **(filled in)** | there is no room left on the heap (8.3) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
 | `var g: ()int = f;`, a copy of a function that the compiler can't see | the function keeps something (7.8) |
+| `f()`, a call through a variable | the function it holds touches something that a pointer still used below depends on (8.12) |
 
 **(filled in)** Every check the compiler makes, and every check made while running, is listed
 in Appendix B.
@@ -4226,7 +4306,7 @@ Rule 8.12 follows a pointer that is held in a variable. It can't follow these:
   borrower inside it points at another part of it, where the compiler can't see that
   borrower. A kept block that is handed back one frame is such a value (7.8).
 
-**(filled in)** So a helper function can put a borrower behind a `^` where a line of the
+So a helper function can put a borrower behind a `^` where a line of the
 caller's own would be turned away. `return ^&local;` is an error, because that one line shows
 both ends (8.5). Split over two functions, the same store is not caught:
 
@@ -4485,7 +4565,7 @@ var bad: Counter = {
 };
 ```
 
-**(adjusted)** A function in a struct value that is written inside a function can also use
+A function in a struct value that is written inside a function can also use
 that function's names, like any function made there (7.8). "What any function sees" includes
 them.
 
@@ -4702,8 +4782,9 @@ left to do when a call comes back. `values` and `v` borrow the caller's array, n
 
 ## 11. A program is one file
 
-A program is one file. Its top-level declarations are the program's names. So you can always
-tell where a name comes from: it is declared in this file, or it is a built-in name (2.7).
+A program is one file, and the file's name ends in `.my`. Its top-level declarations are the
+program's names. So you can always tell where a name comes from: it is declared in this file,
+or it is a built-in name (2.7).
 
 Inside the file, `{ }` blocks still make smaller scopes (2.6).
 
@@ -4752,9 +4833,12 @@ value has to be worked out.
 **(filled in)** A function's body can use top-level names declared below it, so a call could
 reach a name that isn't set up yet. The compiler rejects that call: **a call at the top level
 can run only when every top-level name its function uses is ready, or is declared above the
-call.** The compiler reads the function for this, and the functions it calls, as in 8.12. A call
-through a variable (7.2) could run any function of its type, so it counts as using what every
-function of that type uses.
+call.** The compiler reads the function for this, the functions it calls by name, and the
+functions that are handed to it, as in 8.12. A call through a variable (7.2), and a function
+handed over that the compiler doesn't see, are checked while the program runs instead, by the
+note beside the function's code, which says which top-level names the function uses (7.7).
+The call fails when one of them isn't set up yet, and prints `name used before it is set up`
+(11.2). A function whose note is fail safe counts as using every top-level name.
 
 ```go
 const readLate: ()int = (){ return late; };
@@ -4768,6 +4852,7 @@ const onTime: int = readLate();    // fine: late is set up by now
 
 - If the file declares a top-level `main`, it has to be a `const` of type `()int`.
 - The program runs the top-level lines of the file from the top down, and then calls `main`.
+  That call counts as one that the top level makes after its last line (8.12).
 - The `int` that `main` returns is the program's status. A status is a number from 0 to 255:
   the `int` is converted the way `convert(int, uint8)` converts it (4.4), and a number outside
   that range fails in the same way (11.2).
@@ -5052,7 +5137,7 @@ their type from the place they are written for (3.8).
 | `var @r: ^int = @p;` | `r` takes over what `p` owned: no copy, and `p` is left `null` |
 | a function uses `x` from around it | the function borrows `x`: no copy, and `x` can't die before the function (7.8) |
 | a function given back uses a parameter `p` of the call | the function keeps `p` in its kept block, in the frame of the call that receives the function. It is a borrower of that block, so it can't be stored where it outlasts the frame (7.8) |
-| `keep = adderOn(&topStep);` where the function keeps only the borrower `step` **(filled in)** | the function has no kept block. It is a borrower of `topStep`, so it can go wherever one can (7.8) |
+| `keep = adderOn(&topStep);` where the function keeps only the borrower `step` | the function has no kept block. It is a borrower of `topStep`, so it can go wherever one can (7.8) |
 | keeping a local in a function given back | a helper whose parameter takes the value: `return countFrom(@total);` (7.8) |
 | `var again: ()int = next;` where `next` keeps parameters | an error: a copy would share them. To share the function, borrow it: `var again: &()int = &next;` (7.8) |
 | `var keepLong: ^(int)int = ^makeAdder(five);` | the function goes on the heap, kept block included (7.8) |
@@ -5082,6 +5167,7 @@ their type from the place they are written for (3.8).
 | `int(3.0)` | a type is never called: write `convert(float, int)(3.0)` |
 | `describe(3);` | `describe` takes an `any`: write `wrap(int)(3)` |
 | `double(x);` where `x` is an `any` | write the unwrap: `double(unwrap(int)(x))` |
+| `var changer: &int = unwrap(&int)(sealed);` where `sealed` is a `const` `any` | a borrower unwrapped from a `const` `any` is a `const` borrower (8.6) |
 | `primes[0] = 7;` | `primes` is `const` |
 | `sizes[1]` where `sizes` is a `?int` | a pair is looked up with a `bool` |
 | `var sizes: [bool]int = [3, 10];` | the size of an array is a number (5.1) |
@@ -5127,16 +5213,18 @@ their type from the place they are written for (3.8).
 | `([]T, T: type)T` and `(T: type)bool` | in a function type, a type parameter's name is used only after it is given, and it is given only when something uses it (4.3) |
 | `a + b` where both are a `T` in a generic function | `+` doesn't work on every type (4.3) |
 | `wrapMore([1]T)` inside the generic function `wrapMore` | a function can't hand itself ever bigger types: every type has to be known before the program runs (4.3) |
+| `pick([1]T)` where `pick` is a variable | through a variable, a type parameter is handed only a type parameter as it is, or a type with none in it (4.3) |
 | `const Bad: type = {value: int, next: Bad};` | a type can't hold itself directly (4.6) |
 | `primes[3]` where `primes` is a `[3]int` | the last index is 2 (5.2) |
 | `seen[7]` where the keys of `seen` are 1 and 4 | `7` isn't a key (6.2) |
 | `var y: &int = x;` where `x` is a `const` borrower | a copy of a `const` borrower can only read (8.6) |
 | `var mine: [2]&int = views;` where `views` is a `const` | the borrowers inside a `const` can only read (8.6) |
-| `wrap(&int)(c)` where `c` is a `const` borrower | nothing read-only goes into an `any` (8.6) |
+| `var loose: any = wrap(&int)(c);` where `c` is a `const` borrower | the result can only read, because `c` can (8.6) |
+| `var copied: any = sealed;` where `sealed` is a `const` | an `any` counts as holding a borrower, and a `const` one can only be read (8.6) |
 | `var x: T = v[0];` in a generic function, where `v` is a `const` | a `T` may have a borrower in it, and `v` can only be read (8.6) |
 | `first(@^int)` | a type parameter is never handed an ownership type itself (4.3) |
 | `run(&refill);` where `refill` changes an owner that a pointer used below followed | a function that is handed over may be called (8.12) |
-| `q = ^6;` in a function, where another function aims an outside pointer at what `q` owns | a pointer that function bodies share is still in use when the function ends (8.12) |
+| `renew();` where `renew` changes `q`, and `watch`, a pointer in a top-level variable, followed `q` | a pointer that function bodies share is still in use when the body ends (8.12) |
 | `c~ = ^6;` where `c` is a parameter, and a borrower made through another parameter of the same type is used below | two pointers from outside may lead to the same owner (8.12) |
 | `addTo(&p~, renewP())` where `renewP` changes `p` | a statement is still using what it has worked out (8.12) |
 | `return ^&local;`, and `slot~ = &local;` where `slot` came in through a parameter | the line that stores a borrower behind a pointer is checked (8.5) |
@@ -5170,6 +5258,8 @@ program (11.2), and Appendix B lists all of them with what each one prints:
 | a call of `convert` through a variable **(filled in)** | the two types have no conversion (4.4) |
 | `f(&limit)`, a call through a variable that lends a `const` | the parameter it goes to is a `var` in the function that runs (8.6) |
 | `var g: ()int = f;`, a copy of a function that the compiler can't see | the function keeps something (7.8) |
+| `f()`, a call through a variable | the function it holds touches something that a pointer still used below depends on (8.12) |
+| a call through a variable at the top level **(filled in)** | the function uses a top-level name that isn't set up yet (11.1) |
 
 ---
 
@@ -5301,7 +5391,7 @@ program runs. The rules themselves are in the sections named.
 | a name declared where the same name can already be seen, or spelled like a top-level name | a second `var count`, a parameter or a name in a block spelled like a top-level name, `const int: type = int8;` | 2.8 |
 | a name that isn't declared | `total = 1;` with no `total` | 2.8 |
 | a name used above its declaration | `var a: int = b;` and below it `var b: int = 1;` | 2.8 |
-| a top-level call that reaches a top-level name that isn't set up yet | `const early: int = readLate();` | 11.1 |
+| a top-level call of a function the compiler sees, which reaches a top-level name that isn't set up yet | `const early: int = readLate();` | 11.1 |
 
 ### B.2 Declarations and statements
 
@@ -5337,6 +5427,7 @@ program runs. The rules themselves are in the sections named.
 | a type that isn't written out where it decides a type | `var m: wholeTypes[1] = 5;`, `first(x.T)`, `first(t)` | 4.2, 4.3 |
 | a name that holds a type but is not a type name, used as a type: a `var`, a `const` whose value is worked out, a `type` parameter that the function's type gives no name | `var n: t = 5;` for a `var t: type`; `const U: type = x.T;` and then `var n: U = 5;` | 4.2, 4.3 |
 | a function that would be reached again, through its own calls, with a type parameter handed a type that has its earlier type strictly inside it | `wrapMore([1]T)` inside `wrapMore` | 4.3 |
+| a type parameter handed, through a variable, a type with a type parameter strictly inside it, and a call that hands such a type to a function that hands a type parameter on through a variable, by itself or through calls the compiler sees | `pick([1]T)` for a `var` `pick` | 4.3 |
 | a type parameter handed an ownership type itself | `first(@^int)`, `wrap(@^int)` | 4.3 |
 | a `type` parameter used as a type in a function value that is written where nothing asks for a type | `(const T: type, const v: []T){ … }(int, [7, 8])` | 4.3 |
 | in a function type: a name on a parameter that isn't a type parameter, a name that nothing in the rest of the type uses, or a type parameter's name used before it is given | `(n: int)int`, `(T: type)bool`, `([]T, T: type)T` | 4.3 |
@@ -5396,7 +5487,7 @@ check these rules:
 | a `var` borrower borrows a `var`, and nothing is changed through a `const` borrower or a `const` ownership | 8.6 |
 | a `var` borrower is made only from a place that can be assigned, a value made on the spot, another borrower that isn't read-only, the result of a call that was lent nothing read-only, or `null`, wherever the compiler sees both | 8.6 |
 | a read-only borrower, or a value with one inside it, goes only into a `const`, a `const` parameter or back as a result, wherever the compiler sees both ends | 8.6 |
-| nothing read-only is wrapped into an `any`. Inside a generic function, a `T` read from a place that can't be assigned goes only into a `const`, a `const` parameter or back as a result | 8.6 |
+| an `any`, and inside a generic function a `T`, that is read from a place that can't be assigned goes only into a `const`, a `const` parameter or back as a result, and a borrower unwrapped from a `const` `any` is a `const` borrower | 8.6 |
 | what comes in through a parameter that holds a borrower, an ownership or a function isn't put in a variable that outlasts the call | 8.5 |
 | through a pointer that came in from outside, or that was read from behind a pointer, only a borrower of a top-level name itself is stored, or what came in through a parameter of this call. Nothing is stored there that borrows or uses a name of this call, a name of a function call or a block around the function, a heap value that such a name or a top-level name owns, a pointer or a function read from an outside variable, or a kept block. A name that holds something behind a pointer doesn't outlast it, and isn't given back or moved out of the call while it holds something of this call | 8.5 |
 | a parameter is never declared with the type `@T` itself: it is declared `@x: T` | 8.13 |
@@ -5406,8 +5497,8 @@ check these rules:
 | an owner isn't changed while a pointer made by following it is still used below, and a call to a function that uses the pointer is such a use | 8.12 |
 | a call later in a statement doesn't change an owner that an earlier part of the statement followed to reach a pointer, a place or a function | 8.12 |
 | a call doesn't change or take an owner that a pointer in use followed: an argument, the function that is called, or a pointer used below. A function that is handed over counts as called, an ownership inside an argument as lent, and a function that came back as lent the same things again | 8.12, 8.13 |
-| a call counts as doing what its function does to its outside variables: changing them, giving a pointer among them a new target at the call line, and using one. A call through a variable counts what every function of that type does | 8.12 |
-| a pointer in an outside variable is still in use when a body ends. At the first line of a body that doesn't declare it, it counts as having followed every owner that any line of the program has it follow | 8.12 |
+| a call counts as doing what its function does to its outside variables: changing them, giving a pointer among them a new target at the call line, and using one. That counts the functions it calls by name and the functions handed to it. A call through a variable is checked while the program runs instead (B.9) | 8.12 |
+| a pointer in an outside variable is still in use when a body ends. At the first line of a body that doesn't declare it, a name of a function or a block, or a kept parameter, counts as having followed every owner that a line written inside that function or block has it follow, and so it does in the body that declares it after a call the compiler doesn't see into. A pointer in a top-level variable counts as having followed nothing at the first line of a function, and the top level checks every call it makes | 8.12 |
 | an owner reached through a pointer from outside counts as the same owner as every owner of its type that is reached through another such pointer, or that is an outside variable or lies inside one. An owner reached through a pointer that was read from behind a pointer counts as the same owner as every owner of its type, also one that the function names. An owner that a called function changes and the caller can't name counts as one reached through a pointer from outside. Two elements of one array, or two entries of one map, count as one owner unless written values tell them apart, and a pointer read out of an array, a pair or a map of pointers with an index or a key that isn't a written value counts as each pointer held there. Two owners reached from one pointer along ways that go only through owners and their fields, and differ by more than an index or a key, are two owners. Inside a generic function, a type with a `T` in it counts as the same type as every type | 8.12 |
 | an owner reached through a `var` borrower that a call gave back counts as what the call was lent, or any owner inside it | 8.13 |
 | after a call, a variable that was lent with `&` where it may be changed, and that holds a borrower, an ownership or a function, doesn't outlast the other arguments, and counts as having followed what they followed | 8.13 |
@@ -5452,8 +5543,10 @@ error line.
 | `{k1: v1, k2: v2}` with keys worked out while running | two keys are equal | `key written twice` | 6.1 |
 | `m[k]` | `k` isn't a key of `m` | `key not in map` | 6.2 |
 | `m = n;` for maps | the two don't have the same keys | `keys do not match` | 6.3 |
-| `f(&limit)`, a call through a variable that hands over something read-only: `&limit`, a read-only borrower, or a value with one inside it. Inside a generic function, a `T` counts when the type it stands for has a borrower in it | the parameter it goes to is a `var` in the function that runs | `const lent to a var parameter` | 8.6 |
+| `f(&limit)`, a call through a variable that hands over something read-only: `&limit`, a read-only borrower, or a value with one inside it. Inside a generic function, a `T` counts when the type it stands for has a borrower in it, and an `any` counts when the value inside has one | the parameter it goes to is a `var` in the function that runs | `const lent to a var parameter` | 8.6 |
 | `var g: ()int = f;`, `twice(f, 3)`: a copy of a function that the compiler can't see, by itself or inside a bigger value that is copied | the function keeps something | `copy of a function that keeps parameters` | 7.8 |
+| `f()`, a call through a variable, and a call that hands over a function the compiler doesn't see | by the function's note: it changes or takes an owner that a pointer in use followed, gives a pointer in a top-level variable a new target that the caller doesn't count, or follows a pointer that may point at something gone | `call touches what a pointer depends on` | 8.12 |
+| a call through a variable at the top level, or one that hands over a function the compiler doesn't see | by the function's note, it uses a top-level name that isn't set up yet | `name used before it is set up` | 11.1 |
 | `p~`, for a heap owner, a borrower or an ownership | `p` is `null` | `null followed` | 8.10 |
 | `@q = h;`, `var @q: ^int = h;`, `take(h)`: a move or a call that takes through an ownership | the ownership is `null` | `null followed` | 8.10 |
 | `^v`, and `=` where it copies a heap owner | there is no room left on the heap | `out of heap` | 8.3 |
